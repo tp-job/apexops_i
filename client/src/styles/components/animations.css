@@ -1,0 +1,405 @@
+.animate-marquee {
+    animation: marquee 10s linear infinite;
+}
+
+.animate-marquee:hover {
+    animation-play-state: paused;
+}
+
+.marquee-container {
+    position: relative;
+    overflow: hidden;
+}
+
+.marquee-track {
+    display: inline-flex;
+    white-space: nowrap;
+    gap: 2rem;
+    will-change: transform;
+    animation: marqueeTrack var(--marquee-duration, 15s) linear infinite;
+}
+
+.marquee-text {
+    white-space: nowrap;
+}
+
+@keyframes marquee {
+    0% {
+        transform: translateX(0);
+    }
+    100% {
+        transform: translateX(-100%);
+    }
+}
+
+@keyframes marqueeTrack {
+    0% {
+        transform: translateX(0);
+    }
+    100% {
+        transform: translateX(-50%);
+    }
+}
+
+/* ===== Google/Apple Inspired Animations ===== */
+
+/* Fade Animations */
+.animate-fade-in {
+    animation: fadeIn 0.3s ease-out forwards;
+}
+
+.animate-fade-in-up {
+    animation: fadeInUp 0.4s ease-out forwards;
+}
+
+.animate-fade-in-down {
+    animation: fadeInDown 0.4s ease-out forwards;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(16px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes fadeInDown {
+    from {
+        opacity: 0;
+        transform: translateY(-16px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Scale Animations */
+.animate-scale-in {
+    animation: scaleIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+.animate-scale-out {
+    animation: scaleOut 0.2s ease-out forwards;
+}
+
+@keyframes scaleIn {
+    from {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@keyframes scaleOut {
+    from {
+        opacity: 1;
+        transform: scale(1);
+    }
+    to {
+        opacity: 0;
+        transform: scale(0.95);
+    }
+}
+
+/* Slide Animations */
+.animate-slide-in-right {
+    animation: slideInRight 0.3s ease-out forwards;
+}
+
+.animate-slide-in-left {
+    animation: slideInLeft 0.3s ease-out forwards;
+}
+
+@keyframes slideInRight {
+    from {
+        opacity: 0;
+        transform: translateX(24px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@keyframes slideInLeft {
+    from {
+        opacity: 0;
+        transform: translateX(-24px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+/* Pulse & Glow Effects */
+.animate-pulse-soft {
+    animation: pulseSoft 2s ease-in-out infinite;
+}
+
+.animate-glow {
+    animation: glow 2s ease-in-out infinite;
+}
+
+@keyframes pulseSoft {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+@keyframes glow {
+    0%, 100% {
+        box-shadow: 0 0 5px rgba(59, 130, 246, 0.3);
+    }
+    50% {
+        box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
+    }
+}
+
+/* Bounce Effect */
+.animate-bounce-in {
+    animation: bounceIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes bounceIn {
+    0% {
+        opacity: 0;
+        transform: scale(0.3);
+    }
+    50% {
+        transform: scale(1.05);
+    }
+    70% {
+        transform: scale(0.9);
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+/* Smooth Transition Utilities */
+.transition-smooth {
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.transition-smooth-md {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.transition-smooth-lg {
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Hover Transform Utilities */
+.hover-lift {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.hover-lift:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px -5px rgba(0, 0, 0, 0.1), 0 4px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+.dark .hover-lift:hover {
+    box-shadow: 0 8px 25px -5px rgba(0, 0, 0, 0.4), 0 4px 10px -5px rgba(0, 0, 0, 0.2);
+}
+
+.hover-scale {
+    transition: transform 0.2s ease;
+}
+
+.hover-scale:hover {
+    transform: scale(1.02);
+}
+
+/* Button Press Effect */
+.press-effect {
+    transition: transform 0.1s ease;
+}
+
+.press-effect:active {
+    transform: scale(0.97);
+}
+
+/* Shimmer Effect for Loading States */
+.shimmer {
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+}
+
+/* Toast/Notification Slide */
+.animate-slide-in {
+    animation: slideIn 0.3s ease-out forwards;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateX(100%);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+/* Message Bubble Animation */
+.animate-message-in {
+    animation: messageIn 0.25s ease-out forwards;
+}
+
+@keyframes messageIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px) scale(0.95);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+/* ═══════════════════════════════════════
+   🌅 SUNSET THEME ANIMATIONS
+═══════════════════════════════════════ */
+
+/* Ember Glow Pulse */
+.animate-ember-pulse {
+    animation: emberPulse 2s ease-in-out infinite;
+}
+
+@keyframes emberPulse {
+    0%, 100% {
+        box-shadow: 0 0 5px var(--color-ember), 0 0 10px rgba(246, 70, 104, 0.3);
+    }
+    50% {
+        box-shadow: 0 0 15px var(--color-ember), 0 0 25px rgba(246, 70, 104, 0.4);
+    }
+}
+
+/* Wine Glow */
+.animate-wine-pulse {
+    animation: winePulse 2s ease-in-out infinite;
+}
+
+@keyframes winePulse {
+    0%, 100% {
+        box-shadow: 0 0 5px var(--color-wine), 0 0 10px rgba(152, 64, 99, 0.3);
+    }
+    50% {
+        box-shadow: 0 0 15px var(--color-wine), 0 0 25px rgba(152, 64, 99, 0.4);
+    }
+}
+
+/* Peach Glow */
+.animate-peach-pulse {
+    animation: peachPulse 2s ease-in-out infinite;
+}
+
+@keyframes peachPulse {
+    0%, 100% {
+        box-shadow: 0 0 5px var(--color-peach), 0 0 10px rgba(254, 150, 119, 0.3);
+    }
+    50% {
+        box-shadow: 0 0 15px var(--color-peach), 0 0 25px rgba(254, 150, 119, 0.4);
+    }
+}
+
+/* Indigo Glow */
+.animate-indigo-pulse {
+    animation: indigoPulse 2s ease-in-out infinite;
+}
+
+@keyframes indigoPulse {
+    0%, 100% {
+        box-shadow: 0 0 5px var(--color-indigo), 0 0 10px rgba(65, 67, 106, 0.3);
+    }
+    50% {
+        box-shadow: 0 0 15px var(--color-indigo), 0 0 25px rgba(65, 67, 106, 0.4);
+    }
+}
+
+/* Typing Cursor Animation */
+.typing-cursor::after {
+    content: '|';
+    animation: blink 1s step-end infinite;
+}
+
+@keyframes blink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0; }
+}
+
+/* Status Dot Pulse */
+.status-online {
+    position: relative;
+}
+
+.status-online::before {
+    content: '';
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    background: inherit;
+    animation: statusPulse 2s ease-out infinite;
+}
+
+@keyframes statusPulse {
+    0% {
+        transform: scale(1);
+        opacity: 0.7;
+    }
+    100% {
+        transform: scale(2);
+        opacity: 0;
+    }
+}
+
+/* Sunset Gradient Border Animation */
+.gradient-border-sunset {
+    position: relative;
+    background: var(--color-dark-surface);
+    border-radius: var(--radius-lg);
+}
+
+.gradient-border-sunset::before {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    background: linear-gradient(45deg, 
+        var(--color-navy), 
+        var(--color-indigo), 
+        var(--color-wine), 
+        var(--color-ember),
+        var(--color-peach)
+    );
+    border-radius: inherit;
+    z-index: -1;
+    background-size: 300% 300%;
+    animation: sunsetShift 4s ease infinite;
+}
+
+@keyframes sunsetShift {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+}

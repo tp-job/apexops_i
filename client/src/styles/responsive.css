@@ -1,0 +1,11 @@
+@media (min-width: 425px) and (max-width: 768px) {
+    .song-group .song-title {
+        width: 5.5rem;
+    }
+    .song-group .song-title .marquee-text {
+        font-size: 0.75rem;
+    }
+    .song-group .ri-voiceprint-fill {
+        font-size: 1rem;
+    }
+}
