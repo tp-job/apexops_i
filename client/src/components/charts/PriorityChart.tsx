@@ -12,35 +12,35 @@ interface PriorityChartProps {
 
 const PriorityChart: FC<PriorityChartProps> = ({ data }) => {
     const priorities = [
-        { 
-            name: 'Critical', 
-            value: data.critical, 
-            color: '#DB4437', 
-            bgColor: 'bg-global-red/10',
+        {
+            name: 'Critical',
+            value: data.critical,
+            color: '#FF6F41', // orange-primary
+            bgColor: 'bg-orange-primary/10',
             icon: AlertOctagon,
             description: 'Requires immediate attention'
         },
-        { 
-            name: 'High', 
-            value: data.high, 
-            color: '#F64668', 
-            bgColor: 'bg-ember/10',
+        {
+            name: 'High',
+            value: data.high,
+            color: '#1F76F9', // blue-secondary
+            bgColor: 'bg-blue-secondary/10',
             icon: AlertTriangle,
             description: 'Should be addressed soon'
         },
-        { 
-            name: 'Medium', 
-            value: data.medium, 
-            color: '#F4B400', 
-            bgColor: 'bg-global-yellow/10',
+        {
+            name: 'Medium',
+            value: data.medium,
+            color: '#3B82F6', // blue-primary
+            bgColor: 'bg-blue-primary/10',
             icon: AlertCircle,
             description: 'Normal priority'
         },
-        { 
-            name: 'Low', 
-            value: data.low, 
-            color: '#0F9D58', 
-            bgColor: 'bg-global-green/10',
+        {
+            name: 'Low',
+            value: data.low,
+            color: '#10B981', // green
+            bgColor: 'bg-green/10',
             icon: Info,
             description: 'Can be handled later'
         },
@@ -54,7 +54,7 @@ const PriorityChart: FC<PriorityChartProps> = ({ data }) => {
             {/* Header */}
             <div className="px-6 py-4 border-b flex items-center justify-between border-light-border dark:border-dark-border">
                 <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-global-red to-ember flex items-center justify-center">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-primary to-blue-secondary flex items-center justify-center">
                         <Target className="w-5 h-5 text-white" />
                     </div>
                     <div>
@@ -67,7 +67,7 @@ const PriorityChart: FC<PriorityChartProps> = ({ data }) => {
                     </div>
                 </div>
                 {data.critical > 0 && (
-                    <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-global-red/10 text-global-red animate-pulse">
+                    <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-orange-primary/10 text-orange-primary animate-pulse">
                         {data.critical} Critical!
                     </span>
                 )}
@@ -84,7 +84,7 @@ const PriorityChart: FC<PriorityChartProps> = ({ data }) => {
                         <div key={priority.name} className="space-y-2">
                             <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-2">
-                                    <div 
+                                    <div
                                         className={`w-8 h-8 rounded-lg flex items-center justify-center ${priority.bgColor}`}
                                     >
                                         <Icon className="w-4 h-4" style={{ color: priority.color }} />
@@ -108,9 +108,9 @@ const PriorityChart: FC<PriorityChartProps> = ({ data }) => {
                                 </div>
                             </div>
                             <div className="w-full rounded-full h-2.5 overflow-hidden bg-light-surface-2 dark:bg-dark-surface-2">
-                                <div 
+                                <div
                                     className="h-full rounded-full transition-all duration-700 ease-out"
-                                    style={{ 
+                                    style={{
                                         width: `${barWidth}%`,
                                         backgroundColor: priority.color
                                     }}
@@ -134,7 +134,7 @@ const PriorityChart: FC<PriorityChartProps> = ({ data }) => {
                     </div>
                     <div className="flex -space-x-2">
                         {priorities.map((p, i) => (
-                            <div 
+                            <div
                                 key={i}
                                 className="w-8 h-8 rounded-full border-2 border-white dark:border-dark-surface flex items-center justify-center text-xs font-bold text-white"
                                 style={{ backgroundColor: p.color }}

@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import type { FC } from 'react';
-import { Bell, Save, Check, UserCircle, Key, Lock, Camera, Sun, Moon, Globe } from 'lucide-react';
+import { getIcon } from '@/utils/iconMapping';
 import type { NotificationSettings, SecuritySettings } from '../types/accountSettings';
 import { useAuth } from '@/context/AuthContext';
+import { useTheme } from '@/context/ThemeContext';
 import Notifications from '@/components/accountsettings/Notifications';
 import Security from '@/components/accountsettings/Security';
 import Privacy from '@/components/accountsettings/Privacy';
@@ -19,11 +20,11 @@ const btnOutline = 'px-5 py-2.5 text-sm font-medium rounded-xl border border-lig
 
 // ── Tab config ─────────────────────────────────────────────────
 const tabs = [
-    { id: 'personal-info', label: 'ข้อมูลส่วนบุคคล', icon: UserCircle },
-    { id: 'profile', label: 'โปรไฟล์', icon: UserCircle },
-    { id: 'security', label: 'ความปลอดภัย', icon: Key },
-    { id: 'notifications', label: 'การแจ้งเตือน', icon: Bell },
-    { id: 'privacy', label: 'ความเป็นส่วนตัว', icon: Lock },
+    { id: 'personal-info', label: 'ข้อมูลส่วนบุคคล', icon: 'ri-user-circle-fill' },
+    { id: 'profile', label: 'โปรไฟล์', icon: 'ri-user-circle-fill' },
+    { id: 'security', label: 'ความปลอดภัย', icon: 'ri-key-fill' },
+    { id: 'notifications', label: 'การแจ้งเตือน', icon: 'ri-notification-3-fill' },
+    { id: 'privacy', label: 'ความเป็นส่วนตัว', icon: 'ri-lock-fill' },
 ];
 
 // ── Toggle button for theme / language ─────────────────────────
@@ -37,8 +38,8 @@ const ToggleButton: FC<{
         onClick={onClick}
         className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-200 ${
             active
-                ? 'bg-ember text-white shadow-md shadow-ember/20'
-                : `bg-white dark:bg-dark-surface-2 border border-light-border dark:border-dark-border ${textSecondary} hover:border-ember/40 hover:text-ember`
+                ? 'bg-orange-primary text-white shadow-md shadow-orange-primary/20'
+                : `bg-white dark:bg-dark-surface-2 border border-light-border dark:border-dark-border ${textSecondary} hover:border-orange-primary/40 hover:text-orange-primary`
         }`}
     >
         {icon}
@@ -49,13 +50,12 @@ const ToggleButton: FC<{
 // ── Main Component ─────────────────────────────────────────────
 const AccountSettings: FC = () => {
     const { user, settings, updateSettings, updateProfile, loading: authLoading } = useAuth();
+    const { theme, setTheme } = useTheme();
     const [activeTab, setActiveTab] = useState('personal-info');
     const [showSuccess, setShowSuccess] = useState(false);
     const [saving, setSaving] = useState(false);
 
-    const [currentTheme, setCurrentTheme] = useState<'light' | 'dark'>(() =>
-        document.documentElement.classList.contains('dark') ? 'dark' : 'light'
-    );
+    const [currentTheme, setCurrentTheme] = useState<'light' | 'dark'>(() => theme);
 
     const [currentLanguage, setCurrentLanguage] = useState<'th' | 'en'>(() =>
         user?.language?.includes('English') ? 'en' : 'th'
@@ -109,9 +109,9 @@ const AccountSettings: FC = () => {
         setSecurity(prev => ({ ...prev, [field]: !prev[field] }));
     };
 
-    const handleThemeChange = (theme: 'light' | 'dark') => {
-        setCurrentTheme(theme);
-        document.documentElement.classList.toggle('dark', theme === 'dark');
+    const handleThemeChange = (nextTheme: 'light' | 'dark') => {
+        setCurrentTheme(nextTheme);
+        setTheme(nextTheme); // ThemeProvider will toggle .dark class + persist to localStorage
     };
 
     const handleLanguageChange = async (lang: 'th' | 'en') => {
@@ -174,7 +174,10 @@ const AccountSettings: FC = () => {
             {/* ── Success Toast ── */}
             {showSuccess && (
                 <div className="fixed top-24 right-6 z-50 bg-global-green/90 backdrop-blur-md text-white px-6 py-3 rounded-2xl shadow-lg flex items-center gap-3 animate-slide-in-right">
-                    <Check className="w-5 h-5" />
+                    {(() => {
+                        const CheckIcon = getIcon('ri-check-fill');
+                        return CheckIcon ? <CheckIcon className="w-5 h-5 transition-colors duration-200" /> : null;
+                    })()}
                     <span className="font-medium">บันทึกสำเร็จ!</span>
                 </div>
             )}
@@ -200,12 +203,15 @@ const AccountSettings: FC = () => {
                                     className="w-20 h-20 sm:w-24 sm:h-24 rounded-full object-cover ring-4 ring-light-surface-2 dark:ring-dark-border"
                                 />
                             ) : (
-                                <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-br from-indigo via-wine to-ember flex items-center justify-center text-white text-2xl sm:text-3xl font-bold ring-4 ring-light-surface-2 dark:ring-dark-border">
+                                <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-br from-blue-primary via-blue-secondary to-orange-primary flex items-center justify-center text-white text-2xl sm:text-3xl font-bold ring-4 ring-light-surface-2 dark:ring-dark-border">
                                     {getInitials()}
                                 </div>
                             )}
-                            <button className="absolute bottom-0 right-0 w-8 h-8 bg-indigo hover:bg-wine rounded-full flex items-center justify-center border-2 border-white dark:border-dark-surface transition-colors shadow-md">
-                                <Camera className="w-4 h-4 text-white" />
+                            <button className="absolute bottom-0 right-0 w-8 h-8 bg-blue-primary hover:bg-blue-secondary rounded-full flex items-center justify-center border-2 border-white dark:border-dark-surface transition-colors shadow-md">
+                                {(() => {
+                                    const CameraIcon = getIcon('ri-camera-fill');
+                                    return CameraIcon ? <CameraIcon className="w-4 h-4 text-white transition-colors duration-200" /> : null;
+                                })()}
                             </button>
                         </div>
 
@@ -214,7 +220,7 @@ const AccountSettings: FC = () => {
                             <p className={`text-sm mb-4 ${textSecondary}`}>รูปนี้จะแสดงบนโปรไฟล์ของคุณ</p>
                             <div className="flex items-center gap-3">
                                 <button className={btnOutline}>เปลี่ยนรูป</button>
-                                <button className="px-5 py-2.5 text-sm font-medium rounded-xl text-ember hover:bg-ember/10 transition-colors">
+                                <button className="px-5 py-2.5 text-sm font-medium rounded-xl text-orange-primary hover:bg-orange-primary/10 transition-colors">
                                     ลบรูป
                                 </button>
                             </div>
@@ -225,8 +231,11 @@ const AccountSettings: FC = () => {
                 {/* ── Display Settings ── */}
                 <div className={`${card} ${sectionPad} mb-10 animate-fade-in-up`} style={{ animationDelay: '0.1s' }}>
                     <div className="flex items-center gap-3 mb-1">
-                        <div className="w-8 h-8 rounded-full bg-wine/10 dark:bg-wine/20 flex items-center justify-center">
-                            <Globe className="w-4 h-4 text-wine" />
+                        <div className="w-8 h-8 rounded-full bg-orange-primary/10 dark:bg-orange-primary/20 flex items-center justify-center">
+                            {(() => {
+                                const GlobeIcon = getIcon('ri-globe-fill');
+                                return GlobeIcon ? <GlobeIcon className="w-4 h-4 text-orange-primary transition-colors duration-200" /> : null;
+                            })()}
                         </div>
                         <h2 className={`text-xl font-bold ${textPrimary}`}>การตั้งค่าการแสดงผล</h2>
                     </div>
@@ -236,7 +245,10 @@ const AccountSettings: FC = () => {
                         {/* Theme */}
                         <div className="bg-light-surface-2/50 dark:bg-dark-bg/50 rounded-2xl p-6 border border-light-border/40 dark:border-dark-border/40">
                             <div className="flex items-center gap-2.5 mb-1">
-                                <Sun className="w-5 h-5 text-peach" />
+                                {(() => {
+                                    const SunIcon = getIcon('ri-sun-fill');
+                                    return SunIcon ? <SunIcon className="w-5 h-5 text-peach transition-colors duration-200" /> : null;
+                                })()}
                                 <h3 className={`font-bold ${textPrimary}`}>ธีมหน้าจอ</h3>
                             </div>
                             <p className={`text-xs mb-5 ${textSecondary}`}>เลือกระหว่างโหมดสว่างและมืด</p>
@@ -245,13 +257,19 @@ const AccountSettings: FC = () => {
                                 <ToggleButton
                                     active={currentTheme === 'light'}
                                     onClick={() => handleThemeChange('light')}
-                                    icon={<Sun className="w-4 h-4" />}
+                                    icon={(() => {
+                                        const SunIcon = getIcon('ri-sun-fill');
+                                        return SunIcon ? <SunIcon className="w-4 h-4 transition-colors duration-200" /> : null;
+                                    })()}
                                     label="สว่าง"
                                 />
                                 <ToggleButton
                                     active={currentTheme === 'dark'}
                                     onClick={() => handleThemeChange('dark')}
-                                    icon={<Moon className="w-4 h-4" />}
+                                    icon={(() => {
+                                        const MoonIcon = getIcon('ri-moon-fill');
+                                        return MoonIcon ? <MoonIcon className="w-4 h-4 transition-colors duration-200" /> : null;
+                                    })()}
                                     label="มืด"
                                 />
                             </div>
@@ -264,7 +282,10 @@ const AccountSettings: FC = () => {
                         {/* Language */}
                         <div className="bg-light-surface-2/50 dark:bg-dark-bg/50 rounded-2xl p-6 border border-light-border/40 dark:border-dark-border/40">
                             <div className="flex items-center gap-2.5 mb-1">
-                                <Globe className="w-5 h-5 text-indigo" />
+                                {(() => {
+                                    const GlobeIcon = getIcon('ri-globe-fill');
+                                    return GlobeIcon ? <GlobeIcon className="w-5 h-5 text-blue-primary transition-colors duration-200" /> : null;
+                                })()}
                                 <h3 className={`font-bold ${textPrimary}`}>ภาษา</h3>
                             </div>
                             <p className={`text-xs mb-5 ${textSecondary}`}>เลือกภาษาที่ต้องการแสดงผล</p>
@@ -294,22 +315,30 @@ const AccountSettings: FC = () => {
                 {/* ── Tab Navigation ── */}
                 <div className="border-b border-light-border/60 dark:border-dark-border/60 mb-8 animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
                     <div className="flex overflow-x-auto scrollbar-none -mb-px">
-                        {tabs.map((tab) => (
+                        {tabs.map((tab) => {
+                            const TabIcon = getIcon(tab.icon);
+                            return (
                             <button
                                 key={tab.id}
                                 onClick={() => setActiveTab(tab.id)}
-                                className={`relative px-5 py-3.5 text-sm font-semibold whitespace-nowrap transition-colors duration-200 ${
+                                className={`relative px-5 py-3.5 text-sm font-semibold whitespace-nowrap transition-colors duration-200 flex items-center gap-2 ${
                                     activeTab === tab.id
-                                        ? 'text-ember'
+                                        ? 'text-orange-primary'
                                         : `${textSecondary} hover:text-light-text dark:hover:text-dark-text`
                                 }`}
                             >
+                                {TabIcon && <TabIcon className={`text-lg transition-colors duration-200 ${
+                                    activeTab === tab.id
+                                        ? 'text-orange-primary'
+                                        : 'text-light-text-secondary dark:text-dark-text-secondary'
+                                }`} />}
                                 {tab.label}
                                 {activeTab === tab.id && (
-                                    <span className="absolute bottom-0 left-0 right-0 h-[3px] bg-ember rounded-t-full" />
+                                    <span className="absolute bottom-0 left-0 right-0 h-[3px] bg-orange-primary rounded-t-full" />
                                 )}
                             </button>
-                        ))}
+                            );
+                        })}
                     </div>
                 </div>
 
@@ -320,9 +349,12 @@ const AccountSettings: FC = () => {
                         <button
                             onClick={handleSave}
                             disabled={saving}
-                            className="px-5 py-2.5 text-sm font-semibold rounded-xl bg-ember hover:bg-wine text-white shadow-md shadow-ember/20 hover:shadow-ember/40 transition-all duration-200 flex items-center gap-2 disabled:opacity-60"
+                            className="px-5 py-2.5 text-sm font-semibold rounded-xl bg-orange-primary hover:bg-blue-primary text-white shadow-md shadow-orange-primary/20 hover:shadow-orange-primary/40 transition-all duration-200 flex items-center gap-2 disabled:opacity-60"
                         >
-                            <Save className={`w-4 h-4 ${saving ? 'animate-spin' : ''}`} />
+                            {(() => {
+                                const SaveIcon = saving ? getIcon('ri-loader-line') : getIcon('ri-save-fill');
+                                return SaveIcon ? <SaveIcon className={`w-4 h-4 transition-colors duration-200 ${saving ? 'animate-spin' : ''}`} /> : null;
+                            })()}
                             {saving ? 'กำลังบันทึก...' : 'บันทึกการเปลี่ยนแปลง'}
                         </button>
                     </div>

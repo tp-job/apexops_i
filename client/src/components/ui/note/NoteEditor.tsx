@@ -1,131 +1,91 @@
-import { useState, useEffect, useRef, useCallback, type FC } from 'react';
+import { useState, useEffect, useRef, type FC } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
+import ShareNoteModal from './ShareNoteModal';
+import { type Note, contentToBlocks, blocksToContent, fetchNoteById, createNote, updateNote, useNoteAutosave, fetchNotes as fetchAllNotes } from './utils';
+import { isMockEnabled, isNetworkFailure } from '@/utils/offlineMock';
+import { mockAiReply } from '@/utils/mockData';
 
-// Types
-interface Note {
-    id: string;
-    title: string;
-    content: string;
-    type: 'text' | 'image' | 'list' | 'link';
-    isPinned: boolean;
-    color?: string;
-    tags: string[];
-    imageUrl?: string;
-    linkUrl?: string;
-    checklistItems: { text: string; checked: boolean }[];
-    quote: { text: string; author: string };
-    updatedAt?: string;
-}
+// ── TipTap Editor ─────────────────────────────────────────────
+import { useEditor, EditorContent, type Editor } from '@tiptap/react';
+import StarterKit from '@tiptap/starter-kit';
+import Underline from '@tiptap/extension-underline';
+import TextAlign from '@tiptap/extension-text-align';
+import { TextStyle } from '@tiptap/extension-text-style';
+import Color from '@tiptap/extension-color';
+import Highlight from '@tiptap/extension-highlight';
+import Link from '@tiptap/extension-link';
+import Image from '@tiptap/extension-image';
+import { Table } from '@tiptap/extension-table';
+import TableRow from '@tiptap/extension-table-row';
+import TableHeader from '@tiptap/extension-table-header';
+import TableCell from '@tiptap/extension-table-cell';
+
+// ── Demo data ────────────────────────────────────────────────
+const DEMO_ATTACHMENTS: Array<{ id: string; name: string; size: string; type: string }> = [
+    { id: 'a1', name: 'Q3_Review.pdf', size: '2.4 MB', type: 'PDF' },
+    { id: 'a2', name: 'Specs_v2.docx', size: '1.1 MB', type: 'DOCX' },
+    { id: 'a3', name: 'Roadmap_Slides.pptx', size: '3.6 MB', type: 'PPTX' },
+];
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
-// Toast Component
-const Toast: FC<{ message: string; type: 'success' | 'error' | 'info'; onClose: () => void }> = ({ message, type, onClose }) => {
-    useEffect(() => {
-        const timer = setTimeout(onClose, 3000);
-        return () => clearTimeout(timer);
-    }, [onClose]);
+interface AiMessage {
+    id: string;
+    role: 'user' | 'model';
+    text: string;
+    timestamp: number;
+}
 
-    const bgColor = type === 'success' ? 'bg-green-500' : type === 'error' ? 'bg-red-500' : 'bg-blue-500';
+interface NoteComment {
+    id: string;
+    author: string;
+    text: string;
+    message: string;
+    line: number;
+    selectedText: string;
+    createdAt: string;
+}
 
-    return (
-        <div className={`fixed bottom-6 right-6 z-50 ${bgColor} text-white px-6 py-3 rounded-xl shadow-lg flex items-center gap-3 animate-slide-up`}>
-            <i className={`${type === 'success' ? 'ri-check-line' : type === 'error' ? 'ri-error-warning-line' : 'ri-information-line'} text-xl`}></i>
-            <span className="font-medium">{message}</span>
-            <button onClick={onClose} className="ml-2 hover:opacity-70">
-                <i className="ri-close-line"></i>
-            </button>
-        </div>
-    );
+const generateAiReply = async (history: AiMessage[], prompt: string): Promise<string> => {
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/ai/chat`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                prompt,
+                history: history.map((msg) => ({
+                    role: msg.role,
+                    text: msg.text,
+                })),
+            }),
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            console.error('AI API Error:', errorData);
+
+            if (response.status === 429) {
+                return '⚠️ Rate limit exceeded. Please wait a moment and try again.';
+            }
+            if (response.status === 403) {
+                return '⚠️ AI service access denied. Please check your API key configuration.';
+            }
+
+            return errorData.error || 'Sorry, I encountered an error. Please try again.';
+        }
+
+        const data = await response.json();
+        return data.text || "I couldn't generate a response.";
+    } catch (error) {
+        console.error('Generation failed', error);
+        if (isMockEnabled() && isNetworkFailure(error)) {
+            return mockAiReply(prompt);
+        }
+        return "Sorry, I couldn't connect to the AI service. Please check if the server is running.";
+    }
 };
-
-// Delete Confirmation Modal
-const DeleteModal: FC<{ isOpen: boolean; onClose: () => void; onConfirm: () => void; isDeleting: boolean }> = ({ isOpen, onClose, onConfirm, isDeleting }) => {
-    if (!isOpen) return null;
-
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-            <div className="bg-light-surface dark:bg-dark-surface rounded-2xl p-6 max-w-md w-full mx-4 shadow-2xl border border-light-border dark:border-dark-border">
-                <div className="flex items-center gap-4 mb-4">
-                    <div className="size-12 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
-                        <i className="ri-delete-bin-line text-2xl text-red-500"></i>
-                    </div>
-                    <div>
-                        <h3 className="text-lg font-bold text-light-text-primary dark:text-dark-text-primary">Delete Note</h3>
-                        <p className="text-sm text-light-text-secondary dark:text-dark-text-secondary">This action cannot be undone</p>
-                    </div>
-                </div>
-                <p className="text-light-text dark:text-dark-text mb-6">
-                    Are you sure you want to delete this note? All content will be permanently removed.
-                </p>
-                <div className="flex justify-end gap-3">
-                    <button
-                        onClick={onClose}
-                        className="px-4 py-2 rounded-xl text-light-text-secondary dark:text-dark-text-secondary hover:bg-light-surface-2 dark:hover:bg-dark-surface-2 transition-colors"
-                        disabled={isDeleting}
-                    >
-                        Cancel
-                    </button>
-                    <button
-                        onClick={onConfirm}
-                        disabled={isDeleting}
-                        className="px-6 py-2 rounded-xl bg-red-500 text-white hover:bg-red-600 transition-colors flex items-center gap-2 disabled:opacity-50"
-                    >
-                        {isDeleting ? (
-                            <>
-                                <i className="ri-loader-4-line animate-spin"></i>
-                                Deleting...
-                            </>
-                        ) : (
-                            <>
-                                <i className="ri-delete-bin-line"></i>
-                                Delete
-                            </>
-                        )}
-                    </button>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-// Toolbar Button Component with active state support
-const ToolbarButton: FC<{
-    icon: string;
-    title?: string;
-    className?: string;
-    onClick?: () => void;
-    isActive?: boolean;
-    command?: string;
-}> = ({ icon, title, className = '', onClick, isActive = false, command }) => (
-    <button
-        onClick={onClick}
-        data-command={command}
-        className={`p-1.5 rounded hover:bg-light-surface-2 dark:hover:bg-dark-surface-2 transition-all duration-150 ${isActive
-            ? 'bg-ember/10 text-ember dark:bg-ember/20'
-            : 'text-light-text-secondary dark:text-dark-text-secondary'
-            } ${className}`}
-        title={title}
-    >
-        <i className={`${icon} text-lg`}></i>
-    </button>
-);
-
-const ToolbarDivider: FC = () => (
-    <div className="w-[1px] h-4 bg-light-border dark:bg-dark-border mx-1 shrink-0" />
-);
-
-const TabButton: FC<{ label: string; isActive?: boolean; onClick?: () => void }> = ({ label, isActive, onClick }) => (
-    <button
-        onClick={onClick}
-        className={`flex-1 py-2 text-xs font-semibold uppercase tracking-wide border-b-2 transition-colors ${isActive
-            ? 'border-ember text-light-text-primary dark:text-dark-text-primary'
-            : 'border-transparent text-light-text-secondary dark:text-dark-text-secondary hover:text-light-text-primary dark:hover:text-dark-text-primary'
-            }`}
-    >
-        {label}
-    </button>
-);
 
 const NoteEditor: FC = () => {
     const [searchParams] = useSearchParams();
@@ -136,805 +96,1060 @@ const NoteEditor: FC = () => {
     const [note, setNote] = useState<Note | null>(null);
     const [loading, setLoading] = useState(!isNewNote);
     const [saving, setSaving] = useState(false);
-    const [deleting, setDeleting] = useState(false);
     const [lastSaved, setLastSaved] = useState<string | null>(null);
-    const [showDeleteModal, setShowDeleteModal] = useState(false);
-    const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
-    const [activeTab, setActiveTab] = useState('Insight');
+    const [showShareModal, setShowShareModal] = useState(false);
+    const [activeRightTab, setActiveRightTab] = useState<'Context' | 'Assistant' | 'Comments'>('Context');
+    const [zoom, setZoom] = useState(1);
+    const [wordCount, setWordCount] = useState(0);
+    const [notesList, setNotesList] = useState<Note[]>([]);
+    const [notesLoading, setNotesLoading] = useState(false);
+    const [sidebarSearch, setSidebarSearch] = useState('');
+    const [aiMessages, setAiMessages] = useState<AiMessage[]>([]);
+    const [aiInput, setAiInput] = useState('');
+    const [aiLoading, setAiLoading] = useState(false);
+    const [comments, setComments] = useState<NoteComment[]>([]);
+    const [newCommentText, setNewCommentText] = useState('');
+    const [showCommentDialog, setShowCommentDialog] = useState(false);
+    const [commentButtonPosition, setCommentButtonPosition] = useState({ x: 0, y: 0, visible: false });
+    const [selectedText, setSelectedText] = useState('');
+    const [selectedLine, setSelectedLine] = useState(0);
+    const [selectionRange, setSelectionRange] = useState<{ from: number; to: number } | null>(null);
+    const commentDialogRef = useRef<HTMLDivElement>(null);
+    const dialogDragRef = useRef<{ startX: number; startY: number; startLeft: number; startTop: number } | null>(null);
+    const [isDraggingDialog, setIsDraggingDialog] = useState(false);
 
-    // Refs for contenteditable elements
-    const editorRef = useRef<HTMLDivElement>(null);
     const titleRef = useRef<HTMLDivElement>(null);
 
-    // Toolbar state
-    const [toolbarState, setToolbarState] = useState({
-        bold: false,
-        italic: false,
-        underline: false,
-        strikeThrough: false,
+    const editor = useEditor({
+        extensions: [
+            StarterKit.configure({
+                heading: { levels: [1, 2, 3, 4] },
+            }),
+            Underline,
+            TextStyle,
+            Color,
+            Highlight.configure({ multicolor: true }),
+            Link.configure({
+                openOnClick: true,
+                linkOnPaste: true,
+            }),
+            Image.configure({
+                inline: false,
+            }),
+            TextAlign.configure({
+                types: ['heading', 'paragraph'],
+            }),
+            Table.configure({
+                resizable: true,
+                lastColumnResizable: true,
+            }),
+            TableRow,
+            TableHeader,
+            TableCell,
+        ],
+        content: '',
+        autofocus: 'end',
+        onUpdate: ({ editor }) => {
+            const html = editor.getHTML();
+            const text = editor.getText();
+            setNote(prev => prev ? { ...prev, content: html } : prev);
+            const words = text
+                .split(/\s+/)
+                .map(w => w.trim())
+                .filter(Boolean).length;
+            setWordCount(words);
+        },
+        onSelectionUpdate: ({ editor }) => {
+            const { from, to } = editor.state.selection;
+            const selectedText = editor.state.doc.textBetween(from, to);
+            
+            if (selectedText.trim().length > 0) {
+                // 计算行号：计算选中文本之前的换行符数量
+                const textBeforeSelection = editor.state.doc.textBetween(0, from);
+                const lineNumber = textBeforeSelection.split('\n').length;
+                
+                setSelectedText(selectedText);
+                setSelectedLine(lineNumber);
+                setSelectionRange({ from, to });
+                
+            } else {
+                setSelectedText('');
+                setSelectedLine(0);
+                setSelectionRange(null);
+            }
+        },
     });
 
-    // Show toast helper
-    const showToast = useCallback((message: string, type: 'success' | 'error' | 'info') => {
-        setToast({ message, type });
-    }, []);
-
-    // ========================================
-    // Formatting Functions
-    // ========================================
-
-    const addClickFeedback = useCallback((buttonSelector: string) => {
-        const button = document.querySelector(buttonSelector) as HTMLElement;
-        if (button) {
-            button.style.transform = 'scale(0.96)';
-            button.style.transition = 'transform 0.12s ease';
-            setTimeout(() => {
-                button.style.transform = '';
-            }, 100);
-        }
-    }, []);
-
-    const execCommand = useCallback((command: string, value: string | null = null): boolean => {
-        const editor = editorRef.current;
-        if (!editor) return false;
-
-        editor.focus();
-        const result = document.execCommand(command, false, value ?? undefined);
-        setTimeout(updateToolbarStates, 10);
-
-        return result;
-    }, []);
-
-    const formatText = useCallback((command: string) => {
-        addClickFeedback(`[data-command="${command}"]`);
-        execCommand(command);
-    }, [addClickFeedback, execCommand]);
-
-    const insertList = useCallback((type: 'ul' | 'ol') => {
-        addClickFeedback(`[data-command="${type}"]`);
-        const command = type === 'ul' ? 'insertUnorderedList' : 'insertOrderedList';
-        execCommand(command);
-    }, [addClickFeedback, execCommand]);
-
-    const alignText = useCallback((alignment: 'justifyLeft' | 'justifyCenter' | 'justifyRight') => {
-        addClickFeedback(`[data-command="${alignment}"]`);
-        execCommand(alignment);
-    }, [addClickFeedback, execCommand]);
-
-    const insertLink = useCallback(() => {
-        const url = prompt('Enter URL:');
-        if (url) {
-            execCommand('createLink', url);
-            setTimeout(() => {
-                const selection = window.getSelection();
-                if (selection && selection.anchorNode) {
-                    const link = selection.anchorNode.parentElement?.closest('a');
-                    if (link) {
-                        link.setAttribute('target', '_blank');
-                        link.setAttribute('rel', 'noopener noreferrer');
-                    }
-                }
-            }, 10);
-        }
-    }, [execCommand]);
-
-    const insertImage = useCallback(() => {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = 'image/*';
-
-        input.onchange = async (e) => {
-            const file = (e.target as HTMLInputElement).files?.[0];
-            if (!file) return;
-
-            const reader = new FileReader();
-            reader.onload = (event) => {
-                const base64 = event.target?.result as string;
-                execCommand('insertImage', base64);
-            };
-            reader.readAsDataURL(file);
-        };
-
-        input.click();
-    }, [execCommand]);
-
-    const insertTable = useCallback((rows: number = 3, cols: number = 3) => {
-        const editor = editorRef.current;
+    // Initial load
+    useEffect(() => {
         if (!editor) return;
 
-        let tableHtml = '<table class="editor-table" style="border-collapse: collapse; width: 100%; margin: 1rem 0;">';
-
-        for (let i = 0; i < rows; i++) {
-            tableHtml += '<tr>';
-            for (let j = 0; j < cols; j++) {
-                tableHtml += `<td style="border: 1px solid var(--color-light-border); padding: 8px; min-width: 80px;" contenteditable="true">&nbsp;</td>`;
-            }
-            tableHtml += '</tr>';
-        }
-
-        tableHtml += '</table>';
-        execCommand('insertHTML', tableHtml);
-    }, [execCommand]);
-
-    const undoAction = useCallback(() => {
-        addClickFeedback('[data-command="undo"]');
-        execCommand('undo');
-    }, [addClickFeedback, execCommand]);
-
-    const redoAction = useCallback(() => {
-        addClickFeedback('[data-command="redo"]');
-        execCommand('redo');
-    }, [addClickFeedback, execCommand]);
-
-    const insertQuote = useCallback(() => {
-        addClickFeedback('[data-command="quote"]');
-        execCommand('formatBlock', 'blockquote');
-    }, [addClickFeedback, execCommand]);
-
-    const insertCode = useCallback(() => {
-        addClickFeedback('[data-command="code"]');
-        const selection = window.getSelection();
-        if (selection && selection.rangeCount > 0) {
-            const range = selection.getRangeAt(0);
-            const selectedText = range.toString();
-
-            if (selectedText) {
-                const code = document.createElement('code');
-                code.style.cssText = 'background: var(--color-dark-surface-2); padding: 2px 6px; border-radius: 4px; font-family: monospace;';
-                code.textContent = selectedText;
-                range.deleteContents();
-                range.insertNode(code);
-            } else {
-                execCommand('insertHTML', '<code style="background: var(--color-dark-surface-2); padding: 2px 6px; border-radius: 4px; font-family: monospace;">&nbsp;</code>');
-            }
-        }
-    }, [addClickFeedback, execCommand]);
-
-    const insertHighlight = useCallback(() => {
-        addClickFeedback('[data-command="highlight"]');
-        const selection = window.getSelection();
-        if (selection && selection.rangeCount > 0) {
-            const range = selection.getRangeAt(0);
-            const selectedText = range.toString();
-
-            if (selectedText) {
-                const mark = document.createElement('mark');
-                mark.style.cssText = 'background: rgba(255, 213, 79, 0.4); padding: 2px 0;';
-                mark.textContent = selectedText;
-                range.deleteContents();
-                range.insertNode(mark);
-            }
-        }
-    }, [addClickFeedback]);
-
-    const updateToolbarStates = useCallback(() => {
-        const commandMap: Record<string, keyof typeof toolbarState> = {
-            bold: 'bold',
-            italic: 'italic',
-            underline: 'underline',
-            strikeThrough: 'strikeThrough',
-        };
-
-        const newState = { ...toolbarState };
-
-        Object.keys(commandMap).forEach((cmd) => {
-            try {
-                newState[commandMap[cmd]] = document.queryCommandState(cmd);
-            } catch {
-                // Ignore errors
-            }
-        });
-
-        setToolbarState(newState);
-    }, []);
-
-    // ========================================
-    // Keyboard Shortcuts
-    // ========================================
-    useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (!editorRef.current?.contains(document.activeElement) &&
-                !titleRef.current?.contains(document.activeElement)) {
-                return;
-            }
-
-            if (e.ctrlKey || e.metaKey) {
-                switch (e.key.toLowerCase()) {
-                    case 'b':
-                        e.preventDefault();
-                        formatText('bold');
-                        break;
-                    case 'i':
-                        e.preventDefault();
-                        formatText('italic');
-                        break;
-                    case 'u':
-                        e.preventDefault();
-                        formatText('underline');
-                        break;
-                    case 'z':
-                        if (e.shiftKey) {
-                            e.preventDefault();
-                            redoAction();
-                        } else {
-                            e.preventDefault();
-                            undoAction();
-                        }
-                        break;
-                    case 'y':
-                        e.preventDefault();
-                        redoAction();
-                        break;
-                    case 's':
-                        e.preventDefault();
-                        handleSave();
-                        break;
-                }
-            }
-        };
-
-        document.addEventListener('keydown', handleKeyDown);
-        return () => document.removeEventListener('keydown', handleKeyDown);
-    }, [formatText, undoAction, redoAction]);
-
-    // Selection change listener
-    useEffect(() => {
-        const handleSelectionChange = () => {
-            updateToolbarStates();
-        };
-
-        document.addEventListener('selectionchange', handleSelectionChange);
-        return () => document.removeEventListener('selectionchange', handleSelectionChange);
-    }, [updateToolbarStates]);
-
-    // ========================================
-    // API Functions
-    // ========================================
-
-    // Initialize new note or fetch existing
-    useEffect(() => {
         if (isNewNote) {
-            // Create empty note for new note
-            setNote({
+            const initialBlocks = contentToBlocks('');
+            const initial: Note = {
                 id: '',
                 title: '',
                 content: '',
                 type: 'text',
                 isPinned: false,
-                tags: [],
+                tags: ['React', 'Docs'],
                 checklistItems: [],
-                quote: { text: '', author: '' }
-            });
+                quote: { text: '', author: '' },
+                blocks: initialBlocks,
+            };
+            setNote(initial);
+            editor.commands.setContent('', { emitUpdate: false });
+            setWordCount(0);
             setLoading(false);
         } else {
-            // Fetch existing note
             const fetchNote = async () => {
-                const token = localStorage.getItem('accessToken');
                 try {
-                    const res = await fetch(`${API_BASE_URL}/api/notes/${noteId}`, {
-                        headers: { 'Authorization': `Bearer ${token}` }
-                    });
-                    if (res.ok) {
-                        const data = await res.json();
-                        setNote(data);
+                    const result = await fetchNoteById(noteId!);
+                    if (result.success && result.data) {
+                        const data = result.data as Note;
+                        const blocks = contentToBlocks(data.content || '');
+                        setNote({ ...data, blocks });
                         if (data.updatedAt) setLastSaved(new Date(data.updatedAt).toLocaleTimeString());
-
-                        setTimeout(() => {
-                            if (editorRef.current && data.content) {
-                                editorRef.current.innerHTML = data.content;
-                            }
-                            if (titleRef.current && data.title) {
-                                titleRef.current.textContent = data.title;
-                            }
-                        }, 0);
-                    } else {
-                        showToast('Note not found', 'error');
-                        navigate('/note');
+                        editor.commands.setContent(data.content || '', { emitUpdate: false });
+                        const text = editor.getText();
+                        const words = text
+                            .split(/\s+/)
+                            .map(w => w.trim())
+                            .filter(Boolean).length;
+                        setWordCount(words);
+                        if (titleRef.current) {
+                            titleRef.current.textContent = data.title || '';
+                        }
                     }
                 } catch (err) {
-                    console.error('Error fetching note:', err);
-                    showToast('Failed to load note', 'error');
+                    console.error(err);
                 } finally {
                     setLoading(false);
                 }
             };
-
-            fetchNote();
+            void fetchNote();
         }
-    }, [noteId, isNewNote, navigate, showToast]);
+    }, [noteId, isNewNote, editor]);
 
-    // Save note (create or update)
+    const autosaveStatus = useNoteAutosave({
+        noteId,
+        enabled: !isNewNote && !!note,
+        title: note?.title || '',
+        content: note?.content || '',
+    });
+
+    // Load notes list for left sidebar
+    useEffect(() => {
+        const loadNotes = async () => {
+            setNotesLoading(true);
+            try {
+                const res = await fetchAllNotes();
+                if (res.success && res.data) {
+                    setNotesList(res.data as Note[]);
+                }
+            } catch (err) {
+                console.error('Error loading notes list:', err);
+            } finally {
+                setNotesLoading(false);
+            }
+        };
+        void loadNotes();
+    }, []);
+
     const handleSave = async () => {
-        if (!note) return;
-
-        const content = editorRef.current?.innerHTML || '';
-        const title = titleRef.current?.textContent || '';
-
-        if (!title && !content) {
-            showToast('Please add a title or content', 'error');
-            return;
-        }
-
+        if (!note || !editor) return;
         setSaving(true);
-        const token = localStorage.getItem('accessToken');
-
+        const rawContent = editor.getHTML();
+        const blocks = contentToBlocks(rawContent);
+        const content = blocksToContent(blocks);
+        const title = titleRef.current?.textContent || note.title || '';
         try {
             if (isNewNote) {
-                // Create new note
-                const res = await fetch(`${API_BASE_URL}/api/notes`, {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        title,
-                        content,
-                        type: 'text',
-                        isPinned: note.isPinned,
-                        tags: note.tags,
-                        color: note.color
-                    })
-                });
-
-                if (res.ok) {
-                    const newNote = await res.json();
-                    showToast('Note created successfully!', 'success');
-                    // Navigate to edit mode with new note ID
-                    navigate(`/note-editor?id=${newNote.id}`, { replace: true });
-                } else {
-                    const error = await res.json();
-                    showToast(error.error || 'Failed to create note', 'error');
-                }
-            } else {
-                // Update existing note
-                const res = await fetch(`${API_BASE_URL}/api/notes/${noteId}`, {
-                    method: 'PUT',
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        title,
-                        content,
-                        checklistItems: note.checklistItems,
-                        quote: note.quote,
-                        tags: note.tags,
-                        color: note.color,
-                        isPinned: note.isPinned
-                    })
-                });
-
-                if (res.ok) {
-                    const updated = await res.json();
-                    setNote(updated);
+                const result = await createNote({ title, content, type: 'text', isPinned: note.isPinned, tags: note.tags });
+                if (result.success && result.data) {
+                    const created = result.data as Note;
+                    navigate(`/note-editor?id=${created.id}`, { replace: true });
                     setLastSaved(new Date().toLocaleTimeString());
-                    showToast('Note saved successfully!', 'success');
-                } else {
-                    const error = await res.json();
-                    showToast(error.error || 'Failed to save note', 'error');
+                }
+            } else {
+                const result = await updateNote(noteId!, { title, content });
+                if (result.success && result.data) {
+                    setLastSaved(new Date().toLocaleTimeString());
                 }
             }
-        } catch (err) {
-            console.error('Error saving note:', err);
-            showToast('Failed to save note', 'error');
-        } finally {
-            setSaving(false);
-        }
+        } catch (err) { console.error(err); } finally { setSaving(false); }
     };
 
-    // Delete note
-    const handleDelete = async () => {
-        if (!noteId) return;
+    useEffect(() => {
+        // Reset per-note ephemeral state when切换笔记
+        setComments([]);
+        setNewCommentText('');
+        setAiMessages([]);
+        setAiInput('');
+        setShowCommentDialog(false);
+        setSelectedText('');
+        setSelectedLine(0);
+        setSelectionRange(null);
+        setCommentButtonPosition(prev => ({ ...prev, visible: false }));
+    }, [noteId]);
 
-        setDeleting(true);
-        const token = localStorage.getItem('accessToken');
+    const handleSendAi = async () => {
+        const text = aiInput.trim();
+        if (!text) return;
+        const baseHistory = aiMessages;
+        const userMsg: AiMessage = {
+            id: String(Date.now()),
+            role: 'user',
+            text,
+            timestamp: Date.now(),
+        };
+        const historyWithUser = [...baseHistory, userMsg];
+        setAiMessages(historyWithUser);
+        setAiInput('');
+        setAiLoading(true);
+        const replyText = await generateAiReply(historyWithUser, text);
+        const replyMsg: AiMessage = {
+            id: String(Date.now() + 1),
+            role: 'model',
+            text: replyText,
+            timestamp: Date.now(),
+        };
+        setAiMessages((prev) => [...prev, replyMsg]);
+        setAiLoading(false);
+    };
 
-        try {
-            const res = await fetch(`${API_BASE_URL}/api/notes/${noteId}`, {
-                method: 'DELETE',
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
+    const handleOpenCommentDialog = () => {
+        if (!selectedText.trim() || !selectionRange) return;
+        const dialogWidth = 400;
+        const dialogHeight = 320;
+        const padding = 24;
+        const toolbarHeight = 80;
+        const x = Math.max(padding, Math.min(window.innerWidth - dialogWidth - padding, (window.innerWidth - dialogWidth) / 2));
+        const y = Math.max(padding, Math.min(window.innerHeight - dialogHeight - padding, toolbarHeight + 16));
+        setCommentButtonPosition({ x, y, visible: false });
+        setShowCommentDialog(true);
+    };
 
-            if (res.ok) {
-                showToast('Note deleted successfully!', 'success');
-                setTimeout(() => {
-                    navigate('/note');
-                }, 1000);
-            } else {
-                const error = await res.json();
-                showToast(error.error || 'Failed to delete note', 'error');
+    const handleAddComment = () => {
+        const text = newCommentText.trim();
+        if (!text || !selectedText) return;
+        const comment: NoteComment = {
+            id: String(Date.now()),
+            author: 'Viewer',
+            text: selectedText,
+            message: text,
+            line: selectedLine,
+            selectedText: selectedText,
+            createdAt: new Date().toISOString(),
+        };
+        setComments((prev) => [...prev, comment]);
+        setNewCommentText('');
+        setShowCommentDialog(false);
+        setCommentButtonPosition(prev => ({ ...prev, visible: false }));
+        dialogDragRef.current = null;
+        setIsDraggingDialog(false);
+        // 清除选中
+        if (editor && selectionRange) {
+            editor.commands.setTextSelection({ from: selectionRange.to, to: selectionRange.to });
+            editor.commands.blur();
+        }
+        setSelectedText('');
+        setSelectedLine(0);
+        setSelectionRange(null);
+    };
+
+    const handleCancelComment = () => {
+        setShowCommentDialog(false);
+        setNewCommentText('');
+        setCommentButtonPosition(prev => ({ ...prev, visible: false }));
+        dialogDragRef.current = null;
+        setIsDraggingDialog(false);
+        // 清除选中
+        if (editor && selectionRange) {
+            editor.commands.setTextSelection({ from: selectionRange.to, to: selectionRange.to });
+            editor.commands.blur();
+        }
+        setSelectedText('');
+        setSelectedLine(0);
+        setSelectionRange(null);
+    };
+
+    const handleAddCommentFromSidebar = () => {
+        const text = newCommentText.trim();
+        if (!text) return;
+        const comment: NoteComment = {
+            id: String(Date.now()),
+            author: 'Viewer',
+            text: '',
+            message: text,
+            line: 0,
+            selectedText: '',
+            createdAt: new Date().toISOString(),
+        };
+        setComments((prev) => [...prev, comment]);
+        setNewCommentText('');
+    };
+
+    // ปิด Comment dialog เมื่อคลิกนอกหรือกด Escape
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            const target = event.target as Node;
+            if (commentDialogRef.current && !commentDialogRef.current.contains(target) && showCommentDialog) {
+                handleCancelComment();
             }
-        } catch (err) {
-            console.error('Error deleting note:', err);
-            showToast('Failed to delete note', 'error');
-        } finally {
-            setDeleting(false);
-            setShowDeleteModal(false);
+        };
+
+        const handleEscape = (event: KeyboardEvent) => {
+            if (event.key === 'Escape' && showCommentDialog) {
+                handleCancelComment();
+            }
+        };
+
+        if (showCommentDialog) {
+            document.addEventListener('mousedown', handleClickOutside);
+            document.addEventListener('keydown', handleEscape);
+            return () => {
+                document.removeEventListener('mousedown', handleClickOutside);
+                document.removeEventListener('keydown', handleEscape);
+            };
         }
-    };
+    }, [showCommentDialog, editor]);
 
-    // Handle content changes
-    const handleContentChange = useCallback(() => {
-        if (editorRef.current && note) {
-            setNote(prev => prev ? { ...prev, content: editorRef.current?.innerHTML || '' } : null);
-        }
-    }, [note]);
+    useEffect(() => {
+        if (!showCommentDialog) return;
 
-    const handleTitleChange = useCallback(() => {
-        if (titleRef.current && note) {
-            setNote(prev => prev ? { ...prev, title: titleRef.current?.textContent || '' } : null);
-        }
-    }, [note]);
+        const onMouseMove = (e: MouseEvent) => {
+            const d = dialogDragRef.current;
+            if (!d) return;
+            setCommentButtonPosition({
+                x: d.startLeft + (e.clientX - d.startX),
+                y: d.startTop + (e.clientY - d.startY),
+                visible: false,
+            });
+        };
 
-    // ========================================
-    // Render
-    // ========================================
-    if (loading) {
-        return (
-            <div className="flex-1 h-screen flex items-center justify-center bg-light-bg dark:bg-dark-bg">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-ember"></div>
-            </div>
-        );
-    }
+        const onMouseUp = () => {
+            dialogDragRef.current = null;
+            setIsDraggingDialog(false);
+        };
 
-    if (!note) {
-        return (
-            <div className="flex-1 h-screen flex flex-col items-center justify-center bg-light-bg dark:bg-dark-bg">
-                <i className="ri-error-warning-line text-6xl text-light-text-secondary dark:text-dark-text-secondary mb-4"></i>
-                <p className="text-xl text-light-text-secondary dark:text-dark-text-secondary">Note not found</p>
-                <button onClick={() => navigate('/note')} className="mt-4 px-6 py-2 bg-ember text-white rounded-xl shadow-lg hover:bg-wine transition-all">
-                    Go Back to Gallery
-                </button>
-            </div>
-        );
-    }
+        window.addEventListener('mousemove', onMouseMove);
+        window.addEventListener('mouseup', onMouseUp);
+        return () => {
+            window.removeEventListener('mousemove', onMouseMove);
+            window.removeEventListener('mouseup', onMouseUp);
+        };
+    }, [showCommentDialog]);
+
+    if (loading) return (
+        <div className="flex-1 h-screen flex items-center justify-center bg-dark-bg text-blue-primary">
+            <span className="material-symbols-outlined text-5xl animate-spin">loader_2</span>
+        </div>
+    );
 
     return (
-        <div className="font-inter text-light-text dark:text-dark-text antialiased h-screen flex flex-col overflow-hidden">
-            {/* Toast */}
-            {toast && (
-                <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
-            )}
-
-            {/* Delete Modal */}
-            <DeleteModal
-                isOpen={showDeleteModal}
-                onClose={() => setShowDeleteModal(false)}
-                onConfirm={handleDelete}
-                isDeleting={deleting}
-            />
-
-            {/* Header */}
-            <header className="h-14 flex items-center justify-between px-4 border-b border-light-border dark:border-dark-border bg-light-surface/80 dark:bg-dark-surface/80 backdrop-blur-md shrink-0 z-20 shadow-sm">
-                <div className="flex items-center gap-4">
-                    <button onClick={() => navigate('/note')} className="size-10 flex items-center justify-center text-light-text-secondary dark:text-dark-text-secondary hover:bg-light-surface-2 dark:hover:bg-dark-surface-2 rounded-xl transition-all">
-                        <i className="ri-arrow-left-line text-2xl"></i>
-                    </button>
-                    <div className="flex flex-col">
-                        <span className="text-xs font-bold text-ember uppercase tracking-widest leading-none">
-                            {isNewNote ? 'New Note' : 'Edit Note'}
-                        </span>
-                        <div className="flex items-center gap-1 text-sm text-light-text-secondary dark:text-dark-text-secondary">
-                            <i className="ri-folder-open-line"></i> Workspace <i className="ri-arrow-right-s-line"></i> {note.type}
-                        </div>
+        <div className="flex flex-col h-screen overflow-hidden bg-white dark:bg-dark-bg transition-colors duration-300 font-sans antialiased text-light-text dark:text-dark-text">
+            {/* Glass Header */}
+            <header className="h-14 bg-white/60 dark:bg-dark-bg/60 backdrop-blur-md fixed top-0 w-full z-50 flex items-center justify-between px-6 border-b border-light-border dark:border-dark-border">
+                        <div className="flex items-center gap-6">
+                    <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate('/note')}>
+                        <div className="w-8 h-8 bg-linear-to-br from-blue-primary to-blue-secondary rounded-xl flex items-center justify-center text-white font-bold text-sm shadow-lg shadow-blue-primary/20">S</div>
+                        <span className="font-bold text-lg text-light-text-primary dark:text-white tracking-tight">SmartNote</span>
+                    </div>
+                    <div className="hidden lg:flex items-center text-sm text-light-text-secondary dark:text-dark-text-secondary font-medium h-full">
+                        <span className="mx-2 opacity-30">/</span>
+                        <span className="hover:text-light-text-primary dark:hover:text-white cursor-pointer">Workspace</span>
+                        <span className="mx-2 opacity-30">/</span>
+                        <span className="text-light-text-primary dark:text-white font-bold">{note?.title || 'Untitled'}</span>
                     </div>
                 </div>
 
                 <div className="flex items-center gap-4">
-                    <div className="hidden md:flex flex-col items-end">
-                        <span className="text-[10px] font-bold text-light-text-secondary/70 dark:text-dark-text-secondary/70 uppercase tracking-wider">Status</span>
-                        <span className="text-xs text-light-text-secondary dark:text-dark-text-secondary italic">
-                            {saving ? 'Saving changes...' : isNewNote ? 'New note' : lastSaved ? `Last saved ${lastSaved}` : 'All changes saved'}
-                        </span>
-                    </div>
-
-                    {/* Delete Button (only for existing notes) */}
-                    {!isNewNote && (
-                        <button
-                            onClick={() => setShowDeleteModal(true)}
-                            className="p-2 rounded-xl text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                            title="Delete note"
-                        >
-                            <i className="ri-delete-bin-line text-xl"></i>
-                        </button>
-                    )}
-
-                    <div className="w-[1px] h-8 bg-light-border dark:bg-dark-border mx-1"></div>
-
                     <button
-                        onClick={handleSave}
-                        className={`px-6 py-2 rounded-xl text-sm font-bold shadow-sm transition-all flex items-center gap-2 ${saving ? 'bg-light-surface-2 text-light-text-secondary' : 'bg-gradient-to-r from-ember to-wine text-white hover:shadow-lg hover:shadow-ember/20 active:scale-95'}`}
-                        disabled={saving}
+                        onClick={() => setShowShareModal(true)}
+                        className="bg-blue-primary hover:bg-blue-600 text-white px-4 py-1.5 rounded-lg text-sm font-bold flex items-center gap-2 transition-all shadow-lg shadow-blue-primary/10"
                     >
-                        {saving ? <i className="ri-loader-4-line animate-spin"></i> : <i className="ri-save-3-line"></i>}
-                        {saving ? 'Saving' : isNewNote ? 'Create Note' : 'Save Changes'}
+                        <span className="material-symbols-outlined text-sm">share</span>
+                        SHARE
                     </button>
+                    <div className="h-6 w-px bg-light-border dark:bg-dark-border"></div>
+                    <div className="flex -space-x-2">
+                        <img className="w-8 h-8 rounded-full border-2 border-white dark:border-dark-bg ring-1 ring-light-border dark:ring-dark-border" src="https://i.pravatar.cc/100?u=1" alt="U1" />
+                        <img className="w-8 h-8 rounded-full border-2 border-white dark:border-dark-bg ring-1 ring-light-border dark:ring-dark-border" src="https://i.pravatar.cc/100?u=2" alt="U2" />
+                    </div>
                 </div>
             </header>
 
-            <div className="flex flex-1 overflow-hidden relative">
-                {/* Main Editor Section */}
-                <main className="flex-1 flex flex-col min-w-0 relative overflow-y-auto">
-                    {/* Toolbar */}
-                    <div className="sticky top-0 z-10 px-6 py-2 border-b border-light-border dark:border-dark-border bg-light-surface/50 dark:bg-dark-surface/50 backdrop-blur-md flex items-center justify-between">
-                        <div className="flex items-center gap-1 flex-wrap">
-                            {/* Undo/Redo Group */}
-                            <div className="flex items-center gap-0.5">
-                                <ToolbarButton icon="ri-arrow-go-back-line" title="Undo (Ctrl+Z)" command="undo" onClick={undoAction} />
-                                <ToolbarButton icon="ri-arrow-go-forward-line" title="Redo (Ctrl+Y)" command="redo" onClick={redoAction} />
+            <div className="flex flex-1 pt-14 h-full">
+                {/* Left Sidebar - All Notes */}
+                <aside className="w-64 bg-light-bg/20 dark:bg-dark-bg/50 flex flex-col shrink-0 hidden md:flex border-r border-light-border dark:border-dark-border overflow-y-auto custom-scrollbar">
+                    <div className="p-4 flex flex-col gap-4 h-full">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="text-[10px] font-bold text-light-text-secondary dark:text-dark-text-secondary uppercase tracking-[0.2em]">
+                                    All Notes
+                                </p>
+                                <p className="text-xs text-light-text-secondary dark:text-dark-text-secondary">
+                                    {notesLoading ? 'Loading…' : `${notesList.length} documents`}
+                                </p>
                             </div>
-
-                            <ToolbarDivider />
-
-                            {/* Text Formatting Group */}
-                            <div className="flex items-center gap-0.5">
-                                <ToolbarButton icon="ri-bold" title="Bold (Ctrl+B)" command="bold" isActive={toolbarState.bold} onClick={() => formatText('bold')} />
-                                <ToolbarButton icon="ri-italic" title="Italic (Ctrl+I)" command="italic" isActive={toolbarState.italic} onClick={() => formatText('italic')} />
-                                <ToolbarButton icon="ri-underline" title="Underline (Ctrl+U)" command="underline" isActive={toolbarState.underline} onClick={() => formatText('underline')} />
-                                <ToolbarButton icon="ri-strikethrough" title="Strikethrough" command="strikeThrough" isActive={toolbarState.strikeThrough} onClick={() => formatText('strikeThrough')} />
-                            </div>
-
-                            <ToolbarDivider />
-
-                            {/* Code & Highlight */}
-                            <div className="flex items-center gap-0.5">
-                                <ToolbarButton icon="ri-code-line" title="Code" command="code" onClick={insertCode} />
-                                <ToolbarButton icon="ri-mark-pen-line" title="Highlight" command="highlight" onClick={insertHighlight} />
-                            </div>
-
-                            <ToolbarDivider />
-
-                            {/* Lists Group */}
-                            <div className="flex items-center gap-0.5">
-                                <ToolbarButton icon="ri-list-unordered" title="Bullet List" command="ul" onClick={() => insertList('ul')} />
-                                <ToolbarButton icon="ri-list-ordered" title="Numbered List" command="ol" onClick={() => insertList('ol')} />
-                            </div>
-
-                            <ToolbarDivider />
-
-                            {/* Alignment Group */}
-                            <div className="flex items-center gap-0.5">
-                                <ToolbarButton icon="ri-align-left" title="Align Left" command="justifyLeft" onClick={() => alignText('justifyLeft')} />
-                                <ToolbarButton icon="ri-align-center" title="Align Center" command="justifyCenter" onClick={() => alignText('justifyCenter')} />
-                                <ToolbarButton icon="ri-align-right" title="Align Right" command="justifyRight" onClick={() => alignText('justifyRight')} />
-                            </div>
-
-                            <ToolbarDivider />
-
-                            {/* Media/Other Group */}
-                            <div className="flex items-center gap-0.5">
-                                <ToolbarButton icon="ri-link" title="Insert Link" command="link" onClick={insertLink} />
-                                <ToolbarButton icon="ri-image-line" title="Insert Image" command="image" onClick={insertImage} />
-                                <ToolbarButton icon="ri-table-2" title="Insert Table" command="table" onClick={() => insertTable(3, 3)} />
-                                <ToolbarButton icon="ri-double-quotes-r" title="Quote" command="quote" onClick={insertQuote} />
-                            </div>
+                            <button
+                                onClick={() => navigate('/note-editor')}
+                                className="p-1.5 rounded-lg hover:bg-light-surface-2 dark:hover:bg-dark-surface-2 text-light-text-secondary dark:text-dark-text-secondary"
+                            >
+                                <span className="material-symbols-outlined text-[18px]">add</span>
+                            </button>
                         </div>
 
-                        <div className="flex items-center gap-2 shrink-0">
-                            <button
-                                onClick={() => setNote({ ...note, isPinned: !note.isPinned })}
-                                className={`p-2 rounded-lg transition-all ${note.isPinned ? 'bg-ember/10 text-ember dark:bg-ember/20' : 'hover:bg-light-surface-2 dark:hover:bg-dark-surface-2 text-light-text-secondary dark:text-dark-text-secondary'}`}
-                            >
-                                <i className={note.isPinned ? "ri-pushpin-2-fill text-xl" : "ri-pushpin-2-line text-xl"}></i>
-                            </button>
+                        {/* Search */}
+                        <div className="relative">
+                            <span className="absolute inset-y-0 left-2 flex items-center text-light-text-secondary dark:text-dark-text-secondary">
+                                <span className="material-symbols-outlined text-[18px]">search</span>
+                            </span>
+                            <input
+                                value={sidebarSearch}
+                                onChange={(e) => setSidebarSearch(e.target.value)}
+                                placeholder="Filter notes…"
+                                className="w-full pl-8 pr-3 py-2 rounded-lg bg-light-surface-2 dark:bg-dark-surface-2 border border-light-border dark:border-dark-border text-xs text-light-text-primary dark:text-dark-text-primary placeholder:text-light-text-secondary dark:placeholder:text-dark-text-secondary focus:outline-none focus:ring-1 focus:ring-blue-primary/40"
+                            />
+                        </div>
+
+                        {/* Notes list */}
+                        <div className="flex-1 min-h-0 space-y-3">
+                            {(() => {
+                                const query = sidebarSearch.trim().toLowerCase();
+                                const filtered = notesList.filter((n) => {
+                                    if (!query) return true;
+                                    return (
+                                        (n.title || '').toLowerCase().includes(query) ||
+                                        (n.content || '').toLowerCase().includes(query)
+                                    );
+                                });
+                                const pinned = filtered.filter((n) => n.isPinned);
+                                const others = filtered.filter((n) => !n.isPinned);
+                                const renderGroup = (label: string, items: Note[]) => (
+                                    items.length > 0 && (
+                                        <div key={label}>
+                                            <p className="px-1 mb-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-light-text-secondary dark:text-dark-text-secondary">
+                                                {label}
+                                            </p>
+                                            <div className="space-y-1">
+                                                {items.map((n) => {
+                                                    const active = String(n.id) === (noteId ?? '');
+                                                    return (
+                                                        <button
+                                                            key={n.id}
+                                                            type="button"
+                                                            onClick={() => navigate(`/note-editor?id=${n.id}`)}
+                                                            className={`w-full text-left px-2.5 py-2 rounded-lg text-xs transition-colors ${
+                                                                active
+                                                                    ? 'bg-blue-primary/10 text-blue-primary'
+                                                                    : 'text-light-text-secondary dark:text-dark-text-secondary hover:bg-light-surface-2 dark:hover:bg-dark-surface-2'
+                                                            }`}
+                                                        >
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="material-symbols-outlined text-[16px]">
+                                                                    description
+                                                                </span>
+                                                                <span className="truncate text-[13px]">
+                                                                    {n.title || 'Untitled'}
+                                                                </span>
+                                                            </div>
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )
+                                );
+
+                                if (!notesLoading && filtered.length === 0) {
+                                    return (
+                                        <p className="text-xs text-light-text-secondary dark:text-dark-text-secondary px-1">
+                                            No notes found.
+                                        </p>
+                                    );
+                                }
+
+                                return (
+                                    <>
+                                        {renderGroup('Pinned', pinned)}
+                                        {renderGroup(pinned.length ? 'Others' : 'Notes', others)}
+                                    </>
+                                );
+                            })()}
+                        </div>
+                    </div>
+                </aside>
+
+                {/* Main Hybrid Editor */}
+                <main className="flex-1 flex flex-col bg-dark-bg relative shadow-2xl z-10 rounded-tl-3xl overflow-hidden border-l border-t border-dark-border/50 transition-all">
+                    {/* Editor Toolbar (Word-like Ribbon - simplified) */}
+                    <div className="sticky top-0 z-10 w-full bg-dark-bg/95 backdrop-blur-md px-6 lg:px-8 py-3 flex items-center justify-between border-b border-dark-border">
+                        <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.18em]">
+                                <span className="px-2.5 py-1 rounded-md bg-blue-primary/15 text-blue-primary border border-blue-primary/30">Home</span>
+                                <span className="px-2.5 py-1 rounded-md text-dark-text-secondary hover:bg-dark-surface/80 hover:text-white transition-colors cursor-pointer">Insert</span>
+                                <span className="px-2.5 py-1 rounded-md text-dark-text-secondary hover:bg-dark-surface/80 hover:text-white transition-colors cursor-pointer">Layout</span>
+                                <span className="px-2.5 py-1 rounded-md text-dark-text-secondary hover:bg-dark-surface/80 hover:text-white transition-colors cursor-pointer hidden md:inline-flex">View</span>
+                                <div className="w-px h-4 bg-dark-border/60 mx-0.5" aria-hidden />
+                                <button
+                                    type="button"
+                                    onClick={handleOpenCommentDialog}
+                                    disabled={!selectedText.trim()}
+                                    title={selectedText.trim() ? 'Add comment for selection' : 'Select text to add comment'}
+                                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md transition-all ${
+                                        selectedText.trim()
+                                            ? 'bg-blue-primary text-white hover:bg-blue-secondary cursor-pointer'
+                                            : 'text-dark-text-secondary/60 cursor-not-allowed opacity-70'
+                                    }`}
+                                >
+                                    <span className="material-symbols-outlined text-[16px]">comment</span>
+                                    <span>Comment</span>
+                                </button>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                {/* Undo / Redo */}
+                                <div className="flex items-center gap-1 rounded-xl bg-dark-surface/60 px-1 py-0.5 border border-dark-border/70">
+                                    <button
+                                        disabled={!editor}
+                                        onClick={() => editor?.chain().focus().undo().run()}
+                                        className="p-1.5 rounded-lg hover:bg-dark-surface text-dark-text-secondary hover:text-blue-primary transition-colors disabled:opacity-40"
+                                    >
+                                        <span className="material-symbols-outlined text-[18px]">undo</span>
+                                    </button>
+                                    <button
+                                        disabled={!editor}
+                                        onClick={() => editor?.chain().focus().redo().run()}
+                                        className="p-1.5 rounded-lg hover:bg-dark-surface text-dark-text-secondary hover:text-blue-primary transition-colors disabled:opacity-40"
+                                    >
+                                        <span className="material-symbols-outlined text-[18px]">redo</span>
+                                    </button>
+                                </div>
+
+                                {/* Font & heading group */}
+                                <div className="hidden md:flex items-center gap-1 rounded-xl bg-dark-surface/60 px-2 py-0.5 border border-dark-border/70">
+                                    {/* Heading levels */}
+                                    {( [1, 2, 3] as const ).map((lvl) => (
+                                        <button
+                                            key={lvl}
+                                            disabled={!editor}
+                                            onClick={() => editor?.chain().focus().setHeading({ level: lvl }).run()}
+                                            className={`px-2 py-1 rounded-lg text-xs font-semibold transition-colors ${
+                                                editor?.isActive('heading', { level: lvl })
+                                                    ? 'bg-blue-primary text-white'
+                                                    : 'text-dark-text-secondary hover:bg-dark-surface hover:text-blue-primary'
+                                            }`}
+                                        >
+                                            H{lvl}
+                                        </button>
+                                    ))}
+                                    <div className="h-4 w-px bg-dark-border mx-1" />
+                                    {/* Inline styles */}
+                                    <button
+                                        disabled={!editor}
+                                        onClick={() => editor?.chain().focus().toggleBold().run()}
+                                        className={`px-2 py-1 rounded-lg text-xs font-semibold transition-colors ${
+                                            editor?.isActive('bold')
+                                                ? 'bg-blue-primary text-white'
+                                                : 'text-dark-text-secondary hover:bg-dark-surface hover:text-blue-primary'
+                                        }`}
+                                    >
+                                        B
+                                    </button>
+                                    <button
+                                        disabled={!editor}
+                                        onClick={() => editor?.chain().focus().toggleItalic().run()}
+                                        className={`px-2 py-1 rounded-lg text-xs font-semibold italic transition-colors ${
+                                            editor?.isActive('italic')
+                                                ? 'bg-blue-primary text-white'
+                                                : 'text-dark-text-secondary hover:bg-dark-surface hover:text-blue-primary'
+                                        }`}
+                                    >
+                                        I
+                                    </button>
+                                    <button
+                                        disabled={!editor}
+                                        onClick={() => editor?.chain().focus().toggleUnderline().run()}
+                                        className={`px-2 py-1 rounded-lg text-xs font-semibold underline transition-colors ${
+                                            editor?.isActive('underline')
+                                                ? 'bg-blue-primary text-white'
+                                                : 'text-dark-text-secondary hover:bg-dark-surface hover:text-blue-primary'
+                                        }`}
+                                    >
+                                        U
+                                    </button>
+                                    <div className="h-4 w-px bg-dark-border mx-1" />
+                                    <button
+                                        disabled={!editor}
+                                        onClick={() => editor?.chain().focus().toggleBulletList().run()}
+                                        className="p-1.5 rounded-lg hover:bg-dark-surface text-dark-text-secondary hover:text-blue-primary transition-colors disabled:opacity-40"
+                                    >
+                                        <span className="material-symbols-outlined text-[18px]">format_list_bulleted</span>
+                                    </button>
+                                    <button
+                                        disabled={!editor}
+                                        onClick={() => editor?.chain().focus().toggleOrderedList().run()}
+                                        className="p-1.5 rounded-lg hover:bg-dark-surface text-dark-text-secondary hover:text-blue-primary transition-colors disabled:opacity-40"
+                                    >
+                                        <span className="material-symbols-outlined text-[18px]">format_list_numbered</span>
+                                    </button>
+                                </div>
+
+                                {/* Paragraph / alignment */}
+                                <div className="hidden lg:flex items-center gap-1 rounded-xl bg-dark-surface/60 px-2 py-0.5 border border-dark-border/70">
+                                    <button
+                                        disabled={!editor}
+                                        onClick={() => editor?.chain().focus().setTextAlign('left').run()}
+                                        className={`p-1.5 rounded-lg transition-colors ${
+                                            editor?.isActive({ textAlign: 'left' })
+                                                ? 'bg-blue-primary/10 text-blue-primary'
+                                                : 'text-dark-text-secondary hover:bg-dark-surface hover:text-blue-primary'
+                                        }`}
+                                    >
+                                        <span className="material-symbols-outlined text-[18px]">format_align_left</span>
+                                    </button>
+                                    <button
+                                        disabled={!editor}
+                                        onClick={() => editor?.chain().focus().setTextAlign('center').run()}
+                                        className={`p-1.5 rounded-lg transition-colors ${
+                                            editor?.isActive({ textAlign: 'center' })
+                                                ? 'bg-blue-primary/10 text-blue-primary'
+                                                : 'text-dark-text-secondary hover:bg-dark-surface hover:text-blue-primary'
+                                        }`}
+                                    >
+                                        <span className="material-symbols-outlined text-[18px]">format_align_center</span>
+                                    </button>
+                                    <button
+                                        disabled={!editor}
+                                        onClick={() => editor?.chain().focus().setTextAlign('right').run()}
+                                        className={`p-1.5 rounded-lg transition-colors ${
+                                            editor?.isActive({ textAlign: 'right' })
+                                                ? 'bg-blue-primary/10 text-blue-primary'
+                                                : 'text-dark-text-secondary hover:bg-dark-surface hover:text-blue-primary'
+                                        }`}
+                                    >
+                                        <span className="material-symbols-outlined text-[18px]">format_align_right</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-4">
+                            <span className="text-[10px] font-bold text-dark-text-secondary uppercase tracking-widest">
+                                {saving || autosaveStatus === 'saving'
+                                    ? 'Saving...'
+                                    : autosaveStatus === 'error'
+                                        ? 'Autosave failed'
+                                        : lastSaved
+                                            ? `Last saved: ${lastSaved}`
+                                            : 'All changes saved'}
+                            </span>
+                            <button onClick={handleSave} className="p-2 rounded-lg bg-blue-primary/10 text-blue-primary hover:bg-blue-primary hover:text-white transition-all"><span className="material-symbols-outlined text-[20px]">save</span></button>
                         </div>
                     </div>
 
-                    <div className="max-w-[900px] mx-auto w-full px-8 lg:px-16 py-12 flex flex-col gap-6">
-                        {/* Title Section */}
-                        <div className="space-y-4">
-                            <div
-                                ref={titleRef}
-                                contentEditable
-                                suppressContentEditableWarning
-                                onInput={handleTitleChange}
-                                className="w-full bg-transparent border-none p-0 text-5xl font-black text-light-text-primary dark:text-dark-text-primary focus:ring-0 focus:outline-none leading-tight tracking-tight min-h-[60px] empty:before:content-['The_Title_of_Your_Note'] empty:before:text-light-text-secondary/30 dark:empty:before:text-dark-text-secondary/30"
-                                data-placeholder="The Title of Your Note"
-                            />
+                    {/* Editor Canvas */}
+                    <div className="flex-1 overflow-y-auto custom-scrollbar pt-8 pb-6 bg-dark-bg">
+                        <div className="min-h-full flex flex-col items-center px-4">
+                            {/* Title row */}
+                            <div className="w-full max-w-[960px] flex items-start justify-center mb-6">
+                                <div className="flex-1">
+                                    <h1
+                                        ref={titleRef}
+                                        contentEditable
+                                        suppressContentEditableWarning
+                                        onInput={() => {
+                                            const text = titleRef.current?.textContent || '';
+                                            setNote(prev => prev ? { ...prev, title: text } : prev);
+                                        }}
+                                        className="text-3xl md:text-4xl font-extrabold text-white outline-none tracking-tight leading-tight empty:before:content-[attr(data-placeholder)] empty:before:text-dark-text-secondary"
+                                        data-placeholder="Document title"
+                                    ></h1>
+                                </div>
+                            </div>
 
-                            <div className="flex flex-wrap gap-2 items-center">
-                                {note.tags?.map((tag, idx) => (
-                                    <div key={idx} className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo/5 dark:bg-indigo/20 text-indigo dark:text-indigo-muted text-xs font-bold border border-indigo/10 dark:border-indigo/30">
-                                        <i className="ri-hashtag text-[10px]"></i>
-                                        {tag}
-                                        <button
-                                            onClick={() => setNote({ ...note, tags: note.tags.filter(t => t !== tag) })}
-                                            className="hover:text-ember transition-colors ml-1"
-                                        >
-                                            <i className="ri-close-line"></i>
-                                        </button>
-                                    </div>
-                                ))}
-                                <button
-                                    onClick={() => {
-                                        const tag = prompt('Enter tag name:');
-                                        if (tag && !note.tags.includes(tag)) {
-                                            setNote({ ...note, tags: [...note.tags, tag] });
-                                        }
+                            {/* Word-like page */}
+                            <div className="relative w-full flex justify-center">
+                                <div className="pointer-events-none absolute inset-x-0 top-4 mx-auto max-w-[860px] h-6 rounded-full bg-white/5 blur-xl" />
+                                <div
+                                    className="relative bg-dark-bg rounded-[2px] shadow-2xl border border-dark-border/50 overflow-hidden"
+                                    style={{
+                                        width: 816,
+                                        minHeight: 1056,
+                                        transform: `scale(${zoom})`,
+                                        transformOrigin: 'top center',
+                                        transition: 'transform 150ms ease-out',
                                     }}
-                                    className="size-6 rounded-full border border-dashed border-light-text-secondary dark:border-dark-text-secondary flex items-center justify-center text-light-text-secondary dark:text-dark-text-secondary hover:border-ember hover:text-ember transition-all"
                                 >
-                                    <i className="ri-add-line"></i>
-                                </button>
+                                    <div className="h-10 border-b border-dark-border/50 bg-dark-surface/60 flex items-center px-8 text-[10px] text-dark-text-secondary font-mono uppercase tracking-[0.18em]">
+                                        <span>Document</span>
+                                        <span className="mx-3 h-px w-6 bg-dark-border/50" />
+                                        <span>Note content</span>
+                                    </div>
+                                    <div className="px-16 py-10 space-y-10 relative bg-dark-bg">
+                                        <EditorContent
+                                            editor={editor as Editor | null}
+                                            className="prose prose-invert max-w-none prose-lg outline-none font-medium text-white min-h-[400px] prose-headings:text-white prose-p:text-white prose-strong:text-white prose-em:text-white prose-code:text-white prose-pre:bg-dark-surface-2 prose-pre:text-white prose-blockquote:text-dark-text-secondary prose-blockquote:border-dark-border"
+                                        />
+
+                                        {/* Comment Dialog */}
+                                        {showCommentDialog && selectedText.trim() && (
+                                            <div
+                                                ref={commentDialogRef}
+                                                className="fixed z-[100] bg-dark-bg rounded-xl shadow-2xl border border-dark-border/50 p-5 min-w-[320px] max-w-[400px] backdrop-blur-sm"
+                                                style={{
+                                                    left: `${commentButtonPosition.x}px`,
+                                                    top: `${commentButtonPosition.y}px`,
+                                                    animation: 'fadeInScale 0.2s ease-out',
+                                                }}
+                                            >
+                                                <div
+                                                    className={`mb-4 select-none ${isDraggingDialog ? 'cursor-grabbing' : 'cursor-grab'}`}
+                                                    onMouseDown={(e) => {
+                                                        if ((e.target as HTMLElement).closest('button')) return;
+                                                        e.preventDefault();
+                                                        dialogDragRef.current = {
+                                                            startX: e.clientX,
+                                                            startY: e.clientY,
+                                                            startLeft: commentButtonPosition.x,
+                                                            startTop: commentButtonPosition.y,
+                                                        };
+                                                        setIsDraggingDialog(true);
+                                                    }}
+                                                >
+                                                    <div className="flex items-center gap-2 mb-2">
+                                                        <div className="w-8 h-8 rounded-lg bg-blue-primary/20 flex items-center justify-center">
+                                                            <span className="material-symbols-outlined text-blue-primary text-lg">comment</span>
+                                                        </div>
+                                                        <div>
+                                                            <h3 className="text-sm font-semibold text-white">Comment</h3>
+                                                            <p className="text-[10px] text-dark-text-secondary">Add a comment for this selection</p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                
+                                                <div className="mb-4 p-3 bg-dark-surface-2/50 rounded-lg border border-dark-border/30 text-xs">
+                                                    <div className="flex items-start gap-2 mb-2">
+                                                        <span className="text-dark-text-secondary font-medium min-w-[40px]">Line:</span>
+                                                        <span className="text-white font-mono">{selectedLine}</span>
+                                                    </div>
+                                                    <div className="flex items-start gap-2">
+                                                        <span className="text-dark-text-secondary font-medium min-w-[40px]">Text:</span>
+                                                        <span className="text-white italic break-words">
+                                                            "{selectedText.length > 60 ? selectedText.substring(0, 60) + '...' : selectedText}"
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                
+                                                <div className="mb-4">
+                                                    <label className="block text-xs font-semibold text-dark-text-secondary mb-2 uppercase tracking-wider">
+                                                        Message
+                                                    </label>
+                                                    <textarea
+                                                        value={newCommentText}
+                                                        onChange={(e) => setNewCommentText(e.target.value)}
+                                                        placeholder="Enter your comment message..."
+                                                        rows={4}
+                                                        className="w-full resize-none rounded-lg border border-dark-border bg-dark-surface-2 px-3 py-2.5 text-sm text-white placeholder:text-dark-text-secondary/60 focus:outline-none focus:ring-2 focus:ring-blue-primary/50 focus:border-blue-primary/50 transition-all"
+                                                        autoFocus
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                                                                e.preventDefault();
+                                                                handleAddComment();
+                                                            }
+                                                            if (e.key === 'Escape') {
+                                                                e.preventDefault();
+                                                                handleCancelComment();
+                                                            }
+                                                        }}
+                                                    />
+                                                    <p className="mt-1.5 text-[10px] text-dark-text-secondary/70">
+                                                        Press <kbd className="px-1.5 py-0.5 bg-dark-surface rounded text-[10px] font-mono">⌘/Ctrl + Enter</kbd> to submit
+                                                    </p>
+                                                </div>
+                                                
+                                                <div className="flex items-center justify-end gap-2 pt-2 border-t border-dark-border/30">
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleCancelComment}
+                                                        className="px-4 py-2 rounded-lg text-xs font-medium bg-dark-surface-2 text-dark-text-secondary hover:text-white hover:bg-dark-surface transition-colors"
+                                                    >
+                                                        Cancel
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={handleAddComment}
+                                                        disabled={!newCommentText.trim()}
+                                                        className="px-4 py-2 rounded-lg text-xs font-semibold bg-blue-primary text-white hover:bg-blue-secondary disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-1.5 shadow-lg shadow-blue-primary/20 hover:shadow-xl hover:shadow-blue-primary/30"
+                                                    >
+                                                        <span className="material-symbols-outlined text-sm">add_comment</span>
+                                                        Add Comment
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
                             </div>
                         </div>
+                    </div>
 
-                        {/* Visual Divider */}
-                        <div className="w-20 h-[2px] bg-light-border dark:bg-dark-border rounded-full"></div>
-
-                        {/* Content Section */}
-                        <div
-                            ref={editorRef}
-                            contentEditable
-                            suppressContentEditableWarning
-                            onInput={handleContentChange}
-                            className="w-full bg-transparent border-none p-0 text-xl leading-relaxed text-light-text-primary dark:text-dark-text-primary min-h-[50vh] focus:ring-0 focus:outline-none empty:before:content-['Start_putting_your_thoughts_here._Express_yourself_freely...'] empty:before:text-light-text-secondary/50 dark:empty:before:text-dark-text-secondary/50 prose prose-lg dark:prose-invert max-w-none
-                            [&_blockquote]:border-l-4 [&_blockquote]:border-ember [&_blockquote]:pl-4 [&_blockquote]:italic [&_blockquote]:text-light-text-secondary dark:[&_blockquote]:text-dark-text-secondary
-                            [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:list-decimal [&_ol]:pl-6
-                            [&_a]:text-ember [&_a]:underline
-                            [&_img]:max-w-full [&_img]:rounded-lg [&_img]:my-4
-                            [&_table]:w-full [&_table]:border-collapse
-                            [&_td]:border [&_td]:border-light-border dark:[&_td]:border-dark-border [&_td]:p-2
-                            [&_th]:border [&_th]:border-light-border dark:[&_th]:border-dark-border [&_th]:p-2 [&_th]:bg-light-surface-2 dark:[&_th]:bg-dark-surface-2"
-                            data-placeholder="Start putting your thoughts here. Express yourself freely..."
-                        />
+                    {/* Status bar */}
+                    <div className="h-10 px-4 md:px-6 flex items-center justify-between border-t border-dark-border bg-dark-bg/95 text-[11px] font-mono text-dark-text-secondary">
+                        <div className="flex items-center gap-4">
+                            <span className="flex items-center gap-1.5">
+                                <span className="material-symbols-outlined text-[14px]">description</span>
+                                {wordCount} words
+                            </span>
+                            <span className="hidden sm:flex items-center gap-1.5">
+                                <span className="w-1.5 h-1.5 rounded-full bg-blue-primary"></span>
+                                {saving || autosaveStatus === 'saving'
+                                    ? 'Saving...'
+                                    : autosaveStatus === 'error'
+                                        ? 'Autosave failed'
+                                        : lastSaved
+                                            ? `Saved at ${lastSaved}`
+                                            : 'All changes saved'}
+                            </span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <span className="hidden sm:inline-flex">Zoom</span>
+                            <input
+                                type="range"
+                                min={0.7}
+                                max={1.4}
+                                step={0.05}
+                                value={zoom}
+                                onChange={(e) => setZoom(parseFloat(e.target.value))}
+                                className="w-24 accent-blue-primary"
+                            />
+                            <span className="w-10 text-right">{Math.round(zoom * 100)}%</span>
+                        </div>
                     </div>
                 </main>
 
-                {/* Info Aside Panel */}
-                <aside className="w-[320px] bg-light-surface/30 dark:bg-dark-surface/30 backdrop-blur-sm border-l border-light-border dark:border-dark-border hidden lg:flex flex-col shrink-0">
-                    <div className="flex border-b border-light-border dark:border-dark-border">
-                        <TabButton label="Insight" isActive={activeTab === 'Insight'} onClick={() => setActiveTab('Insight')} />
-                        <TabButton label="Network" isActive={activeTab === 'Network'} onClick={() => setActiveTab('Network')} />
-                        <TabButton label="Activity" isActive={activeTab === 'Activity'} onClick={() => setActiveTab('Activity')} />
+                {/* Right Sidebar (Context & AI) */}
+                <aside className="w-80 bg-light-bg/20 dark:bg-dark-bg/50 flex flex-col shrink-0 hidden xl:flex border-l border-light-border dark:border-dark-border">
+                    <div className="flex items-center px-6 pt-6 pb-2 gap-4">
+                        {(['Context', 'Assistant', 'Comments'] as const).map(tab => {
+                            const label = tab === 'Assistant' ? 'AI Assistant' : tab;
+                            return (
+                                <button
+                                    key={tab}
+                                    onClick={() => setActiveRightTab(tab)}
+                                    className={`text-[10px] font-bold uppercase tracking-widest pb-2 transition-all ${activeRightTab === tab ? 'text-light-text-primary dark:text-white border-b-2 border-blue-primary' : 'text-light-text-secondary dark:text-dark-text-secondary hover:text-light-text-primary dark:hover:text-white'}`}
+                                >
+                                    {label}
+                                </button>
+                            );
+                        })}
                     </div>
 
-                    <div className="flex-1 overflow-y-auto p-6 space-y-8">
-                        {/* Word Count Stats */}
-                        <div className="bg-light-surface-2 dark:bg-dark-surface-2 rounded-2xl p-5 border border-light-border dark:border-dark-border shadow-sm">
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-1">
-                                    <p className="text-[10px] uppercase font-black text-light-text-secondary/60 dark:text-dark-text-secondary/60 tracking-tighter">Words</p>
-                                    <p className="text-3xl font-black text-light-text-primary dark:text-dark-text-primary tabular-nums">
-                                        {(editorRef.current?.textContent || '').split(/\s+/).filter(Boolean).length}
-                                    </p>
-                                </div>
-                                <div className="space-y-1 text-right">
-                                    <p className="text-[10px] uppercase font-black text-light-text-secondary/60 dark:text-dark-text-secondary/60 tracking-tighter">Characters</p>
-                                    <p className="text-3xl font-black text-light-text-primary dark:text-dark-text-primary tabular-nums">
-                                        {(editorRef.current?.textContent || '').length}
-                                    </p>
-                                </div>
-                            </div>
-                            <div className="mt-4 pt-4 border-t border-light-border dark:border-dark-border flex items-center justify-between text-xs text-light-text-secondary dark:text-dark-text-secondary">
-                                <span>Estimated Reading Time</span>
-                                <span className="font-bold text-light-text-primary dark:text-dark-text-primary">
-                                    {Math.max(1, Math.ceil((editorRef.current?.textContent || '').split(/\s+/).filter(Boolean).length / 200))} min
-                                </span>
-                            </div>
-                        </div>
-
-                        {/* Metadata Details */}
-                        <div className="space-y-4">
-                            <h4 className="text-[10px] uppercase font-black text-light-text-secondary/60 dark:text-dark-text-secondary/60 tracking-widest px-1">Note Details</h4>
-                            <div className="space-y-3">
-                                <div className="flex items-center justify-between p-3 rounded-xl hover:bg-light-surface-2 dark:hover:bg-dark-surface-2 transition-all group">
-                                    <span className="text-sm font-medium text-light-text-secondary dark:text-dark-text-secondary group-hover:text-ember transition-colors">Status</span>
-                                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-tighter ${isNewNote ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400' : 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'}`}>
-                                        {isNewNote ? 'New' : 'Saved'}
-                                    </span>
-                                </div>
-                                {!isNewNote && (
-                                    <div className="flex items-center justify-between p-3 rounded-xl hover:bg-light-surface-2 dark:hover:bg-dark-surface-2 transition-all group">
-                                        <span className="text-sm font-medium text-light-text-secondary dark:text-dark-text-secondary group-hover:text-ember transition-colors">ID</span>
-                                        <span className="text-xs font-mono text-light-text-secondary/50 dark:text-dark-text-secondary/50 truncate max-w-[140px]">{note.id}</span>
+                    <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
+                        {activeRightTab === 'Context' && (
+                            <div className="space-y-6">
+                                {/* Attachments & References */}
+                                <section>
+                                    <div className="flex items-center justify-between gap-4 mb-4">
+                                        <div>
+                                            <h2 className="text-sm font-semibold text-light-text-primary dark:text-dark-text-primary">
+                                                Attachments &amp; References
+                                            </h2>
+                                            <p className="text-xs text-light-text-secondary dark:text-dark-text-secondary">
+                                                Linked files that provide context for this note.
+                                            </p>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            className="px-3 py-1.5 rounded-lg text-xs font-medium bg-light-surface-2 dark:bg-dark-surface-2 text-light-text-secondary dark:text-dark-text-secondary hover:text-light-text-primary dark:hover:text-dark-text-primary hover:bg-light-surface dark:hover:bg-dark-surface transition-colors"
+                                        >
+                                            + Add file
+                                        </button>
                                     </div>
-                                )}
-                                <div className="flex items-center justify-between p-3 rounded-xl hover:bg-light-surface-2 dark:hover:bg-dark-surface-2 transition-all group">
-                                    <span className="text-sm font-medium text-light-text-secondary dark:text-dark-text-secondary group-hover:text-ember transition-colors">Type</span>
-                                    <span className="px-2 py-0.5 rounded-full bg-light-surface-2 dark:bg-dark-surface-2 text-[10px] font-black uppercase text-light-text-secondary dark:text-dark-text-secondary tracking-tighter">
-                                        {note.type}
-                                    </span>
-                                </div>
-                                {note.updatedAt && (
-                                    <div className="flex items-center justify-between p-3 rounded-xl hover:bg-light-surface-2 dark:hover:bg-dark-surface-2 transition-all group">
-                                        <span className="text-sm font-medium text-light-text-secondary dark:text-dark-text-secondary group-hover:text-ember transition-colors">Updated</span>
-                                        <span className="text-xs text-light-text-primary dark:text-dark-text-primary font-bold">
-                                            {new Date(note.updatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                                        </span>
+                                    <div className="grid grid-cols-1 gap-3">
+                                        {DEMO_ATTACHMENTS.map((att) => (
+                                            <div
+                                                key={att.id}
+                                                className="flex items-center gap-3 rounded-xl border border-light-border dark:border-dark-border bg-light-surface-2/60 dark:bg-dark-surface-2/60 px-4 py-3"
+                                            >
+                                                <div className="w-9 h-9 rounded-lg bg-orange-primary/10 text-orange-primary flex items-center justify-center text-xs font-bold">
+                                                    {att.type}
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-sm font-medium truncate text-light-text-primary dark:text-dark-text-primary">
+                                                        {att.name}
+                                                    </p>
+                                                    <p className="text-xs text-light-text-secondary dark:text-dark-text-secondary">
+                                                        {att.size}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        ))}
                                     </div>
-                                )}
-                            </div>
-                        </div>
+                                </section>
 
-                        {/* Keyboard Shortcuts */}
-                        <div className="space-y-4">
-                            <h4 className="text-[10px] uppercase font-black text-light-text-secondary/60 dark:text-dark-text-secondary/60 tracking-widest px-1">Keyboard Shortcuts</h4>
-                            <div className="space-y-2 text-xs text-light-text-secondary dark:text-dark-text-secondary">
-                                <div className="flex justify-between">
-                                    <span>Bold</span>
-                                    <kbd className="px-2 py-0.5 bg-light-surface-2 dark:bg-dark-surface-2 rounded">Ctrl+B</kbd>
+                                <div className="pt-6 border-t border-light-border dark:border-dark-border">
+                                    <label className="text-[10px] font-black text-light-text-secondary dark:text-dark-text-secondary uppercase tracking-[0.2em] mb-4 block">File Meta</label>
+                                    <div className="space-y-4">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-8 h-8 rounded-full bg-orange-primary/10 dark:bg-orange-primary/30 flex items-center justify-center text-orange-primary"><span className="material-symbols-outlined text-sm">folder</span></div>
+                                            <div><div className="text-[10px] text-light-text-secondary dark:text-dark-text-secondary font-bold">FOLDER</div><div className="text-sm font-medium">Product / 2026</div></div>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-8 h-8 rounded-full bg-blue-primary/10 dark:bg-blue-primary/30 flex items-center justify-center text-blue-primary"><span className="material-symbols-outlined text-sm">schedule</span></div>
+                                            <div><div className="text-[10px] text-light-text-secondary dark:text-dark-text-secondary font-bold">STATUS</div><div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-blue-primary"></div><span className="text-sm font-medium">In Progress</span></div></div>
+                                        </div>
+                                    </div>
                                 </div>
-                                <div className="flex justify-between">
-                                    <span>Italic</span>
-                                    <kbd className="px-2 py-0.5 bg-light-surface-2 dark:bg-dark-surface-2 rounded">Ctrl+I</kbd>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span>Underline</span>
-                                    <kbd className="px-2 py-0.5 bg-light-surface-2 dark:bg-dark-surface-2 rounded">Ctrl+U</kbd>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span>Save</span>
-                                    <kbd className="px-2 py-0.5 bg-light-surface-2 dark:bg-dark-surface-2 rounded">Ctrl+S</kbd>
+                                <div className="pt-6 border-t border-light-border dark:border-dark-border">
+                                    <label className="text-[10px] font-black text-light-text-secondary dark:text-dark-text-secondary uppercase tracking-[0.2em] mb-4 block">Deployment Info</label>
+                                    <div className="bg-black/20 dark:bg-white/2 p-4 rounded-xl border border-light-border dark:border-dark-border font-mono text-[11px] space-y-2">
+                                        <div className="flex justify-between"><span>CREATED</span><span className="text-light-text-secondary dark:text-dark-text-secondary">FEB 15, 2026</span></div>
+                                        <div className="flex justify-between"><span>TAGS</span><span className="text-blue-primary">#REACT #DOCS</span></div>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-
-                        {/* Color Picker */}
-                        <div className="space-y-4">
-                            <h4 className="text-[10px] uppercase font-black text-light-text-secondary/60 dark:text-dark-text-secondary/60 tracking-widest px-1">Themes</h4>
-                            <div className="flex gap-3 px-1">
-                                {['transparent', 'var(--color-global-red)', 'var(--color-global-yellow)', 'var(--color-global-green)', 'var(--color-global-blue)', 'var(--color-wine)'].map(c => (
-                                    <button
-                                        key={c}
-                                        onClick={() => setNote({ ...note, color: c })}
-                                        className={`size-6 rounded-full border-2 transition-all hover:scale-110 active:scale-90 ${note.color === c ? 'border-ember scale-125' : 'border-light-border dark:border-dark-border'}`}
-                                        style={{ backgroundColor: c === 'transparent' ? 'var(--color-light-bg)' : c }}
-                                    ></button>
-                                ))}
+                        )}
+                        {activeRightTab === 'Assistant' && (
+                            <div className="flex flex-col h-full text-sm text-light-text-secondary dark:text-dark-text-secondary">
+                                <div className="flex-1 space-y-3 overflow-y-auto pb-4">
+                                    {aiMessages.map((msg) => (
+                                        <div
+                                            key={msg.id}
+                                            className={`flex mb-1 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                                        >
+                                            <div
+                                                className={`max-w-[80%] rounded-2xl px-3 py-2 text-xs whitespace-pre-wrap ${
+                                                    msg.role === 'user'
+                                                        ? 'bg-blue-primary text-white rounded-br-sm'
+                                                        : 'bg-light-surface-2 dark:bg-dark-surface-2 text-light-text-primary dark:text-dark-text-primary rounded-bl-sm'
+                                                }`}
+                                            >
+                                                {msg.text}
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {aiMessages.length === 0 && !aiLoading && (
+                                        <div className="mt-8 text-xs text-center text-light-text-secondary dark:text-dark-text-secondary">
+                                            <span className="material-symbols-outlined text-3xl mb-2 block opacity-30">smart_toy</span>
+                                            Ask the assistant to summarize or refactor this note.
+                                        </div>
+                                    )}
+                                    {aiLoading && (
+                                        <div className="flex items-center gap-2 text-xs text-light-text-secondary dark:text-dark-text-secondary mt-2">
+                                            <span className="w-2 h-2 rounded-full bg-blue-primary animate-bounce" />
+                                            <span className="w-2 h-2 rounded-full bg-orange-primary animate-bounce delay-150" />
+                                            <span className="w-2 h-2 rounded-full bg-blue-secondary animate-bounce delay-300" />
+                                            <span>Thinking…</span>
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="border-t border-light-border dark:border-dark-border pt-3 mt-2">
+                                    <div className="flex items-end gap-2">
+                                        <textarea
+                                            value={aiInput}
+                                            onChange={(e) => setAiInput(e.target.value)}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter' && !e.shiftKey) {
+                                                    e.preventDefault();
+                                                    void handleSendAi();
+                                                }
+                                            }}
+                                            rows={2}
+                                            placeholder="Ask AI about this note…"
+                                            className="flex-1 resize-none rounded-lg border border-light-border dark:border-dark-border bg-light-surface-2 dark:bg-dark-surface-2 px-3 py-2 text-xs text-light-text-primary dark:text-dark-text-primary placeholder:text-light-text-secondary dark:placeholder:text-dark-text-secondary focus:outline-none focus:ring-1 focus:ring-blue-primary/40"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => void handleSendAi()}
+                                            disabled={!aiInput.trim() || aiLoading}
+                                            className="shrink-0 px-3 py-2 rounded-lg bg-blue-primary text-white text-xs font-semibold hover:bg-blue-secondary disabled:opacity-60"
+                                        >
+                                            Send
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
-                        </div>
-
-                        {/* Quick Actions */}
-                        <div className="space-y-4">
-                            <h4 className="text-[10px] uppercase font-black text-light-text-secondary/60 dark:text-dark-text-secondary/60 tracking-widest px-1">Quick Actions</h4>
-                            <div className="space-y-2">
-                                <button
-                                    onClick={() => navigate('/note-editor')}
-                                    className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-light-surface-2 dark:hover:bg-dark-surface-2 transition-all text-left"
-                                >
-                                    <i className="ri-add-line text-ember"></i>
-                                    <span className="text-sm font-medium text-light-text-secondary dark:text-dark-text-secondary">Create New Note</span>
-                                </button>
-                                <button
-                                    onClick={() => navigate('/note')}
-                                    className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-light-surface-2 dark:hover:bg-dark-surface-2 transition-all text-left"
-                                >
-                                    <i className="ri-gallery-view text-light-text-secondary dark:text-dark-text-secondary"></i>
-                                    <span className="text-sm font-medium text-light-text-secondary dark:text-dark-text-secondary">Back to Gallery</span>
-                                </button>
-                                {!isNewNote && (
-                                    <button
-                                        onClick={() => setShowDeleteModal(true)}
-                                        className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-red-50 dark:hover:bg-red-900/20 transition-all text-left"
-                                    >
-                                        <i className="ri-delete-bin-line text-red-500"></i>
-                                        <span className="text-sm font-medium text-red-500">Delete Note</span>
-                                    </button>
-                                )}
+                        )}
+                        {activeRightTab === 'Comments' && (
+                            <div className="flex flex-col h-full text-sm text-light-text-secondary dark:text-dark-text-secondary">
+                                <div className="flex-1 space-y-3 overflow-y-auto pb-4">
+                                    {comments.length > 0 ? (
+                                        comments.map((c) => (
+                                            <div
+                                                key={c.id}
+                                                className="flex items-start gap-2 rounded-xl bg-light-surface-2 dark:bg-dark-surface-2 px-3 py-2"
+                                            >
+                                                <div className="w-7 h-7 rounded-full bg-blue-primary/10 text-blue-primary flex items-center justify-center text-[11px] font-bold shrink-0">
+                                                    V
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex items-center justify-between gap-2 mb-1">
+                                                        <span className="text-xs font-semibold text-light-text-primary dark:text-dark-text-primary">
+                                                            Viewer
+                                                        </span>
+                                                        <span className="text-[10px] text-light-text-secondary dark:text-dark-text-secondary">
+                                                            {new Date(c.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                        </span>
+                                                    </div>
+                                                    {c.line > 0 && (
+                                                        <div className="mb-1.5 text-[10px] font-semibold text-blue-primary">
+                                                            Line {c.line}
+                                                        </div>
+                                                    )}
+                                                    {c.selectedText && (
+                                                        <div className="mb-1.5 px-2 py-1 bg-light-bg dark:bg-dark-bg rounded border border-light-border dark:border-dark-border">
+                                                            <p className="text-[10px] text-light-text-secondary dark:text-dark-text-secondary font-mono italic">
+                                                                "{c.selectedText.length > 60 ? c.selectedText.substring(0, 60) + '...' : c.selectedText}"
+                                                            </p>
+                                                        </div>
+                                                    )}
+                                                    <p className="mt-1 text-xs text-light-text-primary dark:text-dark-text-primary whitespace-pre-wrap">
+                                                        {c.message || c.text}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        ))
+                                    ) : (
+                                        <div className="mt-8 text-xs text-center text-light-text-secondary dark:text-dark-text-secondary">
+                                            <p className="mb-2">No comments yet.</p>
+                                            <p className="text-[10px]">Select text in the editor to add a comment, or use the form below.</p>
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="border-t border-light-border dark:border-dark-border pt-3 mt-2">
+                                    <div className="flex flex-col gap-2">
+                                        <textarea
+                                            value={newCommentText}
+                                            onChange={(e) => setNewCommentText(e.target.value)}
+                                            rows={2}
+                                            placeholder="Add a general comment…"
+                                            className="w-full resize-none rounded-lg border border-light-border dark:border-dark-border bg-light-surface-2 dark:bg-dark-surface-2 px-3 py-2 text-xs text-light-text-primary dark:text-dark-text-primary placeholder:text-light-text-secondary dark:placeholder:text-dark-text-secondary focus:outline-none focus:ring-1 focus:ring-blue-primary/40"
+                                        />
+                                        <div className="flex justify-end">
+                                            <button
+                                                type="button"
+                                                onClick={handleAddCommentFromSidebar}
+                                                disabled={!newCommentText.trim()}
+                                                className="px-3 py-1.5 rounded-lg bg-orange-primary text-white text-xs font-semibold hover:bg-wine disabled:opacity-60"
+                                            >
+                                                Add comment
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
-                        </div>
+                        )}
                     </div>
                 </aside>
             </div>
 
-            {/* Custom CSS for animations */}
-            <style>{`
-                @keyframes slide-up {
-                    from {
-                        transform: translateY(100%);
-                        opacity: 0;
-                    }
-                    to {
-                        transform: translateY(0);
-                        opacity: 1;
-                    }
-                }
-                .animate-slide-up {
-                    animation: slide-up 0.3s ease-out;
-                }
-            `}</style>
+            {/* Modals */}
+            <ShareNoteModal
+                isOpen={showShareModal}
+                onClose={() => setShowShareModal(false)}
+                noteTitle={note?.title || 'Untitled'}
+            />
         </div>
     );
 };

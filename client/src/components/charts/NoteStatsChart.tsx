@@ -1,9 +1,11 @@
 import { useState, useEffect, type FC } from 'react';
+import { getIcon } from '@/utils/iconMapping';
+import { isMockEnabled, isNetworkFailure } from '@/utils/offlineMock';
+import { mockNoteStatsOverview } from '@/utils/mockData';
 import {
     AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
     ResponsiveContainer, PieChart, Pie, Cell
 } from 'recharts';
-import { FileText, Image, List, Link2, Pin, TrendingUp } from 'lucide-react';
 
 interface NoteStats {
     total: number;
@@ -27,11 +29,14 @@ const NoteStatsChart: FC = () => {
     const [stats, setStats] = useState<NoteStats | null>(null);
     const [loading, setLoading] = useState(true);
     const [activeView, setActiveView] = useState<'daily' | 'monthly'>('daily');
+    const [hasAuth, setHasAuth] = useState<boolean>(true);
+    const [isOffline, setIsOffline] = useState<boolean>(false);
 
     useEffect(() => {
         const fetchStats = async () => {
             const token = localStorage.getItem('accessToken');
             if (!token) {
+                setHasAuth(false);
                 setLoading(false);
                 return;
             }
@@ -43,9 +48,14 @@ const NoteStatsChart: FC = () => {
                 if (res.ok) {
                     const data = await res.json();
                     setStats(data);
+                    setIsOffline(false);
                 }
             } catch (err) {
                 console.error('Error fetching note stats:', err);
+                setIsOffline(true);
+                if (isMockEnabled() && isNetworkFailure(err)) {
+                    setStats(mockNoteStatsOverview);
+                }
             } finally {
                 setLoading(false);
             }
@@ -55,10 +65,10 @@ const NoteStatsChart: FC = () => {
     }, []);
 
     const typeData = stats ? [
-        { name: 'Text', value: stats.byType.text, color: '#6366F1', icon: FileText },
-        { name: 'Image', value: stats.byType.image, color: '#F64668', icon: Image },
-        { name: 'List', value: stats.byType.list, color: '#0F9D58', icon: List },
-        { name: 'Link', value: stats.byType.link, color: '#F4B400', icon: Link2 },
+        { name: 'Text', value: stats.byType.text, color: '#3B82F6', iconClass: 'ri-booklet-line' }, // blue-primary
+        { name: 'Image', value: stats.byType.image, color: '#1F76F9', iconClass: 'ri-image-line' }, // blue-secondary
+        { name: 'List', value: stats.byType.list, color: '#10B981', iconClass: 'ri-list-check' }, // green
+        { name: 'Link', value: stats.byType.link, color: '#FF6F41', iconClass: 'ri-link-line' }, // orange-primary
     ] : [];
 
     const CustomTooltip = ({ active, payload, label }: any) => {
@@ -68,7 +78,7 @@ const NoteStatsChart: FC = () => {
                     <p className="text-sm font-bold text-light-text-primary dark:text-dark-text-primary">
                         {label}
                     </p>
-                    <p className="text-ember font-bold text-lg">
+                    <p className="text-orange-primary font-bold text-lg">
                         {payload[0].value} notes
                     </p>
                 </div>
@@ -94,17 +104,81 @@ const NoteStatsChart: FC = () => {
     if (loading) {
         return (
             <div className="rounded-2xl overflow-hidden h-[400px] flex items-center justify-center bg-white border-light-border dark:bg-dark-surface dark:border-dark-border border">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-ember"></div>
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-primary"></div>
             </div>
         );
     }
 
     if (!stats) {
+        const HeaderIcon = getIcon('ri-booklet-fill');
+        const PinIcon = getIcon('ri-pushpin-2-fill');
+        const TrendIcon = getIcon('ri-line-chart-line');
+        const ListIcon = getIcon('ri-list-check');
         return (
-            <div className="rounded-2xl overflow-hidden p-6 bg-white border-light-border dark:bg-dark-surface dark:border-dark-border border">
-                <p className="text-center text-light-text-secondary dark:text-dark-text-secondary">
-                    No data available
-                </p>
+            <div className="rounded-2xl overflow-hidden bg-white border-light-border dark:bg-dark-surface dark:border-dark-border border">
+                {/* Header */}
+                <div className="px-6 py-4 border-b flex items-center justify-between border-light-border dark:border-dark-border">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-linear-to-br from-blue-primary to-orange-primary flex items-center justify-center">
+                            {HeaderIcon ? <HeaderIcon className="w-5 h-5 text-white" /> : null}
+                        </div>
+                        <div>
+                            <h3 className="font-bold text-light-text-primary dark:text-dark-text-primary">
+                                Notes Overview
+                            </h3>
+                            <p className="text-xs text-light-text-secondary dark:text-dark-text-secondary">
+                                {hasAuth ? (isOffline ? 'Waiting for API connection…' : 'Waiting for data…') : 'Login required to load analytics'}
+                            </p>
+                        </div>
+                    </div>
+                    <span className="px-3 py-1.5 rounded-lg text-xs font-medium bg-light-surface-2 text-light-text-secondary dark:bg-dark-surface-2 dark:text-dark-text-secondary">
+                        Preview
+                    </span>
+                </div>
+
+                <div className="p-6">
+                    {/* What this widget shows */}
+                    <div className="mb-5 rounded-xl border border-light-border/60 dark:border-dark-border/60 bg-light-surface-2/40 dark:bg-dark-surface-2/40 p-4">
+                        <p className="text-sm font-semibold text-light-text-primary dark:text-dark-text-primary mb-1">
+                            This panel will display
+                        </p>
+                        <ul className="text-xs text-light-text-secondary dark:text-dark-text-secondary space-y-1">
+                            <li>- Total notes, pinned notes, weekly volume, and lists</li>
+                            <li>- Daily / monthly note creation trend</li>
+                            <li>- Distribution by note type (Text / Image / List / Link)</li>
+                        </ul>
+                    </div>
+
+                    {/* Skeleton summary */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                        {[
+                            { label: 'Total Notes', icon: HeaderIcon, color: 'text-blue-primary' },
+                            { label: 'Pinned', icon: PinIcon, color: 'text-orange-primary' },
+                            { label: 'This Week', icon: TrendIcon, color: 'text-green' },
+                            { label: 'Lists', icon: ListIcon, color: 'text-blue-secondary' },
+                        ].map((item) => (
+                            <div key={item.label} className="p-4 rounded-xl bg-light-surface-2 dark:bg-dark-surface-2">
+                                <div className="flex items-center gap-2 mb-2">
+                                    {item.icon ? <item.icon className={`w-4 h-4 ${item.color}`} /> : null}
+                                    <span className="text-xs text-light-text-secondary dark:text-dark-text-secondary">
+                                        {item.label}
+                                    </span>
+                                </div>
+                                <div className="h-7 w-16 rounded bg-light-border/60 dark:bg-dark-border/60 animate-pulse" />
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Skeleton chart + distribution */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="h-[200px] rounded-xl bg-light-surface-2 dark:bg-dark-surface-2 border border-light-border/40 dark:border-dark-border/40 animate-pulse" />
+                        <div className="space-y-2">
+                            {['Text', 'Image', 'List', 'Link'].map((k) => (
+                                <div key={k} className="h-12 rounded-xl bg-light-surface-2 dark:bg-dark-surface-2 border border-light-border/40 dark:border-dark-border/40 animate-pulse" />
+                            ))}
+                        </div>
+                    </div>
+                </div>
             </div>
         );
     }
@@ -114,8 +188,11 @@ const NoteStatsChart: FC = () => {
             {/* Header */}
             <div className="px-6 py-4 border-b flex items-center justify-between border-light-border dark:border-dark-border">
                 <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo to-wine flex items-center justify-center">
-                        <FileText className="w-5 h-5 text-white" />
+                    <div className="w-10 h-10 rounded-xl bg-linear-to-br from-blue-primary to-orange-primary flex items-center justify-center">
+                        {(() => {
+                            const Icon = getIcon('ri-booklet-fill');
+                            return Icon ? <Icon className="w-5 h-5 text-white" /> : null;
+                        })()}
                     </div>
                     <div>
                         <h3 className="font-bold text-light-text-primary dark:text-dark-text-primary">
@@ -129,21 +206,19 @@ const NoteStatsChart: FC = () => {
                 <div className="flex items-center gap-2">
                     <button
                         onClick={() => setActiveView('daily')}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                            activeView === 'daily'
-                                ? 'bg-ember text-white'
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${activeView === 'daily'
+                                ? 'bg-orange-primary text-white'
                                 : 'bg-light-surface-2 text-light-text-secondary hover:text-light-text-primary dark:bg-dark-surface-2 dark:text-dark-text-secondary dark:hover:text-dark-text-primary'
-                        }`}
+                            }`}
                     >
                         Daily
                     </button>
                     <button
                         onClick={() => setActiveView('monthly')}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                            activeView === 'monthly'
-                                ? 'bg-ember text-white'
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${activeView === 'monthly'
+                                ? 'bg-orange-primary text-white'
                                 : 'bg-light-surface-2 text-light-text-secondary hover:text-light-text-primary dark:bg-dark-surface-2 dark:text-dark-text-secondary dark:hover:text-dark-text-primary'
-                        }`}
+                            }`}
                     >
                         Monthly
                     </button>
@@ -155,7 +230,10 @@ const NoteStatsChart: FC = () => {
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                     <div className="p-4 rounded-xl bg-light-surface-2 dark:bg-dark-surface-2">
                         <div className="flex items-center gap-2 mb-2">
-                            <FileText className="w-4 h-4 text-indigo" />
+                            {(() => {
+                                const Icon = getIcon('ri-booklet-line');
+                                return Icon ? <Icon className="w-4 h-4 text-blue-primary" /> : null;
+                            })()}
                             <span className="text-xs text-light-text-secondary dark:text-dark-text-secondary">
                                 Total Notes
                             </span>
@@ -166,7 +244,10 @@ const NoteStatsChart: FC = () => {
                     </div>
                     <div className="p-4 rounded-xl bg-light-surface-2 dark:bg-dark-surface-2">
                         <div className="flex items-center gap-2 mb-2">
-                            <Pin className="w-4 h-4 text-ember" />
+                            {(() => {
+                                const Icon = getIcon('ri-pushpin-2-fill');
+                                return Icon ? <Icon className="w-4 h-4 text-orange-primary" /> : null;
+                            })()}
                             <span className="text-xs text-light-text-secondary dark:text-dark-text-secondary">
                                 Pinned
                             </span>
@@ -177,7 +258,10 @@ const NoteStatsChart: FC = () => {
                     </div>
                     <div className="p-4 rounded-xl bg-light-surface-2 dark:bg-dark-surface-2">
                         <div className="flex items-center gap-2 mb-2">
-                            <TrendingUp className="w-4 h-4 text-global-green" />
+                            {(() => {
+                                const Icon = getIcon('ri-line-chart-line');
+                                return Icon ? <Icon className="w-4 h-4 text-green" /> : null;
+                            })()}
                             <span className="text-xs text-light-text-secondary dark:text-dark-text-secondary">
                                 This Week
                             </span>
@@ -188,7 +272,10 @@ const NoteStatsChart: FC = () => {
                     </div>
                     <div className="p-4 rounded-xl bg-light-surface-2 dark:bg-dark-surface-2">
                         <div className="flex items-center gap-2 mb-2">
-                            <List className="w-4 h-4 text-wine" />
+                            {(() => {
+                                const Icon = getIcon('ri-list-check');
+                                return Icon ? <Icon className="w-4 h-4 text-blue-secondary" /> : null;
+                            })()}
                             <span className="text-xs text-light-text-secondary dark:text-dark-text-secondary">
                                 Lists
                             </span>
@@ -208,25 +295,25 @@ const NoteStatsChart: FC = () => {
                         >
                             <defs>
                                 <linearGradient id="noteGradient" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="5%" stopColor="#F64668" stopOpacity={0.3} />
-                                    <stop offset="95%" stopColor="#F64668" stopOpacity={0} />
+                                    <stop offset="5%" stopColor="#FF6F41" stopOpacity={0.3} />
+                                    <stop offset="95%" stopColor="#FF6F41" stopOpacity={0} />
                                 </linearGradient>
                             </defs>
                             <CartesianGrid
                                 strokeDasharray="3 3"
-                                className="stroke-gray-200 dark:stroke-gray-700"
+                                className="stroke-light-border dark:stroke-dark-border"
                                 vertical={false}
                             />
                             <XAxis
                                 dataKey={activeView === 'daily' ? 'day' : 'monthName'}
                                 tick={{ fontSize: 11 }}
-                                className="fill-gray-500 dark:fill-gray-400"
+                                className="fill-light-text-secondary dark:fill-dark-text-secondary"
                                 axisLine={false}
                                 tickLine={false}
                             />
                             <YAxis
                                 tick={{ fontSize: 11 }}
-                                className="fill-gray-500 dark:fill-gray-400"
+                                className="fill-light-text-secondary dark:fill-dark-text-secondary"
                                 axisLine={false}
                                 tickLine={false}
                                 allowDecimals={false}
@@ -235,7 +322,7 @@ const NoteStatsChart: FC = () => {
                             <Area
                                 type="monotone"
                                 dataKey="count"
-                                stroke="#F64668"
+                                stroke="#FF6F41"
                                 strokeWidth={2}
                                 fill="url(#noteGradient)"
                                 animationDuration={1000}
@@ -248,8 +335,8 @@ const NoteStatsChart: FC = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     {/* Pie Chart */}
                     <div className="flex items-center justify-center">
-                        <div className="relative">
-                            <ResponsiveContainer width={160} height={160}>
+                    <div className="relative" style={{ width: 160, height: 160 }}>
+                            <ResponsiveContainer width="100%" height="100%">
                                 <PieChart>
                                     <Pie
                                         data={typeData}
@@ -287,7 +374,7 @@ const NoteStatsChart: FC = () => {
                     <div className="space-y-2">
                         {typeData.map((item) => {
                             const percentage = stats.total > 0 ? Math.round((item.value / stats.total) * 100) : 0;
-                            const Icon = item.icon;
+                            const Icon = getIcon(item.iconClass);
                             return (
                                 <div
                                     key={item.name}
@@ -298,7 +385,7 @@ const NoteStatsChart: FC = () => {
                                             className="w-8 h-8 rounded-lg flex items-center justify-center"
                                             style={{ backgroundColor: `${item.color}20` }}
                                         >
-                                            <Icon className="w-4 h-4" style={{ color: item.color }} />
+                                            {Icon ? <Icon className="w-4 h-4" style={{ color: item.color }} /> : null}
                                         </div>
                                         <span className="text-sm font-medium text-light-text-primary dark:text-dark-text-primary">
                                             {item.name}
@@ -319,7 +406,7 @@ const NoteStatsChart: FC = () => {
                 </div>
             </div>
         </div>
-    );
-};
+        );
+    };
 
 export default NoteStatsChart;

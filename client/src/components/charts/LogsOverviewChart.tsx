@@ -1,6 +1,6 @@
 import type { FC } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { Terminal, TrendingUp, AlertTriangle, AlertCircle, Info } from 'lucide-react';
+import { getIcon } from '@/utils/iconMapping';
 
 interface LogsOverviewChartProps {
     data: {
@@ -17,16 +17,10 @@ interface LogsOverviewChartProps {
 }
 
 const LogsOverviewChart: FC<LogsOverviewChartProps> = ({ data, chartData }) => {
-    // Default chart data if not provided
-    const defaultChartData = chartData || [
-        { time: '00:00', errors: 2, warnings: 5, info: 10 },
-        { time: '04:00', errors: 1, warnings: 3, info: 8 },
-        { time: '08:00', errors: 4, warnings: 7, info: 15 },
-        { time: '12:00', errors: 3, warnings: 4, info: 12 },
-        { time: '16:00', errors: 5, warnings: 8, info: 20 },
-        { time: '20:00', errors: 2, warnings: 6, info: 14 },
-        { time: 'Now', errors: data.errors, warnings: data.warnings, info: data.info },
-    ];
+    // Use real series if provided; otherwise show a minimal "Now" point (no mock data)
+    const series = (chartData && chartData.length > 0)
+        ? chartData
+        : [{ time: 'Now', errors: data.errors, warnings: data.warnings, info: data.info }];
 
     const total = data.errors + data.warnings + data.info;
     const errorRate = total > 0 ? Math.round((data.errors / total) * 100) : 0;
@@ -62,21 +56,22 @@ const LogsOverviewChart: FC<LogsOverviewChartProps> = ({ data, chartData }) => {
         { 
             label: 'Errors', 
             value: data.errors, 
-            icon: AlertTriangle, 
+            iconClass: 'ri-error-warning-fill',
             color: '#DB4437',
             bg: 'bg-global-red/10'
         },
         { 
             label: 'Warnings', 
             value: data.warnings, 
-            icon: AlertCircle, 
+            iconClass: 'ri-alert-line',
             color: '#F4B400',
             bg: 'bg-global-yellow/10'
         },
         { 
             label: 'Info', 
             value: data.info, 
-            icon: Info, 
+            // Note: no dedicated info icon mapping; use alert-line as safe fallback
+            iconClass: 'ri-alert-line',
             color: '#4285F4',
             bg: 'bg-global-blue/10'
         },
@@ -88,7 +83,10 @@ const LogsOverviewChart: FC<LogsOverviewChartProps> = ({ data, chartData }) => {
             <div className="px-6 py-4 border-b flex items-center justify-between border-light-border dark:border-dark-border">
                 <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-navy to-indigo flex items-center justify-center">
-                        <Terminal className="w-5 h-5 text-white" />
+                        {(() => {
+                            const Icon = getIcon('ri-terminal-box-line') || getIcon('ri-terminal-line');
+                            return Icon ? <Icon className="w-5 h-5 text-white" /> : null;
+                        })()}
                     </div>
                     <div>
                         <h3 className="font-bold text-light-text-primary dark:text-dark-text-primary">
@@ -114,11 +112,11 @@ const LogsOverviewChart: FC<LogsOverviewChartProps> = ({ data, chartData }) => {
             {/* Stats Summary */}
             <div className="px-6 py-4 grid grid-cols-3 gap-4 border-b border-light-border bg-light-surface-2/50 dark:border-dark-border dark:bg-dark-surface-2/50">
                 {stats.map((stat) => {
-                    const Icon = stat.icon;
+                    const Icon = getIcon(stat.iconClass);
                     return (
                         <div key={stat.label} className="text-center">
                             <div className={`inline-flex items-center justify-center w-10 h-10 rounded-lg mb-2 ${stat.bg}`}>
-                                <Icon className="w-5 h-5" style={{ color: stat.color }} />
+                                {Icon ? <Icon className="w-5 h-5" style={{ color: stat.color }} /> : null}
                             </div>
                             <p className="text-2xl font-bold text-light-text-primary dark:text-dark-text-primary">
                                 {stat.value}
@@ -134,7 +132,7 @@ const LogsOverviewChart: FC<LogsOverviewChartProps> = ({ data, chartData }) => {
             {/* Chart */}
             <div className="p-6">
                 <ResponsiveContainer width="100%" height={200}>
-                    <AreaChart data={defaultChartData}>
+                    <AreaChart data={series}>
                         <defs>
                             <linearGradient id="errorGradient" x1="0" y1="0" x2="0" y2="1">
                                 <stop offset="0%" stopColor="#DB4437" stopOpacity={0.3} />
@@ -159,13 +157,13 @@ const LogsOverviewChart: FC<LogsOverviewChartProps> = ({ data, chartData }) => {
                             axisLine={false}
                             tickLine={false}
                             tick={{ fontSize: 11 }}
-                            className="fill-gray-500 dark:fill-gray-400"
+                            className="fill-light-text-secondary dark:fill-dark-text-secondary"
                         />
                         <YAxis 
                             axisLine={false}
                             tickLine={false}
                             tick={{ fontSize: 11 }}
-                            className="fill-gray-500 dark:fill-gray-400"
+                            className="fill-light-text-secondary dark:fill-dark-text-secondary"
                         />
                         <Tooltip content={<CustomTooltip />} />
                         <Area 
@@ -203,7 +201,10 @@ const LogsOverviewChart: FC<LogsOverviewChartProps> = ({ data, chartData }) => {
                 </span>
                 <button className="text-sm font-medium text-ember hover:text-wine transition-colors flex items-center gap-1">
                     View Terminal
-                    <TrendingUp className="w-4 h-4" />
+                    {(() => {
+                        const Icon = getIcon('ri-line-chart-line');
+                        return Icon ? <Icon className="w-4 h-4" /> : null;
+                    })()}
                 </button>
             </div>
         </div>

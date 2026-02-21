@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Shield, AlertCircle } from 'lucide-react';
+import { getIcon } from '@/utils/iconMapping';
 import { useAuth } from '@/context/AuthContext';
 import '@/styles/components/socalmedia.css'
 
@@ -49,13 +50,13 @@ const Auth: React.FC = () => {
     return (
         <div className="flex min-h-screen bg-light-bg dark:bg-dark-bg animate-fade-in">
             {/* Left Side - Modern Gradient Section */}
-            <div className="hidden lg:flex w-1/2 relative overflow-hidden bg-gradient-to-br from-indigo via-navy to-dark-bg items-center justify-center p-12 text-white">
+            <div className="hidden lg:flex w-1/2 relative overflow-hidden bg-gradient-to-br from-blue-primary via-dark-surface to-dark-bg items-center justify-center p-12 text-white">
                 <div className="absolute inset-0 bg-black/10 backdrop-blur-sm"></div>
 
-                {/* Animated Background Elements */}
-                <div className="absolute top-0 -left-20 w-80 h-80 bg-wine rounded-full mix-blend-overlay filter blur-3xl opacity-40 animate-pulse-soft"></div>
-                <div className="absolute top-0 -right-20 w-80 h-80 bg-ember rounded-full mix-blend-overlay filter blur-3xl opacity-40 animate-pulse-soft" style={{ animationDelay: '1s' }}></div>
-                <div className="absolute -bottom-32 left-20 w-80 h-80 bg-indigo rounded-full mix-blend-overlay filter blur-3xl opacity-40 animate-pulse-soft" style={{ animationDelay: '2s' }}></div>
+                {/* Animated Background Elements - Amphibian palette */}
+                <div className="absolute top-0 -left-20 w-80 h-80 bg-orange-primary/40 rounded-full mix-blend-overlay filter blur-3xl opacity-40 animate-pulse-soft"></div>
+                <div className="absolute top-0 -right-20 w-80 h-80 bg-orange-primary/40 rounded-full mix-blend-overlay filter blur-3xl opacity-40 animate-pulse-soft" style={{ animationDelay: '1s' }}></div>
+                <div className="absolute -bottom-32 left-20 w-80 h-80 bg-blue-primary/40 rounded-full mix-blend-overlay filter blur-3xl opacity-40 animate-pulse-soft" style={{ animationDelay: '2s' }}></div>
 
                 {/* Content */}
                 <div className="relative z-10 max-w-lg text-center animate-fade-in-up">
@@ -64,16 +65,16 @@ const Auth: React.FC = () => {
                             <Shield className="w-10 h-10 text-white" />
                         </div>
                     </div>
-                    <h1 className="text-5xl font-bold mb-6 tracking-tight">Event Jungle</h1>
+                    <h1 className="text-5xl font-bold mb-6 tracking-tight">ApexOps</h1>
                     <p className="text-xl text-white/90 font-light leading-relaxed">
-                        Join our community and experience the future of event management. clean, fast, and secure.
+                        Bug & Log Management for developers. Clean, fast, and secure.
                     </p>
                 </div>
             </div>
 
             {/* Right Side - Clean Form Section */}
             <div className="w-full lg:w-1/2 flex items-center justify-center p-8 lg:p-12 relative bg-light-bg dark:bg-dark-bg transition-colors duration-300">
-                <div className="absolute inset-0 bg-gradient-to-br from-ember/5 to-indigo/5 dark:from-black/0 dark:to-white/0 pointer-events-none"></div>
+                <div className="absolute inset-0 bg-gradient-to-br from-orange-primary/5 to-blue-primary/5 dark:from-black/0 dark:to-white/0 pointer-events-none"></div>
 
                 <div className="w-full max-w-md relative z-10 animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
                     <div className="text-center mb-10">
@@ -164,11 +165,11 @@ const Auth: React.FC = () => {
                                     type="checkbox"
                                     checked={keepLoggedIn}
                                     onChange={(e) => setKeepLoggedIn(e.target.checked)}
-                                    className="w-4 h-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500 transition-colors"
+                                    className="w-4 h-4 rounded border-light-border dark:border-dark-border text-blue-primary focus:ring-blue-primary transition-colors"
                                 />
                                 <span className="ml-2 text-sm text-light-text-secondary dark:text-dark-text-secondary group-hover:text-light-text dark:group-hover:text-dark-text transition-colors">Keep me signed in</span>
                             </label>
-                            <button type="button" className="text-sm font-medium text-ember dark:text-peach hover:text-wine transition-colors">
+                            <button type="button" className="text-sm font-medium text-orange-primary hover:text-blue-primary transition-colors">
                                 Forgot password?
                             </button>
                         </div>
@@ -176,7 +177,7 @@ const Auth: React.FC = () => {
                         <button
                             type="submit"
                             disabled={loading}
-                            className="w-full py-3.5 bg-gradient-to-r from-ember to-wine hover:from-ember/90 hover:to-wine/90 text-white rounded-xl font-medium shadow-lg shadow-ember/30 hover:shadow-ember/50 transform hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 disabled:opacity-70 disabled:cursor-not-allowed"
+                            className="w-full py-3.5 bg-gradient-to-r from-orange-primary to-blue-primary hover:from-orange-primary/90 hover:to-blue-primary/90 text-white rounded-xl font-medium shadow-lg shadow-orange-primary/30 hover:shadow-orange-primary/50 transform hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 disabled:opacity-70 disabled:cursor-not-allowed"
                         >
                             {loading ? (
                                 <span className="flex items-center justify-center gap-2">
@@ -190,10 +191,10 @@ const Auth: React.FC = () => {
 
                         <div className="relative my-8">
                             <div className="absolute inset-0 flex items-center">
-                                <div className="w-full border-t border-gray-200 dark:border-gray-700"></div>
+                                <div className="w-full border-t border-light-border dark:border-dark-border"></div>
                             </div>
                             <div className="relative flex justify-center text-sm">
-                                <span className="px-4 bg-light-bg dark:bg-dark-bg text-gray-500 dark:text-gray-400">Or continue with</span>
+                                <span className="px-4 bg-light-bg dark:bg-dark-bg text-light-text-secondary dark:text-dark-text-secondary">Or continue with</span>
                             </div>
                         </div>
 
@@ -204,19 +205,28 @@ const Auth: React.FC = () => {
                                     <li className="icon contact">
                                         <span className="tooltip">Twitter</span>
                                         <a href="https://x.com/nevinas_ka" className="hover:text-global-purple transition-colors duration-200">
-                                            <i className="text-3xl ri-twitter-fill"></i>
+                                            {(() => {
+                                                const TwitterIcon = getIcon('ri-twitter-fill');
+                                                return TwitterIcon ? <TwitterIcon className="text-3xl transition-colors duration-200" /> : <i className="text-3xl ri-twitter-fill"></i>;
+                                            })()}
                                         </a>
                                     </li>
                                     <li className="icon contact">
                                         <span className="tooltip">Instagram</span>
                                         <a href="https://www.instagram.com/tp_job_th/?hl=en" className="hover:text-global-purple transition-colors duration-200">
-                                            <i className="text-3xl ri-instagram-fill"></i>
+                                            {(() => {
+                                                const InstagramIcon = getIcon('ri-instagram-fill');
+                                                return InstagramIcon ? <InstagramIcon className="text-3xl transition-colors duration-200" /> : <i className="text-3xl ri-instagram-fill"></i>;
+                                            })()}
                                         </a>
                                     </li>
                                     <li className="icon contact">
                                         <span className="tooltip">Github</span>
                                         <a href="https://github.com/tp-job" className="hover:text-global-purple transition-colors duration-200">
-                                            <i className="text-3xl ri-github-fill"></i>
+                                            {(() => {
+                                                const GithubIcon = getIcon('ri-github-fill');
+                                                return GithubIcon ? <GithubIcon className="text-3xl transition-colors duration-200" /> : <i className="text-3xl ri-github-fill"></i>;
+                                            })()}
                                         </a>
                                     </li>
                                 </ul>
@@ -224,7 +234,7 @@ const Auth: React.FC = () => {
                             </div>
                         </div>
 
-                        <p className="text-center text-sm text-gray-500 mt-8">
+                        <p className="text-center text-sm text-light-text-secondary dark:text-dark-text-secondary mt-8">
                             {isSignUp ? 'Already have an account?' : "Don't have an account?"}{' '}
                             <button
                                 type="button"
@@ -232,7 +242,7 @@ const Auth: React.FC = () => {
                                     setIsSignUp(!isSignUp);
                                     setError('');
                                 }}
-                                className="font-semibold text-ember hover:text-wine transition-colors"
+                                className="font-semibold text-orange-primary hover:text-blue-primary transition-colors"
                             >
                                 {isSignUp ? 'Sign In' : 'Sign Up'}
                             </button>

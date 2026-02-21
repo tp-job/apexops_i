@@ -1,27 +1,26 @@
-import { useState, useEffect, type FC } from 'react';
+import { useState, useEffect, useMemo, memo, type FC } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { getIcon } from '@/utils/iconMapping';
+
+import {
+    type Note,
+    fetchNotes as apiFetchNotes,
+    createNote as apiCreateNote,
+    toggleNotePin as apiToggleNotePin,
+    deleteNote as apiDeleteNote,
+    type NormalizedNotes,
+    emptyNotesState,
+    normalizeNotes,
+    upsertNote,
+    removeNote,
+    getFilteredNotes,
+    splitPinnedNotes,
+} from './utils';
 
 // Import reusable components
 import Toast from '@/components/common/alert/Toast';
 import ConfirmationModal from '@/components/common/alert/ConfirmationModal';
-import SidebarLink, { SidebarItem } from '@/components/layouts/SidebarLink';
-
-// Types
-interface Note {
-    id: string;
-    title: string;
-    content: string;
-    type: 'text' | 'image' | 'list' | 'link';
-    isPinned: boolean;
-    color?: string;
-    tags?: string[];
-    imageUrl?: string;
-    linkUrl?: string;
-    checklistItems?: { text: string; checked: boolean }[];
-    quote?: { text: string; author: string };
-}
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+import SidebarLink, { type SidebarItem } from '@/components/layouts/SidebarLink';
 
 // Sample data (kept for sidebar structure)
 const sidebarItems: SidebarItem[] = [
@@ -48,43 +47,55 @@ const IconButton: FC<{ icon: string; size?: number; className?: string; title?: 
     className = '',
     title,
     onClick,
-}) => (
-    <button
-        className={`p-2 rounded-full hover:bg-light-surface-2 dark:hover:bg-dark-surface-2 text-light-text-secondary dark:text-dark-text-secondary transition-colors ${className}`}
-        title={title}
-        onClick={onClick}
-    >
-        <span className="material-symbols-outlined" style={{ fontSize: size }}>
-            <i className={`${icon} text-lg transition-colors duration-200`}></i>
-        </span>
-    </button>
-);
+}) => {
+    const IconComponent = getIcon(icon);
+    return (
+        <button
+            className={`p-2 rounded-full hover:bg-light-surface-2 dark:hover:bg-dark-surface-2 text-light-text-secondary dark:text-dark-text-secondary transition-colors ${className}`}
+            title={title}
+            onClick={onClick}
+        >
+            {IconComponent ? (
+                <IconComponent className="text-lg transition-colors duration-200 text-light-text-secondary dark:text-dark-text-secondary" style={{ fontSize: size }} />
+            ) : (
+                <i className={`${icon} text-lg transition-colors duration-200`} style={{ fontSize: size }}></i>
+            )}
+        </button>
+    );
+};
 
 const NoteActionButtons: FC<{ hoverBgClass?: string; onDelete?: () => void }> = ({ hoverBgClass = 'hover:bg-light-surface-2 dark:hover:bg-dark-surface-2', onDelete }) => (
     <div className="flex items-center justify-between px-2 py-2 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
         <div className="flex gap-1">
-            {['ri-file-add-fill', 'ri-user-add-fill', 'ri-palette-fill', 'ri-image-add-line', 'ri-inbox-archive-fill', 'ri-delete-bin-fill'].map((icon) => (
-                <button
-                    key={icon}
-                    onClick={icon === 'ri-delete-bin-fill' ? onDelete : (e) => { e.stopPropagation(); }}
-                    className={`p-1.5 rounded-full ${hoverBgClass} text-light-text-secondary dark:text-dark-text-secondary`}
-                >
-                    <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
-                        <i className={`${icon} text-lg transition-colors duration-200`}></i>
-                    </span>
-                </button>
-            ))}
+            {['ri-file-add-fill', 'ri-user-add-fill', 'ri-palette-fill', 'ri-image-add-line', 'ri-inbox-archive-fill', 'ri-delete-bin-fill'].map((iconClass) => {
+                const IconComponent = getIcon(iconClass);
+                return (
+                    <button
+                        key={iconClass}
+                        onClick={iconClass === 'ri-delete-bin-fill' ? onDelete : (e) => { e.stopPropagation(); }}
+                        className={`p-1.5 rounded-full ${hoverBgClass} text-light-text-secondary dark:text-dark-text-secondary`}
+                    >
+                        {IconComponent ? (
+                            <IconComponent className="text-lg transition-colors duration-200 text-light-text-secondary dark:text-dark-text-secondary" style={{ fontSize: 18 }} />
+                        ) : (
+                            <i className={`${iconClass} text-lg transition-colors duration-200`} style={{ fontSize: 18 }}></i>
+                        )}
+                    </button>
+                );
+            })}
         </div>
     </div>
 );
 
-const NoteCard: FC<{ note: Note; onTogglePin: (id: string) => void; onDelete: (id: string) => void; onClick: () => void }> = ({ note, onTogglePin, onDelete, onClick }) => {
+NoteActionButtons.displayName = 'NoteActionButtons';
+
+const NoteCardComponent: FC<{ note: Note; onTogglePin: (id: string) => void; onDelete: (id: string) => void; onClick: () => void }> = ({ note, onTogglePin, onDelete, onClick }) => {
     const colorClasses = note.color === 'red'
-        ? 'bg-ember/5 dark:bg-ember/10 border-ember/20'
+        ? 'bg-orange-primary/5 dark:bg-orange-primary/10 border-orange-primary/20'
         : 'bg-light-surface dark:bg-dark-surface border-light-border dark:border-dark-border';
 
     const hoverBgClass = note.color === 'red'
-        ? 'hover:bg-ember/10 dark:hover:bg-ember/20'
+        ? 'hover:bg-orange-primary/10 dark:hover:bg-orange-primary/20'
         : 'hover:bg-light-surface-2 dark:hover:bg-dark-surface-2';
 
     return (
@@ -104,9 +115,16 @@ const NoteCard: FC<{ note: Note; onTogglePin: (id: string) => void; onDelete: (i
             {note.type === 'link' && (
                 <a className="block bg-light-surface-2 dark:bg-dark-surface-2 h-32 rounded-t-xl relative overflow-hidden" href={note.linkUrl}>
                     <div className="absolute inset-0 flex items-center justify-center">
-                        <span className="material-symbols-outlined text-light-text-secondary dark:text-dark-text-secondary" style={{ fontSize: 48 }}>
-                            link
-                        </span>
+                        {(() => {
+                            const LinkIcon = getIcon('ri-link-line');
+                            return LinkIcon ? (
+                                <LinkIcon className="text-light-text-secondary dark:text-dark-text-secondary transition-colors duration-200" style={{ fontSize: 48 }} />
+                            ) : (
+                                <span className="material-symbols-outlined text-light-text-secondary dark:text-dark-text-secondary" style={{ fontSize: 48 }}>
+                                    link
+                                </span>
+                            );
+                        })()}
                     </div>
                     <div className="absolute bottom-0 left-0 right-0 bg-black/50 p-2 text-white text-xs truncate">
                         {note.linkUrl}
@@ -122,9 +140,14 @@ const NoteCard: FC<{ note: Note; onTogglePin: (id: string) => void; onDelete: (i
                         onClick={(e) => { e.stopPropagation(); onTogglePin(note.id); }}
                         className="opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-light-surface-2 dark:hover:bg-dark-surface-2 rounded-full -mt-1 -mr-1"
                     >
-                        <span className={`material-symbols-outlined ${note.isPinned ? 'filled text-light-text-primary dark:text-dark-text-primary' : 'text-light-text-secondary dark:text-dark-text-secondary'}`} style={{ fontSize: 20 }}>
-                            <i className={note.isPinned ? "ri-pushpin-2-fill" : "ri-pushpin-2-line"}></i>
-                        </span>
+                        {(() => {
+                            const PinIcon = getIcon(note.isPinned ? 'ri-pushpin-2-fill' : 'ri-pushpin-2-line');
+                            return PinIcon ? (
+                                <PinIcon className={`text-lg transition-colors duration-200 ${note.isPinned ? 'text-light-text-primary dark:text-dark-text-primary' : 'text-light-text-secondary dark:text-dark-text-secondary'}`} style={{ fontSize: 20 }} />
+                            ) : (
+                                <i className={note.isPinned ? "ri-pushpin-2-fill" : "ri-pushpin-2-line"} style={{ fontSize: 20 }}></i>
+                            );
+                        })()}
                     </button>
                 </div>
 
@@ -148,16 +171,23 @@ const NoteCard: FC<{ note: Note; onTogglePin: (id: string) => void; onDelete: (i
                 {/* Checklist */}
                 {note.type === 'list' && note.checklistItems && (
                     <ul className="space-y-1 mt-1">
-                        {note.checklistItems.map((item, idx) => (
-                            <li key={idx} className="flex items-center gap-2">
-                                <span className="material-symbols-outlined text-light-text-secondary/50 dark:text-dark-text-secondary/50" style={{ fontSize: 18 }}>
-                                    {item.checked ? 'check_box' : 'check_box_outline_blank'}
-                                </span>
-                                <span className={`text-sm ${item.checked ? 'text-light-text-secondary dark:text-dark-text-secondary line-through' : 'text-light-text dark:text-dark-text'}`}>
-                                    {item.text}
-                                </span>
-                            </li>
-                        ))}
+                        {note.checklistItems.map((item, idx) => {
+                            const CheckboxIcon = getIcon(item.checked ? 'ri-checkbox-fill' : 'ri-checkbox-line');
+                            return (
+                                <li key={idx} className="flex items-center gap-2">
+                                    {CheckboxIcon ? (
+                                        <CheckboxIcon className="text-light-text-secondary/50 dark:text-dark-text-secondary/50 transition-colors duration-200" style={{ fontSize: 18 }} />
+                                    ) : (
+                                        <span className="material-symbols-outlined text-light-text-secondary/50 dark:text-dark-text-secondary/50" style={{ fontSize: 18 }}>
+                                            {item.checked ? 'check_box' : 'check_box_outline_blank'}
+                                        </span>
+                                    )}
+                                    <span className={`text-sm ${item.checked ? 'text-light-text-secondary dark:text-dark-text-secondary line-through' : 'text-light-text dark:text-dark-text'}`}>
+                                        {item.text}
+                                    </span>
+                                </li>
+                            );
+                        })}
                     </ul>
                 )}
 
@@ -181,10 +211,13 @@ const NoteCard: FC<{ note: Note; onTogglePin: (id: string) => void; onDelete: (i
     );
 };
 
+const NoteCard = memo(NoteCardComponent);
+NoteCard.displayName = 'NoteCard';
+
 const NoteDashboard: FC = () => {
     const navigate = useNavigate();
     const [searchValue, setSearchValue] = useState('');
-    const [notes, setNotes] = useState<Note[]>([]);
+    const [notesState, setNotesState] = useState<NormalizedNotes>(emptyNotesState);
     const [title, setTitle] = useState('');
     const [content, setContent] = useState('');
     const [filter, setFilter] = useState('All');
@@ -199,24 +232,14 @@ const NoteDashboard: FC = () => {
     };
 
     const fetchNotes = async () => {
-        const token = localStorage.getItem('accessToken');
-        if (!token) {
-            setLoading(false);
-            return;
+        setLoading(true);
+        const result = await apiFetchNotes();
+        if (result.success && result.data) {
+            setNotesState(normalizeNotes(result.data as Note[]));
+        } else if (result.error) {
+            showToast(result.error, 'error');
         }
-        try {
-            const res = await fetch(`${API_BASE_URL}/api/notes`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            if (res.ok) {
-                const data = await res.json();
-                setNotes(data);
-            }
-        } catch (err) {
-            console.error('Error fetching notes:', err);
-        } finally {
-            setLoading(false);
-        }
+        setLoading(false);
     };
 
     useEffect(() => {
@@ -228,30 +251,17 @@ const NoteDashboard: FC = () => {
             showToast('Please add a title or content', 'error');
             return;
         }
-        const token = localStorage.getItem('accessToken');
-        if (!token) {
-            showToast('Please login to add notes', 'error');
-            return;
-        }
         setIsAdding(true);
         try {
-            const res = await fetch(`${API_BASE_URL}/api/notes`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ title, content, type: 'text' })
-            });
-            if (res.ok) {
-                const newNote = await res.json();
-                setNotes(prev => [newNote, ...prev]);
+            const result = await apiCreateNote({ title, content, type: 'text' });
+            if (result.success && result.data) {
+                const newNote = result.data as Note;
+                setNotesState(prev => upsertNote(prev, newNote));
                 setTitle('');
                 setContent('');
                 showToast('Note created successfully!', 'success');
             } else {
-                const error = await res.json();
-                showToast(error.error || 'Failed to create note', 'error');
+                showToast(result.error || 'Failed to create note', 'error');
             }
         } catch (err) {
             console.error('Error adding note:', err);
@@ -262,21 +272,15 @@ const NoteDashboard: FC = () => {
     };
 
     const handleTogglePin = async (id: string) => {
-        const note = notes.find(n => n.id === id);
+        const note = notesState.byId[id];
         if (!note) return;
-        const token = localStorage.getItem('accessToken');
-        if (!token) return;
         try {
-            const res = await fetch(`${API_BASE_URL}/api/notes/${id}`, {
-                method: 'PUT',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ isPinned: !note.isPinned })
-            });
-            if (res.ok) {
-                setNotes(prev => prev.map(n => n.id === id ? { ...n, isPinned: !n.isPinned } : n));
+            const result = await apiToggleNotePin(id, note.isPinned);
+            if (result.success) {
+                const updated: Note = { ...note, isPinned: !note.isPinned };
+                setNotesState(prev => upsertNote(prev, updated));
+            } else if (result.error) {
+                showToast(result.error, 'error');
             }
         } catch (err) {
             console.error('Error toggling pin:', err);
@@ -291,25 +295,15 @@ const NoteDashboard: FC = () => {
         const { noteId } = deleteModal;
         if (!noteId) return;
 
-        const token = localStorage.getItem('accessToken');
-        if (!token) {
-            showToast('Please login to delete notes', 'error');
-            return;
-        }
-
         setIsDeleting(true);
         try {
-            const res = await fetch(`${API_BASE_URL}/api/notes/${noteId}`, {
-                method: 'DELETE',
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            if (res.ok) {
-                setNotes(prev => prev.filter(n => n.id !== noteId));
+            const result = await apiDeleteNote(noteId);
+            if (result.success) {
+                setNotesState(prev => removeNote(prev, noteId));
                 showToast('Note deleted successfully!', 'success');
                 setDeleteModal({ isOpen: false, noteId: '', noteTitle: '' });
             } else {
-                const error = await res.json();
-                showToast(error.error || 'Failed to delete note', 'error');
+                showToast(result.error || 'Failed to delete note', 'error');
             }
         } catch (err) {
             console.error('Error deleting note:', err);
@@ -319,15 +313,20 @@ const NoteDashboard: FC = () => {
         }
     };
 
-    const filteredNotes = notes.filter(note => {
-        const matchesSearch = (note.title?.toLowerCase() || '').includes(searchValue.toLowerCase()) ||
-            (note.content?.toLowerCase() || '').includes(searchValue.toLowerCase());
-        const matchesFilter = filter === 'All' || note.type === filter.toLowerCase();
-        return matchesSearch && matchesFilter;
-    });
+    const filteredNotes = useMemo(
+        () => getFilteredNotes(notesState, searchValue, filter),
+        [notesState, searchValue, filter],
+    );
 
-    const pinnedNotes = filteredNotes.filter(n => n.isPinned);
-    const otherNotes = filteredNotes.filter(n => !n.isPinned);
+    const { pinned: pinnedNotes, others: otherNotes } = useMemo(
+        () => splitPinnedNotes(filteredNotes),
+        [filteredNotes],
+    );
+
+    // Simple windowed rendering for large collections
+    const MAX_RENDERED_NOTES = 200;
+    const visiblePinnedNotes = pinnedNotes.slice(0, MAX_RENDERED_NOTES);
+    const visibleOtherNotes = otherNotes.slice(0, MAX_RENDERED_NOTES);
 
     return (
         <div className="font-inter text-light-text dark:text-dark-text h-screen overflow-hidden flex flex-col">
@@ -349,10 +348,10 @@ const NoteDashboard: FC = () => {
                     </>
                 }
                 confirmText="Delete"
-                confirmBtnColor="bg-red-500 hover:bg-red-600"
+                confirmBtnColor="bg-orange-primary hover:bg-orange-600"
                 icon="ri-delete-bin-line"
-                iconBgColor="bg-red-100 dark:bg-red-900/30"
-                iconColor="text-red-500"
+                iconBgColor="bg-orange-primary/10 dark:bg-orange-primary/30"
+                iconColor="text-orange-primary"
             />
 
 
@@ -361,8 +360,15 @@ const NoteDashboard: FC = () => {
                 <div className="flex items-center gap-4">
                     <IconButton icon="ri-menu-line" onClick={() => { }} />
                     <div className="flex items-center gap-2 text-light-text dark:text-dark-text">
-                        <div className="size-10 flex items-center justify-center bg-gradient-to-br from-ember to-wine rounded-lg text-white shadow-lg shadow-ember/20">
-                            <i className="ri-list-check"></i>
+                        <div className="size-10 flex items-center justify-center bg-gradient-to-br from-orange-primary to-blue-primary rounded-lg text-white shadow-lg shadow-orange-primary/20">
+                            {(() => {
+                                const ListCheckIcon = getIcon('ri-list-check');
+                                return ListCheckIcon ? (
+                                    <ListCheckIcon className="text-white transition-colors duration-200" style={{ fontSize: 20 }} />
+                                ) : (
+                                    <i className="ri-list-check"></i>
+                                );
+                            })()}
                         </div>
                         <h2 className="text-xl font-medium leading-tight tracking-tight hidden sm:block text-light-text-primary dark:text-dark-text-primary">ApexNotes</h2>
                     </div>
@@ -371,11 +377,16 @@ const NoteDashboard: FC = () => {
                 {/* Search Bar */}
                 <div className="flex flex-1 max-w-[720px] px-4 lg:px-12">
                     <label className="flex flex-col w-full h-11 md:h-12 relative group">
-                        <div className="flex w-full flex-1 items-stretch rounded-lg h-full shadow-sm bg-light-surface-2 dark:bg-dark-surface-2 focus-within:bg-light-surface dark:focus-within:bg-dark-surface focus-within:shadow-md transition-all duration-200 border border-transparent focus-within:border-ember/20">
+                        <div className="flex w-full flex-1 items-stretch rounded-lg h-full shadow-sm bg-light-surface-2 dark:bg-dark-surface-2 focus-within:bg-light-surface dark:focus-within:bg-dark-surface focus-within:shadow-md transition-all duration-200 border border-transparent focus-within:border-orange-primary/20">
                             <div className="text-light-text-secondary dark:text-dark-text-secondary flex items-center justify-center pl-4 rounded-l-lg">
-                                <span className="material-symbols-outlined">
-                                    <i className="ri-search-line"></i>
-                                </span>
+                                {(() => {
+                                    const SearchIcon = getIcon('ri-search-line');
+                                    return SearchIcon ? (
+                                        <SearchIcon className="text-light-text-secondary dark:text-dark-text-secondary transition-colors duration-200" style={{ fontSize: 20 }} />
+                                    ) : (
+                                        <i className="ri-search-line"></i>
+                                    );
+                                })()}
                             </div>
                             <input
                                 className="flex w-full min-w-0 flex-1 resize-none overflow-hidden rounded-lg text-light-text dark:text-dark-text focus:outline-none focus:ring-0 border-none bg-transparent h-full placeholder:text-light-text-secondary dark:placeholder:text-dark-text-secondary px-4 text-base font-normal leading-normal"
@@ -388,9 +399,16 @@ const NoteDashboard: FC = () => {
                                     className="text-light-text-secondary dark:text-dark-text-secondary flex items-center justify-center pr-4 rounded-r-lg cursor-pointer hover:text-light-text-primary dark:hover:text-dark-text-primary"
                                     onClick={() => setSearchValue('')}
                                 >
-                                    <span className="material-symbols-outlined" style={{ fontSize: 20 }}>
-                                        close
-                                    </span>
+                                    {(() => {
+                                        const CloseIcon = getIcon('ri-close-line');
+                                        return CloseIcon ? (
+                                            <CloseIcon className="text-light-text-secondary dark:text-dark-text-secondary transition-colors duration-200" style={{ fontSize: 20 }} />
+                                        ) : (
+                                            <span className="material-symbols-outlined" style={{ fontSize: 20 }}>
+                                                close
+                                            </span>
+                                        );
+                                    })()}
                                 </button>
                             )}
                         </div>
@@ -401,9 +419,16 @@ const NoteDashboard: FC = () => {
                 <div className="flex items-center gap-2 sm:gap-4 pl-2">
                     <button
                         onClick={() => navigate('/note-editor')}
-                        className="hidden md:flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-ember to-wine text-white text-sm font-bold shadow-sm hover:shadow-lg hover:shadow-ember/20 transition-all active:scale-95"
+                        className="hidden md:flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-orange-primary to-blue-primary text-white text-sm font-bold shadow-sm hover:shadow-lg hover:shadow-orange-primary/20 transition-all active:scale-95"
                     >
-                        <i className="ri-add-line"></i>
+                        {(() => {
+                            const AddIcon = getIcon('ri-add-line');
+                            return AddIcon ? (
+                                <AddIcon className="text-white transition-colors duration-200" style={{ fontSize: 18 }} />
+                            ) : (
+                                <i className="ri-add-line"></i>
+                            );
+                        })()}
                         New Note
                     </button>
                     <div className="hidden md:flex gap-1">
@@ -453,7 +478,7 @@ const NoteDashboard: FC = () => {
                     <div className="w-full max-w-[1200px] mx-auto px-4 sm:px-8 py-8 flex flex-col gap-8 pb-32">
                         {/* Composer */}
                         <div className="flex justify-center w-full mb-8">
-                            <div className={`w-full max-w-[600px] shadow-sm hover:shadow-lg transition-all duration-300 rounded-xl bg-white/80 dark:bg-dark-surface/80 backdrop-blur-md border border-light-border dark:border-dark-border overflow-hidden relative group`}>
+                            <div className="w-full max-w-[600px] shadow-sm hover:shadow-lg transition-all duration-300 rounded-xl bg-white/80 dark:bg-dark-surface/80 backdrop-blur-md border border-light-border dark:border-dark-border overflow-hidden relative">
                                 <div className="flex flex-col">
                                     <input
                                         className="w-full px-4 pt-4 pb-2 text-lg font-semibold text-light-text-primary dark:text-dark-text-primary placeholder:text-light-text-secondary dark:placeholder:text-dark-text-secondary bg-transparent border-none focus:ring-0 outline-none"
@@ -472,7 +497,7 @@ const NoteDashboard: FC = () => {
                                             if (!content) e.target.rows = 3;
                                         }}
                                     />
-                                    <div className={`flex items-center justify-between px-2 py-2 transition-all duration-300 ${title || content ? 'opacity-100 h-auto' : 'opacity-0 h-0 overflow-hidden group-hover:opacity-100 group-hover:h-auto'}`}>
+                                    <div className="flex items-center justify-between px-2 py-2">
                                         <div className="flex items-center gap-1">
                                             {[
                                                 { icon: 'ri-file-add-line', title: 'Checklist' },
@@ -480,15 +505,22 @@ const NoteDashboard: FC = () => {
                                                 { icon: 'ri-image-add-line', title: 'Add image' },
                                                 { icon: 'ri-archive-line', title: 'Archive' },
                                                 { icon: 'ri-more-2-line', title: 'More' }
-                                            ].map((item) => (
-                                                <button
-                                                    key={item.icon}
-                                                    className="p-2 rounded-full hover:bg-light-surface-2 dark:hover:bg-dark-surface-2 text-light-text-secondary dark:text-dark-text-secondary transition-colors"
-                                                    title={item.title}
-                                                >
-                                                    <i className={`${item.icon} text-lg`}></i>
-                                                </button>
-                                            ))}
+                                            ].map((item) => {
+                                                const IconComponent = getIcon(item.icon);
+                                                return (
+                                                    <button
+                                                        key={item.icon}
+                                                        className="p-2 rounded-full hover:bg-light-surface-2 dark:hover:bg-dark-surface-2 text-light-text-secondary dark:text-dark-text-secondary transition-colors"
+                                                        title={item.title}
+                                                    >
+                                                        {IconComponent ? (
+                                                            <IconComponent className="text-lg transition-colors duration-200 text-light-text-secondary dark:text-dark-text-secondary" />
+                                                        ) : (
+                                                            <i className={`${item.icon} text-lg`}></i>
+                                                        )}
+                                                    </button>
+                                                );
+                                            })}
                                         </div>
                                         <div className="flex items-center gap-2">
                                             <button
@@ -500,11 +532,18 @@ const NoteDashboard: FC = () => {
                                             <button
                                                 onClick={handleAddNote}
                                                 disabled={isAdding}
-                                                className="px-6 py-2 rounded-lg text-sm font-bold bg-gradient-to-r from-ember to-wine hover:shadow-lg hover:shadow-ember/30 text-white shadow-sm transition-all active:scale-95 disabled:opacity-50 flex items-center gap-2"
+                                                className="px-6 py-2 rounded-lg text-sm font-bold bg-gradient-to-r from-orange-primary to-blue-primary hover:shadow-lg hover:shadow-orange-primary/30 text-white shadow-sm transition-all active:scale-95 disabled:opacity-50 flex items-center gap-2"
                                             >
                                                 {isAdding ? (
                                                     <>
-                                                        <i className="ri-loader-4-line animate-spin"></i>
+                                                        {(() => {
+                                                            const LoaderIcon = getIcon('ri-loader-4-line');
+                                                            return LoaderIcon ? (
+                                                                <LoaderIcon className="animate-spin transition-colors duration-200 text-white" style={{ fontSize: 18 }} />
+                                                            ) : (
+                                                                <i className="ri-loader-4-line animate-spin"></i>
+                                                            );
+                                                        })()}
                                                         Adding...
                                                     </>
                                                 ) : (
@@ -524,42 +563,49 @@ const NoteDashboard: FC = () => {
                                 { label: "Image", icon: "ri-image-2-line" },
                                 { label: "List", icon: "ri-list-unordered" },
                                 { label: "Draw", icon: "ri-pencil-fill" },
-                            ].map((item) => (
+                            ].map((item) => {
+                                const FilterIcon = item.icon ? getIcon(item.icon) : null;
+                                return (
                                 <div
                                     key={item.label}
                                     onClick={() => setFilter(item.label)}
                                     className={`flex h-8 shrink-0 items-center justify-center gap-x-2 rounded-full border px-4 cursor-pointer transition-all ${filter === item.label
-                                        ? 'bg-ember text-white border-ember shadow-md shadow-ember/20'
+                                        ? 'bg-orange-primary text-white border-orange-primary shadow-md shadow-orange-primary/20'
                                         : 'border-light-border dark:border-dark-border bg-white/50 dark:bg-dark-surface/50 hover:bg-light-surface-2 dark:hover:bg-dark-surface-2 text-light-text-secondary dark:text-dark-text-secondary'
                                         }`}
                                 >
-                                    {item.icon && (
+                                    {item.icon && FilterIcon ? (
+                                        <FilterIcon
+                                            className={`text-[18px] transition-colors duration-200 ${filter === item.label ? 'text-white' : 'text-light-text-secondary dark:text-dark-text-secondary'}`}
+                                        />
+                                    ) : item.icon ? (
                                         <i
-                                            className={`${item.icon} text-[18px] transition-colors ${filter === item.label ? 'text-amber-700 dark:text-amber-300' : 'text-[#5f6368] dark:text-gray-400'
+                                            className={`${item.icon} text-[18px] transition-colors ${filter === item.label ? 'text-white' : 'text-light-text-secondary dark:text-dark-text-secondary'
                                                 }`}
                                         />
-                                    )}
+                                    ) : null}
                                     <p className="text-sm font-medium">
                                         {item.label}
                                     </p>
                                 </div>
-                            ))}
+                            );
+                            })}
                         </div>
 
                         {loading ? (
                             <div className="flex justify-center py-20">
-                                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-amber-500"></div>
+                                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-primary"></div>
                             </div>
                         ) : (
                             <>
                                 {/* Pinned Section */}
-                                {pinnedNotes.length > 0 && (
+                                {visiblePinnedNotes.length > 0 && (
                                     <div className="flex flex-col gap-3">
-                                        <h6 className="text-[#5f6368] dark:text-gray-400 text-xs font-bold uppercase tracking-wider px-2">
+                                        <h6 className="text-light-text-secondary dark:text-dark-text-secondary text-xs font-bold uppercase tracking-wider px-2">
                                             Pinned
                                         </h6>
                                         <div className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4 space-y-4">
-                                            {pinnedNotes.map((note) => (
+                                            {visiblePinnedNotes.map((note) => (
                                                 <NoteCard
                                                     key={note.id}
                                                     note={note}
@@ -574,14 +620,14 @@ const NoteDashboard: FC = () => {
 
                                 {/* Others Section */}
                                 <div className="flex flex-col gap-3">
-                                    {pinnedNotes.length > 0 && (
-                                        <h6 className="text-[#5f6368] dark:text-gray-400 text-xs font-bold uppercase tracking-wider px-2">
+                                    {visiblePinnedNotes.length > 0 && (
+                                        <h6 className="text-light-text-secondary dark:text-dark-text-secondary text-xs font-bold uppercase tracking-wider px-2">
                                             Others
                                         </h6>
                                     )}
-                                    {otherNotes.length > 0 ? (
+                                    {visibleOtherNotes.length > 0 ? (
                                         <div className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4 space-y-4">
-                                            {otherNotes.map((note) => (
+                                            {visibleOtherNotes.map((note) => (
                                                 <NoteCard
                                                     key={note.id}
                                                     note={note}
@@ -591,9 +637,16 @@ const NoteDashboard: FC = () => {
                                                 />
                                             ))}
                                         </div>
-                                    ) : !pinnedNotes.length && (
+                                    ) : !visiblePinnedNotes.length && (
                                         <div className="flex flex-col items-center justify-center py-20 text-light-text-secondary dark:text-dark-text-secondary">
-                                            <i className="ri-lightbulb-line text-6xl mb-4 opacity-20"></i>
+                                            {(() => {
+                                                const LightbulbIcon = getIcon('ri-lightbulb-line');
+                                                return LightbulbIcon ? (
+                                                    <LightbulbIcon className="text-6xl mb-4 opacity-20 transition-colors duration-200 text-light-text-secondary dark:text-dark-text-secondary" />
+                                                ) : (
+                                                    <i className="ri-lightbulb-line text-6xl mb-4 opacity-20"></i>
+                                                );
+                                            })()}
                                             <p className="text-lg">Notes you add appear here</p>
                                         </div>
                                     )}
@@ -607,9 +660,16 @@ const NoteDashboard: FC = () => {
             {/* Floating Action Button (Mobile) - Navigate to Editor for new note */}
             <button
                 onClick={() => navigate('/note-editor')}
-                className="md:hidden fixed bottom-6 right-6 size-14 rounded-2xl bg-gradient-to-r from-ember to-wine text-white shadow-lg hover:shadow-xl flex items-center justify-center z-50 border border-transparent transition-all active:scale-95"
+                className="md:hidden fixed bottom-6 right-6 size-14 rounded-2xl bg-gradient-to-r from-orange-primary to-blue-primary text-white shadow-lg hover:shadow-xl flex items-center justify-center z-50 border border-transparent transition-all active:scale-95"
             >
-                <i className="ri-add-line text-3xl"></i>
+                {(() => {
+                    const AddIcon = getIcon('ri-add-line');
+                    return AddIcon ? (
+                        <AddIcon className="text-white transition-colors duration-200" style={{ fontSize: 24 }} />
+                    ) : (
+                        <i className="ri-add-line text-3xl"></i>
+                    );
+                })()}
             </button>
 
             {/* Custom CSS for animations */}

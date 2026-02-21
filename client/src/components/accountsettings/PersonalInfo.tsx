@@ -279,7 +279,7 @@ const PersonalInfo: FC = () => {
                                     className="w-16 h-16 rounded-full object-cover ring-2 ring-light-border dark:ring-dark-border"
                                 />
                             ) : (
-                                <div className="w-16 h-16 bg-gradient-to-br from-indigo via-wine to-ember rounded-full flex items-center justify-center text-white text-xl font-bold ring-2 ring-light-border dark:ring-dark-border">
+                                <div className="w-16 h-16 bg-gradient-to-br from-blue-primary via-blue-secondary to-orange-primary rounded-full flex items-center justify-center text-white text-xl font-bold ring-2 ring-light-border dark:ring-dark-border">
                                     {getInitials()}
                                 </div>
                             )}
@@ -360,7 +360,7 @@ const PersonalInfo: FC = () => {
                             type="text"
                             value={editValue}
                             onChange={(e) => setEditValue(e.target.value)}
-                            className="w-full px-4 py-3 bg-light-bg dark:bg-dark-bg border border-light-border dark:border-dark-border rounded-lg text-light-text dark:text-dark-text focus:outline-none focus:border-ember transition-colors"
+                            className="w-full px-4 py-3 bg-light-bg dark:bg-dark-bg border border-light-border dark:border-dark-border rounded-lg text-light-text dark:text-dark-text focus:outline-none focus:border-orange-primary transition-colors"
                             placeholder="ชื่อจริง"
                         />
                     </div>
@@ -370,7 +370,7 @@ const PersonalInfo: FC = () => {
                             type="text"
                             value={editValue2}
                             onChange={(e) => setEditValue2(e.target.value)}
-                            className="w-full px-4 py-3 bg-light-bg dark:bg-dark-bg border border-light-border dark:border-dark-border rounded-lg text-light-text dark:text-dark-text focus:outline-none focus:border-ember transition-colors"
+                            className="w-full px-4 py-3 bg-light-bg dark:bg-dark-bg border border-light-border dark:border-dark-border rounded-lg text-light-text dark:text-dark-text focus:outline-none focus:border-orange-primary transition-colors"
                             placeholder="นามสกุล"
                         />
                     </div>
@@ -393,7 +393,7 @@ const PersonalInfo: FC = () => {
                                 value={gender}
                                 checked={editValue === gender}
                                 onChange={(e) => setEditValue(e.target.value)}
-                                className="w-5 h-5 text-ember"
+                                className="w-5 h-5 text-orange-primary"
                             />
                             <span className="text-light-text dark:text-dark-text">{gender}</span>
                         </label>
@@ -414,7 +414,7 @@ const PersonalInfo: FC = () => {
                         type="tel"
                         value={editValue}
                         onChange={(e) => setEditValue(e.target.value)}
-                        className="w-full px-4 py-3 bg-light-bg dark:bg-dark-bg border border-light-border dark:border-dark-border rounded-lg text-light-text dark:text-dark-text focus:outline-none focus:border-ember transition-colors"
+                        className="w-full px-4 py-3 bg-light-bg dark:bg-dark-bg border border-light-border dark:border-dark-border rounded-lg text-light-text dark:text-dark-text focus:outline-none focus:border-orange-primary transition-colors"
                         placeholder="0XX XXX XXXX"
                     />
                 </div>
@@ -433,7 +433,7 @@ const PersonalInfo: FC = () => {
                         type="date"
                         value={editValue}
                         onChange={(e) => setEditValue(e.target.value)}
-                        className="w-full px-4 py-3 bg-light-bg dark:bg-dark-bg border border-light-border dark:border-dark-border rounded-lg text-light-text dark:text-dark-text focus:outline-none focus:border-ember transition-colors"
+                        className="w-full px-4 py-3 bg-light-bg dark:bg-dark-bg border border-light-border dark:border-dark-border rounded-lg text-light-text dark:text-dark-text focus:outline-none focus:border-orange-primary transition-colors"
                     />
                 </div>
             </EditModal>
@@ -461,7 +461,7 @@ const PersonalInfo: FC = () => {
                                 value={lang}
                                 checked={editValue === lang}
                                 onChange={(e) => setEditValue(e.target.value)}
-                                className="w-5 h-5 text-ember"
+                                className="w-5 h-5 text-orange-primary"
                             />
                             <span className="text-light-text dark:text-dark-text">{lang}</span>
                         </label>

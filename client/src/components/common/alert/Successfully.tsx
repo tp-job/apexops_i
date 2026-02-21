@@ -1,30 +1,69 @@
 import type { FC } from 'react';
 
-const successfully: FC = () => {
+interface SuccessfullyProps {
+    /** Main success message */
+    title?: string;
+    /** Optional description */
+    description?: string;
+    /** Auto-close duration in ms (0 = no auto-close) */
+    autoClose?: number;
+    /** Callback when alert is closed */
+    onClose?: () => void;
+    /** Show close button */
+    showClose?: boolean;
+}
+
+const Successfully: FC<SuccessfullyProps> = ({
+    title = 'Done successfully :)',
+    description = 'Your action has been completed successfully.',
+    autoClose = 0,
+    onClose,
+    showClose = true,
+}) => {
+    // Auto-close if enabled
+    if (autoClose > 0 && onClose) {
+        setTimeout(onClose, autoClose);
+    }
+
     return (
-        <div className="flex flex-col gap-2 w-60 sm:w-72 text-[10px] sm:text-xs z-50">
-            <div className="succsess-alert cursor-default flex items-center justify-between w-full h-12 sm:h-14 rounded-lg bg-[#232531] px-[10px]">
-                <div className="flex gap-2">
-                    <div className="text-global-green bg-white/5 backdrop-blur-xl p-1 rounded-lg">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
-                            stroke="currentColor" className="w-6 h-6">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5"></path>
+        <div className="flex flex-col gap-2 w-full max-w-sm text-sm z-50 animate-slide-in-right">
+            <div className="success-alert cursor-default flex items-center justify-between w-full min-h-[3.5rem] rounded-xl bg-light-surface dark:bg-dark-surface px-4 py-3 shadow-lg border border-global-green/20 dark:border-global-green/30 backdrop-blur-sm">
+                <div className="flex gap-3 items-start flex-1">
+                    {/* Icon */}
+                    <div className="text-global-green bg-global-green/10 dark:bg-global-green/20 backdrop-blur-xl p-2 rounded-lg flex-shrink-0">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor" className="w-5 h-5">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
                         </svg>
                     </div>
-                    <div>
-                        <p className="text-white">done successfully :)</p>
-                        <p className="text-gray-500">This is the description section</p>
+                    
+                    {/* Content */}
+                    <div className="flex-1 min-w-0">
+                        <p className="text-light-text-primary dark:text-dark-text-primary font-semibold mb-0.5">
+                            {title}
+                        </p>
+                        {description && (
+                            <p className="text-light-text-secondary dark:text-dark-text-secondary text-xs leading-relaxed">
+                                {description}
+                            </p>
+                        )}
                     </div>
                 </div>
-                <button className="text-gray-600 text-gray-600 hover:bg-white/5 p-1 rounded-md transition-colors ease-linear">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
-                        stroke="currentColor" className="w-6 h-6">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12"></path>
-                    </svg>
-                </button>
+
+                {/* Close Button */}
+                {showClose && onClose && (
+                    <button
+                        onClick={onClose}
+                        className="text-light-text-secondary dark:text-dark-text-secondary hover:text-light-text-primary dark:hover:text-dark-text-primary hover:bg-light-surface-2 dark:hover:bg-dark-surface-2 p-1.5 rounded-md transition-colors ease-linear flex-shrink-0 ml-2"
+                        aria-label="Close"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="2" stroke="currentColor" className="w-4 h-4">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                )}
             </div>
         </div>
     );
 };
 
-export default successfully;
+export default Successfully;

@@ -5,10 +5,10 @@ import Sidebar from '../components/layouts/Sidebar';
 
 const Layout: FC = () => {
     return (
-        <div className="min-h-screen flex bg-transparent text-light-text dark:text-dark-text transition-colors duration-300">
+        <div className="min-h-screen flex bg-light-bg dark:bg-dark-bg text-light-text dark:text-dark-text transition-colors duration-300">
             <Sidebar />
             <div className="flex-1 flex flex-col overflow-hidden pt-14 lg:pt-0">
-                <main className="flex-1 overflow-y-auto bg-transparent transition-colors duration-300">
+                <main className="flex-1 overflow-y-auto bg-light-bg dark:bg-dark-bg transition-colors duration-300">
                     <Outlet />
                 </main>
             </div>

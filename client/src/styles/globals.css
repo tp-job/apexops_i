@@ -6,10 +6,9 @@ html {
 /* light mode body */
 body {
     background:
-        radial-gradient(1200px 600px at -10% -10%, var(--color-indigo-muted) 0%, transparent 35%),
-        radial-gradient(900px 500px at 110% 0%, var(--color-wine-muted) 0%, transparent 40%),
-        radial-gradient(1000px 600px at 50% 120%, var(--color-peach-muted) 0%, transparent 35%),
-        linear-gradient(180deg, var(--color-light-bg) 0%, var(--color-light-surface-2) 100%);
+        radial-gradient(circle at 0% 0%, rgba(59, 130, 246, 0.05) 0%, transparent 50%),
+        radial-gradient(circle at 100% 100%, rgba(249, 115, 22, 0.05) 0%, transparent 50%),
+        var(--color-light-bg);
     color: var(--color-light-text);
     min-height: 100vh;
 }
@@ -17,32 +16,32 @@ body {
 /* dark mode body */
 .dark body {
     background:
-        radial-gradient(1200px 600px at -10% -10%, var(--color-indigo-muted) 0%, transparent 35%),
-        radial-gradient(900px 500px at 110% 0%, var(--color-wine-muted) 0%, transparent 40%),
-        radial-gradient(1000px 600px at 50% 120%, var(--color-ember-muted) 0%, transparent 35%),
-        linear-gradient(180deg, var(--color-dark-bg) 0%, #0B1121 100%);
+        radial-gradient(1200px 600px at -10% -10%, rgba(59, 130, 246, 0.15) 0%, transparent 40%),
+        radial-gradient(900px 500px at 110% 0%, rgba(236, 72, 153, 0.1) 0%, transparent 40%),
+        radial-gradient(1000px 600px at 50% 120%, rgba(59, 130, 246, 0.1) 0%, transparent 40%),
+        linear-gradient(180deg, var(--color-dark-bg) 0%, #060912 100%);
     color: var(--color-dark-text);
 }
 
 /* gradient utilities */
 .gradient-sunset {
-    background: linear-gradient(135deg, var(--color-indigo) 0%, var(--color-wine) 50%, var(--color-ember) 100%);
+    background: linear-gradient(135deg, var(--color-blue-primary) 0%, var(--color-blue-secondary) 50%, var(--color-orange-primary) 100%);
 }
 
 .gradient-sunset-warm {
-    background: linear-gradient(135deg, var(--color-wine) 0%, var(--color-ember) 50%, var(--color-peach) 100%);
+    background: linear-gradient(135deg, var(--color-orange-primary) 0%, var(--color-blue-secondary) 50%, var(--color-green) 100%);
 }
 
 .gradient-sunset-full {
-    background: linear-gradient(135deg, var(--color-navy) 0%, var(--color-indigo) 25%, var(--color-wine) 50%, var(--color-ember) 75%, var(--color-peach) 100%);
+    background: linear-gradient(135deg, var(--color-blue-primary) 0%, var(--color-blue-secondary) 25%, var(--color-orange-primary) 50%, var(--color-green) 75%, var(--color-white) 100%);
 }
 
 .gradient-navy-indigo {
-    background: linear-gradient(135deg, var(--color-navy) 0%, var(--color-indigo) 100%);
+    background: linear-gradient(135deg, var(--color-blue-primary) 0%, var(--color-blue-secondary) 100%);
 }
 
 .gradient-ember-peach {
-    background: linear-gradient(135deg, var(--color-ember) 0%, var(--color-peach) 100%);
+    background: linear-gradient(135deg, var(--color-orange-primary) 0%, var(--color-green) 100%);
 }
 
 /* text gradient utilities */
@@ -86,6 +85,36 @@ body {
 
 .shadow-peach {
     box-shadow: var(--shadow-peach);
+}
+
+/* Amphibian-based shadow utilities */
+.shadow-blue-primary {
+    box-shadow: var(--shadow-blue-primary);
+}
+
+.shadow-blue-primary-lg {
+    box-shadow: var(--shadow-blue-primary-lg);
+}
+
+.shadow-orange-primary {
+    box-shadow: var(--shadow-orange-primary);
+}
+
+.shadow-orange-primary-lg {
+    box-shadow: var(--shadow-orange-primary-lg);
+}
+
+.shadow-green {
+    box-shadow: var(--shadow-green);
+}
+
+/* Opacity utilities (from index.css tokens) */
+.opacity-section {
+    opacity: var(--opacity-section);
+}
+
+.opacity-card {
+    opacity: var(--opacity-card);
 }
 
 /* hover glow effects */
@@ -137,4 +166,27 @@ body {
 
 .dark ::selection {
     background: rgba(246, 70, 104, 0.35);
+}
+
+/* Comment dialog animations */
+@keyframes fadeInScale {
+    from {
+        opacity: 0;
+        transform: scale(0.95) translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-5px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }

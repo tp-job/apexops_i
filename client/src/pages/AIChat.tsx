@@ -4,20 +4,19 @@ import {
     Plus,
     MessageSquare,
     Settings,
-    Activity,
     HelpCircle,
     Send,
     Image as ImageIcon,
     Mic,
     User,
-    Bot,
     Sparkles,
     Code,
     Compass,
     Lightbulb,
-    MoreVertical,
     X
 } from 'lucide-react';
+import { isMockEnabled, isNetworkFailure } from '@/utils/offlineMock';
+import { mockAiReply } from '@/utils/mockData';
 
 // --- Types ---
 
@@ -73,6 +72,9 @@ const generateResponse = async (history: Message[], prompt: string): Promise<str
         return data.text || "I couldn't generate a response.";
     } catch (error) {
         console.error("Generation failed", error);
+        if (isMockEnabled() && isNetworkFailure(error)) {
+            return mockAiReply(prompt);
+        }
         return "Sorry, I couldn't connect to the AI service. Please check if the server is running.";
     }
 };
@@ -109,7 +111,7 @@ const SidebarAI = ({
 
                 {/* Header with Logo */}
                 <div className="p-4 flex items-center gap-3 border-b border-dark-border/30">
-                    <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-ember to-wine flex items-center justify-center shadow-lg shadow-ember/20">
+                    <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-orange-primary to-blue-primary flex items-center justify-center shadow-lg shadow-orange-primary/20">
                         <Sparkles size={18} className="text-white" />
                     </div>
                     <div className="flex-1">
@@ -131,7 +133,7 @@ const SidebarAI = ({
                             onNewChat();
                             if (window.innerWidth < 1024) setIsOpen(false);
                         }}
-                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-ember to-wine hover:from-ember/90 hover:to-wine/90 text-white rounded-xl transition-all shadow-md shadow-ember/20 hover:shadow-lg hover:shadow-ember/30 font-medium text-sm"
+                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-orange-primary to-blue-primary hover:from-orange-primary/90 hover:to-blue-primary/90 text-white rounded-xl transition-all shadow-md shadow-orange-primary/20 hover:shadow-lg hover:shadow-orange-primary/30 font-medium text-sm"
                     >
                         <Plus size={18} />
                         <span>New Chat</span>
@@ -155,7 +157,7 @@ const SidebarAI = ({
                                 <div
                                     key={session.id}
                                     className={`group flex items-center gap-2 px-3 py-2.5 text-sm rounded-lg transition-all cursor-pointer ${currentSessionId === session.id
-                                        ? 'bg-ember/20 text-ember border-l-2 border-ember'
+                                        ? 'bg-orange-primary/20 text-orange-primary border-l-2 border-orange-primary'
                                         : 'text-dark-text hover:bg-dark-surface-2'
                                         }`}
                                     onClick={() => {
@@ -163,7 +165,7 @@ const SidebarAI = ({
                                         if (window.innerWidth < 1024) setIsOpen(false);
                                     }}
                                 >
-                                    <MessageSquare size={16} className={currentSessionId === session.id ? 'text-ember' : 'text-light-text-secondary dark:text-dark-text-secondary group-hover:text-peach'} />
+                                    <MessageSquare size={16} className={currentSessionId === session.id ? 'text-orange-primary' : 'text-light-text-secondary dark:text-dark-text-secondary group-hover:text-orange-primary'} />
                                     <span className="truncate flex-1 text-light-text-primary dark:text-dark-text-primary">{session.title}</span>
                                     {onDeleteChat && (
                                         <button
@@ -171,7 +173,7 @@ const SidebarAI = ({
                                                 e.stopPropagation();
                                                 onDeleteChat(session.id);
                                             }}
-                                            className="opacity-0 group-hover:opacity-100 p-1 hover:bg-global-red/20 rounded text-dark-text-secondary hover:text-global-red transition-all"
+                                            className="opacity-0 group-hover:opacity-100 p-1 hover:bg-orange-primary/20 rounded text-dark-text-secondary hover:text-orange-primary transition-all"
                                         >
                                             <X size={14} />
                                         </button>
@@ -189,20 +191,6 @@ const SidebarAI = ({
                         <MenuButton icon={<Settings size={16} />} label="Settings" />
                         <MenuButton icon={<HelpCircle size={16} />} label="Help & FAQ" />
                     </div>
-
-                    {/* Status Bar */}
-                    <div className="px-4 py-3 bg-dark-surface-2/50 flex items-center gap-3">
-                        <div className="relative">
-                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo to-wine flex items-center justify-center">
-                                <User size={16} className="text-white" />
-                            </div>
-                            <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-global-green rounded-full border-2 border-dark-surface-2"></div>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-dark-text-primary truncate">Developer</p>
-                            <p className="text-xs text-dark-text-secondary">Online</p>
-                        </div>
-                    </div>
                 </div>
             </div>
         </>
@@ -219,9 +207,9 @@ const MenuButton = ({ icon, label }: { icon: React.ReactNode; label: string }) =
 const SuggestionCard = ({ icon, text, onClick }: { icon: React.ReactNode; text: string; onClick: () => void }) => (
     <button
         onClick={onClick}
-        className="bg-dark-surface hover:bg-dark-surface-2 p-4 rounded-xl text-left transition-all flex flex-col gap-3 h-40 justify-between group border border-dark-border/50 hover:border-ember/30 hover:shadow-lg hover:shadow-ember/10"
+        className="bg-dark-surface hover:bg-dark-surface-2 p-4 rounded-xl text-left transition-all flex flex-col gap-3 h-40 justify-between group border border-dark-border/50 hover:border-orange-primary/30 hover:shadow-lg hover:shadow-orange-primary/10"
     >
-        <div className="p-2.5 bg-gradient-to-br from-ember/20 to-wine/20 w-fit rounded-xl text-ember group-hover:text-peach transition-colors">
+        <div className="p-2.5 bg-gradient-to-br from-orange-primary/20 to-blue-primary/20 w-fit rounded-xl text-orange-primary group-hover:text-blue-primary transition-colors">
             {icon}
         </div>
         <span className="text-dark-text-secondary text-sm font-medium group-hover:text-dark-text-primary transition-colors line-clamp-2">{text}</span>
@@ -234,8 +222,8 @@ const ChatMessage = ({ message }: { message: Message }) => {
     return (
         <div className={`flex gap-3 w-full max-w-4xl mx-auto px-4 py-3 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
             <div className={`flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center overflow-hidden ${isUser
-                    ? 'bg-gradient-to-br from-indigo to-navy'
-                    : 'bg-gradient-to-br from-ember to-wine'
+                ? 'bg-gradient-to-br from-blue-secondary to-dark-surface'
+                : 'bg-gradient-to-br from-orange-primary to-blue-primary'
                 }`}>
                 {isUser ? (
                     <User size={18} className="text-white" />
@@ -245,12 +233,12 @@ const ChatMessage = ({ message }: { message: Message }) => {
             </div>
 
             <div className={`flex flex-col max-w-[80%] ${isUser ? 'items-end' : 'items-start'}`}>
-                <div className={`text-xs font-medium mb-1.5 ${isUser ? 'text-indigo' : 'text-ember'}`}>
+                <div className={`text-xs font-medium mb-1.5 ${isUser ? 'text-blue-secondary' : 'text-orange-primary'}`}>
                     {isUser ? 'You' : 'ApexOps AI'}
                 </div>
                 <div className={`prose prose-invert max-w-none text-[15px] leading-relaxed whitespace-pre-wrap ${isUser
-                        ? 'text-dark-text-primary bg-dark-surface px-4 py-3 rounded-2xl rounded-tr-sm border border-dark-border/50'
-                        : 'text-dark-text'
+                    ? 'text-dark-text-primary bg-dark-surface px-4 py-3 rounded-2xl rounded-tr-sm border border-dark-border/50'
+                    : 'text-dark-text'
                     }`}>
                     {message.text}
                 </div>
@@ -394,7 +382,7 @@ export default function AIChat() {
                             <Menu size={20} />
                         </button>
                         <div className="flex items-center gap-2">
-                            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-ember to-wine flex items-center justify-center">
+                            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-orange-primary to-blue-primary flex items-center justify-center">
                                 <Sparkles size={16} className="text-white" />
                             </div>
                             <span className="text-base font-semibold text-dark-text-primary">ApexOps AI</span>
@@ -419,10 +407,10 @@ export default function AIChat() {
                         // Welcome Screen
                         <div className="max-w-4xl mx-auto px-6 py-12 flex flex-col h-full justify-center min-h-[500px]">
                             <div className="mb-12 text-center">
-                                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-ember via-wine to-indigo flex items-center justify-center mx-auto mb-6 shadow-lg shadow-ember/30">
+                                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-orange-primary via-blue-primary to-blue-secondary flex items-center justify-center mx-auto mb-6 shadow-lg shadow-orange-primary/30">
                                     <Sparkles size={32} className="text-white" />
                                 </div>
-                                <h1 className="text-4xl md:text-5xl font-bold tracking-tight bg-gradient-to-r from-peach via-ember to-wine bg-clip-text text-transparent mb-3">
+                                <h1 className="text-4xl md:text-5xl font-bold tracking-tight bg-gradient-to-r from-orange-primary via-blue-primary to-blue-secondary bg-clip-text text-transparent mb-3">
                                     Hello, Developer!
                                 </h1>
                                 <p className="text-lg text-dark-text-secondary max-w-md mx-auto">
@@ -462,13 +450,13 @@ export default function AIChat() {
 
                             {isLoading && (
                                 <div className="flex gap-4 w-full max-w-4xl mx-auto p-4">
-                                    <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-ember to-wine flex items-center justify-center flex-shrink-0">
+                                    <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-orange-primary to-blue-primary flex items-center justify-center flex-shrink-0">
                                         <Sparkles size={18} className="text-white animate-pulse" />
                                     </div>
                                     <div className="flex items-center gap-2 h-9">
-                                        <div className="w-2 h-2 bg-ember rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                                        <div className="w-2 h-2 bg-wine rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                                        <div className="w-2 h-2 bg-peach rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                                        <div className="w-2 h-2 bg-orange-primary rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                                        <div className="w-2 h-2 bg-blue-primary rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                                        <div className="w-2 h-2 bg-blue-secondary rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
                                         <span className="text-sm text-dark-text-secondary ml-2">Thinking...</span>
                                     </div>
                                 </div>
@@ -481,7 +469,7 @@ export default function AIChat() {
                 {/* Input Area */}
                 <div className="p-4 bg-gradient-to-t from-white via-white dark:from-dark-bg dark:via-dark-bg to-transparent">
                     <div className="max-w-4xl mx-auto">
-                        <div className="relative bg-dark-surface rounded-2xl border border-dark-border focus-within:border-ember/50 focus-within:shadow-lg focus-within:shadow-ember/10 transition-all">
+                        <div className="relative bg-dark-surface rounded-2xl border border-dark-border focus-within:border-orange-primary/50 focus-within:shadow-lg focus-within:shadow-orange-primary/10 transition-all">
                             <textarea
                                 ref={textareaRef}
                                 value={input}
@@ -493,18 +481,18 @@ export default function AIChat() {
                             />
 
                             <div className="absolute right-2 bottom-2 flex items-center gap-1">
-                                <button className="p-2 text-dark-text-secondary hover:text-peach hover:bg-dark-surface-2 rounded-xl transition-colors">
+                                <button className="p-2 text-dark-text-secondary hover:text-orange-primary hover:bg-dark-surface-2 rounded-xl transition-colors">
                                     <ImageIcon size={18} />
                                 </button>
-                                <button className="p-2 text-dark-text-secondary hover:text-peach hover:bg-dark-surface-2 rounded-xl transition-colors">
+                                <button className="p-2 text-dark-text-secondary hover:text-orange-primary hover:bg-dark-surface-2 rounded-xl transition-colors">
                                     <Mic size={18} />
                                 </button>
                                 <button
                                     onClick={() => handleSend()}
                                     disabled={!input.trim() || isLoading}
                                     className={`p-2.5 rounded-xl transition-all ${input.trim() && !isLoading
-                                            ? 'bg-gradient-to-r from-ember to-wine text-white shadow-md shadow-ember/30 hover:shadow-lg hover:shadow-ember/40'
-                                            : 'bg-dark-surface-2 text-dark-text-secondary cursor-not-allowed'
+                                        ? 'bg-gradient-to-r from-orange-primary to-blue-primary text-white shadow-md shadow-orange-primary/30 hover:shadow-lg hover:shadow-orange-primary/40'
+                                        : 'bg-dark-surface-2 text-dark-text-secondary cursor-not-allowed'
                                         }`}
                                 >
                                     <Send size={18} />

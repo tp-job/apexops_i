@@ -9,27 +9,29 @@ interface StatsCardProps {
     description?: string;
     data?: any[];
     dataKey?: string;
-    color?: 'ember' | 'wine' | 'indigo' | 'peach' | 'green' | 'blue';
+    color?: 'ember' | 'wine' | 'indigo' | 'peach' | 'green' | 'blue' | 'orange' | 'purple';
     trend?: number;
     icon?: React.ReactNode;
 }
 
 const colorMap = {
-    ember: { primary: '#F64668', light: 'rgba(246, 70, 104, 0.15)', gradient: 'from-ember/20 to-ember/5' },
-    wine: { primary: '#984063', light: 'rgba(152, 64, 99, 0.15)', gradient: 'from-wine/20 to-wine/5' },
-    indigo: { primary: '#41436A', light: 'rgba(65, 67, 106, 0.15)', gradient: 'from-indigo/20 to-indigo/5' },
-    peach: { primary: '#FE9677', light: 'rgba(254, 150, 119, 0.15)', gradient: 'from-peach/20 to-peach/5' },
-    green: { primary: '#0F9D58', light: 'rgba(15, 157, 88, 0.15)', gradient: 'from-global-green/20 to-global-green/5' },
-    blue: { primary: '#4285F4', light: 'rgba(66, 133, 244, 0.15)', gradient: 'from-global-blue/20 to-global-blue/5' },
+    blue: { primary: '#3B82F6', light: 'rgba(59, 130, 246, 0.1)', gradient: 'from-blue-primary/20 to-blue-primary/5' },
+    orange: { primary: '#FF6F41', light: 'rgba(255, 111, 65, 0.1)', gradient: 'from-orange-primary/20 to-orange-primary/5' },
+    purple: { primary: '#1F76F9', light: 'rgba(31, 118, 249, 0.1)', gradient: 'from-blue-secondary/20 to-blue-secondary/5' },
+    green: { primary: '#10B981', light: 'rgba(16, 185, 129, 0.1)', gradient: 'from-green/20 to-green/5' },
+    ember: { primary: '#FF6F41', light: 'rgba(255, 111, 65, 0.1)', gradient: 'from-orange-primary/20 to-orange-primary/5' },
+    wine: { primary: '#3B82F6', light: 'rgba(59, 130, 246, 0.1)', gradient: 'from-blue-primary/20 to-blue-primary/5' },
+    indigo: { primary: '#1F76F9', light: 'rgba(31, 118, 249, 0.1)', gradient: 'from-blue-secondary/20 to-blue-secondary/5' },
+    peach: { primary: '#FF6F41', light: 'rgba(255, 111, 65, 0.1)', gradient: 'from-orange-primary/20 to-orange-primary/5' },
 };
 
-const StatsCard: FC<StatsCardProps> = ({ 
-    title, 
-    value, 
-    subtitle, 
-    description, 
-    data = [], 
-    dataKey = 'value', 
+const StatsCard: FC<StatsCardProps> = ({
+    title,
+    value,
+    subtitle,
+    description,
+    data = [],
+    dataKey = 'value',
     color = 'ember',
     trend,
     icon
@@ -37,10 +39,10 @@ const StatsCard: FC<StatsCardProps> = ({
     const colors = colorMap[color];
 
     const TrendIcon = trend ? (trend > 0 ? TrendingUp : trend < 0 ? TrendingDown : Minus) : null;
-    const trendColor = trend ? (trend > 0 ? 'text-global-green' : trend < 0 ? 'text-global-red' : 'text-gray-400') : '';
+    const trendColor = trend ? (trend > 0 ? 'text-green' : trend < 0 ? 'text-orange-primary' : 'text-light-text-secondary dark:text-dark-text-secondary') : '';
 
     return (
-        <div className="group relative overflow-hidden rounded-2xl p-6 bg-white border-light-border dark:bg-dark-surface dark:border-dark-border border transition-all duration-300 hover:shadow-lg hover:shadow-ember/5 dark:hover:shadow-ember/10 hover:-translate-y-1">
+        <div className="group relative overflow-hidden rounded-2xl p-6 bg-white border-light-border dark:bg-dark-surface dark:border-dark-border border transition-all duration-300 hover:shadow-lg hover:shadow-orange-primary/5 dark:hover:shadow-orange-primary/10 hover:-translate-y-1">
             {/* Background Gradient Accent */}
             <div className={`absolute top-0 right-0 w-32 h-32 bg-gradient-to-br ${colors.gradient} rounded-full blur-2xl -translate-y-8 translate-x-8 opacity-0 group-hover:opacity-100 transition-opacity duration-500`} />
 
@@ -48,7 +50,7 @@ const StatsCard: FC<StatsCardProps> = ({
             <div className="flex items-center justify-between mb-4 relative">
                 <div className="flex items-center gap-3">
                     {icon && (
-                        <div 
+                        <div
                             className="w-10 h-10 rounded-xl flex items-center justify-center"
                             style={{ backgroundColor: colors.light }}
                         >
@@ -101,10 +103,10 @@ const StatsCard: FC<StatsCardProps> = ({
                                         <stop offset="100%" stopColor={colors.primary} stopOpacity={0} />
                                     </linearGradient>
                                 </defs>
-                                <Area 
-                                    type="monotone" 
-                                    dataKey={dataKey} 
-                                    stroke={colors.primary} 
+                                <Area
+                                    type="monotone"
+                                    dataKey={dataKey}
+                                    stroke={colors.primary}
                                     strokeWidth={2}
                                     fill={`url(#gradient-${color})`}
                                 />

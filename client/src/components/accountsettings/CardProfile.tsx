@@ -27,7 +27,7 @@ const CardProfile: FC = () => {
     return (
         <div className="bg-light-surface dark:bg-dark-surface border border-light-border dark:border-dark-border rounded-2xl p-6">
             <div className="flex flex-col items-center">
-                <div className="w-24 h-24 bg-gradient-to-br from-indigo to-wine rounded-full flex items-center justify-center text-white text-3xl font-bold mb-4">
+                <div className="w-24 h-24 bg-gradient-to-br from-blue-primary to-orange-primary rounded-full flex items-center justify-center text-white text-3xl font-bold mb-4">
                     {getInitials()}
                 </div>
                 <h3 className="text-2xl font-semibold text-light-text dark:text-dark-text mb-2">

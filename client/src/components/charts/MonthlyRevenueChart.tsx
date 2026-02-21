@@ -104,13 +104,13 @@ const MonthlyRevenueChart: FC = () => {
                             axisLine={false}
                             tickLine={false}
                             tick={{ fontSize: 12 }}
-                            className="fill-gray-500 dark:fill-gray-400"
+                            className="fill-light-text-secondary dark:fill-dark-text-secondary"
                         />
                         <YAxis 
                             axisLine={false}
                             tickLine={false}
                             tick={{ fontSize: 12 }}
-                            className="fill-gray-500 dark:fill-gray-400"
+                            className="fill-light-text-secondary dark:fill-dark-text-secondary"
                             tickFormatter={(value) => `$${value / 1000}k`}
                         />
                         <Tooltip content={<CustomTooltip />} cursor={{ fill: 'transparent' }} />

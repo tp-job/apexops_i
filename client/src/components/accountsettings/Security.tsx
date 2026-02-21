@@ -23,7 +23,7 @@ const Security: FC<SecurityProps> = ({ security, onToggle, onSelectChange }) => 
                             onClick={() => onToggle('twoFactorAuth')}
                             className={`relative w-12 h-6 rounded-full transition-colors ${
                                 security.twoFactorAuth 
-                                    ? 'bg-ember' 
+                                    ? 'bg-orange-primary' 
                                     : 'bg-light-surface-2 dark:bg-dark-border'
                             }`}
                         >
@@ -41,7 +41,7 @@ const Security: FC<SecurityProps> = ({ security, onToggle, onSelectChange }) => 
                             onClick={() => onToggle('loginAlerts')}
                             className={`relative w-12 h-6 rounded-full transition-colors ${
                                 security.loginAlerts 
-                                    ? 'bg-ember' 
+                                    ? 'bg-orange-primary' 
                                     : 'bg-light-surface-2 dark:bg-dark-border'
                             }`}
                         >
@@ -102,7 +102,7 @@ const Security: FC<SecurityProps> = ({ security, onToggle, onSelectChange }) => 
                             />
                         </div>
                     </div>
-                    <button className="px-4 py-2 bg-ember hover:bg-wine text-white rounded-lg text-sm font-medium transition-colors">
+                    <button className="px-4 py-2 bg-orange-primary hover:bg-blue-primary text-white rounded-lg text-sm font-medium transition-colors">
                         Update Password
                     </button>
                 </div>

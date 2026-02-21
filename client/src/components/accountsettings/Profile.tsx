@@ -63,7 +63,7 @@ const Profile: FC = () => {
                 <h3 className="font-semibold text-lg mb-6 text-light-text dark:text-dark-text">Profile Picture</h3>
                 <div className="flex items-center gap-6">
                     <div className="relative">
-                        <div className="w-24 h-24 bg-gradient-to-br from-indigo to-wine rounded-full flex items-center justify-center text-white text-3xl font-bold">
+                        <div className="w-24 h-24 bg-gradient-to-br from-blue-primary to-orange-primary rounded-full flex items-center justify-center text-white text-3xl font-bold">
                             {getInitials()}
                         </div>
                         <button className="absolute bottom-0 right-0 w-8 h-8 bg-global-blue hover:bg-blue-700 dark:hover:bg-blue-600 rounded-full flex items-center justify-center border-2 border-light-bg dark:border-dark-bg transition-colors">
@@ -97,7 +97,7 @@ const Profile: FC = () => {
                                 type="text"
                                 value={localData.firstName}
                                 onChange={(e) => handleInputChange('firstName', e.target.value)}
-                                className="w-full pl-10 pr-4 py-3 bg-light-bg dark:bg-dark-bg border border-light-border dark:border-dark-border text-light-text dark:text-dark-text rounded-lg focus:outline-none focus:border-ember transition-colors"
+                                className="w-full pl-10 pr-4 py-3 bg-light-bg dark:bg-dark-bg border border-light-border dark:border-dark-border text-light-text dark:text-dark-text rounded-lg focus:outline-none focus:border-orange-primary transition-colors"
                             />
                         </div>
                     </div>
@@ -109,7 +109,7 @@ const Profile: FC = () => {
                                 type="text"
                                 value={localData.lastName}
                                 onChange={(e) => handleInputChange('lastName', e.target.value)}
-                                className="w-full pl-10 pr-4 py-3 bg-light-bg dark:bg-dark-bg border border-light-border dark:border-dark-border text-light-text dark:text-dark-text rounded-lg focus:outline-none focus:border-ember transition-colors"
+                                className="w-full pl-10 pr-4 py-3 bg-light-bg dark:bg-dark-bg border border-light-border dark:border-dark-border text-light-text dark:text-dark-text rounded-lg focus:outline-none focus:border-orange-primary transition-colors"
                             />
                         </div>
                     </div>
@@ -121,7 +121,7 @@ const Profile: FC = () => {
                                 type="email"
                                 value={localData.email}
                                 onChange={(e) => handleInputChange('email', e.target.value)}
-                                className="w-full pl-10 pr-4 py-3 bg-light-bg dark:bg-dark-bg border border-light-border dark:border-dark-border text-light-text dark:text-dark-text rounded-lg focus:outline-none focus:border-ember transition-colors"
+                                className="w-full pl-10 pr-4 py-3 bg-light-bg dark:bg-dark-bg border border-light-border dark:border-dark-border text-light-text dark:text-dark-text rounded-lg focus:outline-none focus:border-orange-primary transition-colors"
                             />
                         </div>
                     </div>
@@ -133,7 +133,7 @@ const Profile: FC = () => {
                                 type="tel"
                                 value={localData.phone}
                                 onChange={(e) => handleInputChange('phone', e.target.value)}
-                                className="w-full pl-10 pr-4 py-3 bg-light-bg dark:bg-dark-bg border border-light-border dark:border-dark-border text-light-text dark:text-dark-text rounded-lg focus:outline-none focus:border-ember transition-colors"
+                                className="w-full pl-10 pr-4 py-3 bg-light-bg dark:bg-dark-bg border border-light-border dark:border-dark-border text-light-text dark:text-dark-text rounded-lg focus:outline-none focus:border-orange-primary transition-colors"
                             />
                         </div>
                     </div>
@@ -152,7 +152,7 @@ const Profile: FC = () => {
                                 type="text"
                                 value={localData.company}
                                 onChange={(e) => handleInputChange('company', e.target.value)}
-                                className="w-full pl-10 pr-4 py-3 bg-light-bg dark:bg-dark-bg border border-light-border dark:border-dark-border text-light-text dark:text-dark-text rounded-lg focus:outline-none focus:border-ember transition-colors"
+                                className="w-full pl-10 pr-4 py-3 bg-light-bg dark:bg-dark-bg border border-light-border dark:border-dark-border text-light-text dark:text-dark-text rounded-lg focus:outline-none focus:border-orange-primary transition-colors"
                             />
                         </div>
                     </div>
@@ -164,7 +164,7 @@ const Profile: FC = () => {
                                 type="text"
                                 value={localData.position}
                                 onChange={(e) => handleInputChange('position', e.target.value)}
-                                className="w-full pl-10 pr-4 py-3 bg-light-bg dark:bg-dark-bg border border-light-border dark:border-dark-border text-light-text dark:text-dark-text rounded-lg focus:outline-none focus:border-ember transition-colors"
+                                className="w-full pl-10 pr-4 py-3 bg-light-bg dark:bg-dark-bg border border-light-border dark:border-dark-border text-light-text dark:text-dark-text rounded-lg focus:outline-none focus:border-orange-primary transition-colors"
                             />
                         </div>
                     </div>
@@ -176,7 +176,7 @@ const Profile: FC = () => {
                                 type="text"
                                 value={localData.location}
                                 onChange={(e) => handleInputChange('location', e.target.value)}
-                                className="w-full pl-10 pr-4 py-3 bg-light-bg dark:bg-dark-bg border border-light-border dark:border-dark-border text-light-text dark:text-dark-text rounded-lg focus:outline-none focus:border-ember transition-colors"
+                                className="w-full pl-10 pr-4 py-3 bg-light-bg dark:bg-dark-bg border border-light-border dark:border-dark-border text-light-text dark:text-dark-text rounded-lg focus:outline-none focus:border-orange-primary transition-colors"
                             />
                         </div>
                     </div>
@@ -187,7 +187,7 @@ const Profile: FC = () => {
                             <select
                                 value={localData.timezone}
                                 onChange={(e) => handleInputChange('timezone', e.target.value)}
-                                className="w-full pl-10 pr-4 py-3 bg-light-bg dark:bg-dark-bg border border-light-border dark:border-dark-border text-light-text dark:text-dark-text rounded-lg focus:outline-none focus:border-ember transition-colors appearance-none"
+                                className="w-full pl-10 pr-4 py-3 bg-light-bg dark:bg-dark-bg border border-light-border dark:border-dark-border text-light-text dark:text-dark-text rounded-lg focus:outline-none focus:border-orange-primary transition-colors appearance-none"
                             >
                                 <option value="Asia/Bangkok (GMT+7)">Asia/Bangkok (GMT+7)</option>
                                 <option value="Asia/Tokyo (GMT+9)">Asia/Tokyo (GMT+9)</option>
@@ -203,7 +203,7 @@ const Profile: FC = () => {
                         value={localData.bio}
                         onChange={(e) => handleInputChange('bio', e.target.value)}
                         rows={4}
-                        className="w-full px-4 py-3 bg-light-bg dark:bg-dark-bg border border-light-border dark:border-dark-border text-light-text dark:text-dark-text rounded-lg focus:outline-none focus:border-ember transition-colors resize-none"
+                        className="w-full px-4 py-3 bg-light-bg dark:bg-dark-bg border border-light-border dark:border-dark-border text-light-text dark:text-dark-text rounded-lg focus:outline-none focus:border-orange-primary transition-colors resize-none"
                         placeholder="Tell us about yourself..."
                     />
                 </div>

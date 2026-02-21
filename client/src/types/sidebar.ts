@@ -11,6 +11,7 @@ export interface NavItem {
 export interface ItemContentProps {
     item: NavItem;
     isCollapsed: boolean; // Pass isCollapsed to ItemContent
+    isActive?: boolean; // Pass isActive state
 }
 
 export interface SidebarProps {

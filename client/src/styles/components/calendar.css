@@ -1,0 +1,28 @@
+/* Template-style (docs/templase/Calendar.html) */
+.calendar-page ::-webkit-scrollbar {
+    width: 8px;
+}
+.calendar-page ::-webkit-scrollbar-track {
+    background: transparent;
+}
+.calendar-page ::-webkit-scrollbar-thumb {
+    background: #374151;
+    border-radius: 4px;
+}
+.calendar-page ::-webkit-scrollbar-thumb:hover {
+    background: #4b5563;
+}
+
+.glass-nav {
+    background: rgba(28, 28, 30, 0.7);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+.calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+}
+.calendar-day {
+    min-height: 100px;
+    border: 1px solid rgba(255, 255, 255, 0.03);
+}

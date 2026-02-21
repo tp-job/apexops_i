@@ -13,10 +13,10 @@ interface TicketStatusChartProps {
 
 const TicketStatusChart: FC<TicketStatusChartProps> = ({ data }) => {
     const chartData = [
-        { name: 'Open', value: data.open, color: '#F64668', icon: CircleDot },
-        { name: 'In Progress', value: data.inProgress, color: '#41436A', icon: Clock },
-        { name: 'Resolved', value: data.resolved, color: '#0F9D58', icon: CheckCircle2 },
-        { name: 'Closed', value: data.closed, color: '#6B7280', icon: XCircle },
+        { name: 'Open', value: data.open, color: '#FF6F41', icon: CircleDot }, // Orange Primary
+        { name: 'In Progress', value: data.inProgress, color: '#1F76F9', icon: Clock }, // Blue Secondary
+        { name: 'Resolved', value: data.resolved, color: '#10B981', icon: CheckCircle2 }, // Green
+        { name: 'Closed', value: data.closed, color: '#64748B', icon: XCircle }, // Slate-500 (Neutral)
     ];
 
     const total = chartData.reduce((sum, item) => sum + item.value, 0);
@@ -44,7 +44,7 @@ const TicketStatusChart: FC<TicketStatusChartProps> = ({ data }) => {
             {/* Header */}
             <div className="px-6 py-4 border-b flex items-center justify-between border-light-border dark:border-dark-border">
                 <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-ember to-wine flex items-center justify-center">
+                    <div className="w-10 h-10 rounded-xl bg-linear-to-br from-orange-primary to-blue-primary flex items-center justify-center">
                         <Ticket className="w-5 h-5 text-white" />
                     </div>
                     <div>
@@ -64,8 +64,8 @@ const TicketStatusChart: FC<TicketStatusChartProps> = ({ data }) => {
             {/* Chart */}
             <div className="p-6">
                 <div className="flex items-center justify-center mb-6">
-                    <div className="relative">
-                        <ResponsiveContainer width={180} height={180}>
+                    <div className="relative" style={{ width: 180, height: 180 }}>
+                        <ResponsiveContainer width="100%" height="100%">
                             <PieChart>
                                 <Pie
                                     data={chartData}
@@ -78,8 +78,8 @@ const TicketStatusChart: FC<TicketStatusChartProps> = ({ data }) => {
                                     strokeWidth={0}
                                 >
                                     {chartData.map((entry, index) => (
-                                        <Cell 
-                                            key={`cell-${index}`} 
+                                        <Cell
+                                            key={`cell-${index}`}
                                             fill={entry.color}
                                             className="hover:opacity-80 transition-opacity cursor-pointer"
                                         />
@@ -106,12 +106,12 @@ const TicketStatusChart: FC<TicketStatusChartProps> = ({ data }) => {
                         const percentage = total > 0 ? Math.round((item.value / total) * 100) : 0;
                         const Icon = item.icon;
                         return (
-                            <div 
+                            <div
                                 key={item.name}
                                 className="group flex items-center justify-between p-3 rounded-xl bg-light-surface-2 hover:bg-light-border dark:bg-dark-surface-2 dark:hover:bg-dark-border transition-all duration-200 cursor-pointer"
                             >
                                 <div className="flex items-center gap-3">
-                                    <div 
+                                    <div
                                         className="w-8 h-8 rounded-lg flex items-center justify-center"
                                         style={{ backgroundColor: `${item.color}20` }}
                                     >

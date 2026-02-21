@@ -30,7 +30,7 @@ const Notifications: FC<NotificationsProps> = ({ notifications, onToggle }) => {
                                 onClick={() => onToggle(key as keyof NotificationSettings)}
                                 className={`relative w-12 h-6 rounded-full transition-colors ${
                                     value 
-                                        ? 'bg-ember' 
+                                        ? 'bg-orange-primary' 
                                         : 'bg-light-surface-2 dark:bg-dark-border'
                                 }`}
                             >

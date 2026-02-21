@@ -19,8 +19,8 @@ const ProfileCard: FC<ProfileCardProps> = ({ profile }) => {
             {/* Header with Gradient */}
             <div className="relative h-28 bg-gradient-to-br from-navy via-indigo to-wine overflow-hidden">
                 {/* Decorative circles */}
-                <div className="absolute top-0 right-0 w-24 h-24 bg-ember/20 rounded-full blur-xl translate-x-8 -translate-y-8" />
-                <div className="absolute bottom-0 left-0 w-20 h-20 bg-peach/20 rounded-full blur-xl -translate-x-8 translate-y-8" />
+                <div className="absolute top-0 right-0 w-24 h-24 bg-orange-primary/20 rounded-full blur-xl translate-x-8 -translate-y-8" />
+                <div className="absolute bottom-0 left-0 w-20 h-20 bg-orange-primary/20 rounded-full blur-xl -translate-x-8 translate-y-8" />
                 
                 {/* Pattern overlay */}
                 <div className="absolute inset-0 opacity-10">
@@ -45,7 +45,7 @@ const ProfileCard: FC<ProfileCardProps> = ({ profile }) => {
             {/* Avatar */}
             <div className="relative -mt-12 px-6">
                 <div className="relative inline-block">
-                    <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-ember to-wine flex items-center justify-center text-4xl shadow-lg shadow-ember/20 ring-4 ring-white dark:ring-dark-surface">
+                    <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-orange-primary to-blue-primary flex items-center justify-center text-4xl shadow-lg shadow-ember/20 ring-4 ring-white dark:ring-dark-surface">
                         {profile.avatar || '👤'}
                     </div>
                     <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-global-green rounded-full border-2 border-white dark:border-dark-surface flex items-center justify-center">
@@ -118,7 +118,7 @@ const ProfileCard: FC<ProfileCardProps> = ({ profile }) => {
                 </div>
 
                 {/* Action Button */}
-                <button className="w-full py-3 rounded-xl bg-gradient-to-r from-ember to-wine text-white font-medium flex items-center justify-center gap-2 hover:shadow-lg hover:shadow-ember/25 transition-all duration-300 hover:-translate-y-0.5">
+                <button className="w-full py-3 rounded-xl bg-gradient-to-r from-orange-primary to-blue-primary text-white font-medium flex items-center justify-center gap-2 hover:shadow-lg hover:shadow-orange-primary/25 transition-all duration-300 hover:-translate-y-0.5">
                     <span>View Full Profile</span>
                     <ChevronRight className="w-4 h-4" />
                 </button>

@@ -4,6 +4,8 @@ import {
     ChevronLeft, ChevronRight, Calendar, Plus, FileText,
     Image, List, Link2, X, Clock, Edit3
 } from 'lucide-react';
+import { isMockEnabled, isNetworkFailure, readOnlyOfflineMessage } from '@/utils/offlineMock';
+import { buildMockCalendarNotes } from '@/utils/mockData';
 
 interface CalendarNote {
     id: string;
@@ -29,13 +31,18 @@ const QuickAddModal: FC<{
     onClose: () => void;
     selectedDate: Date;
     onSuccess: () => void;
-}> = ({ isOpen, onClose, selectedDate, onSuccess }) => {
+    readOnly?: boolean;
+}> = ({ isOpen, onClose, selectedDate, onSuccess, readOnly = false }) => {
     const [title, setTitle] = useState('');
     const [content, setContent] = useState('');
     const [saving, setSaving] = useState(false);
 
     const handleSave = async () => {
         if (!title && !content) return;
+        if (readOnly) {
+            console.warn(readOnlyOfflineMessage());
+            return;
+        }
 
         setSaving(true);
         const token = localStorage.getItem('accessToken');
@@ -106,6 +113,7 @@ const QuickAddModal: FC<{
                             value={title}
                             onChange={(e) => setTitle(e.target.value)}
                             placeholder="Note title..."
+                            disabled={readOnly}
                             className="w-full mt-2 px-4 py-3 rounded-xl border text-sm bg-light-surface-2 border-light-border text-light-text-primary placeholder:text-light-text-secondary dark:bg-dark-surface-2 dark:border-dark-border dark:text-dark-text-primary dark:placeholder:text-dark-text-secondary focus:outline-none focus:ring-2 focus:ring-ember/50"
                         />
                     </div>
@@ -118,6 +126,7 @@ const QuickAddModal: FC<{
                             onChange={(e) => setContent(e.target.value)}
                             placeholder="Write your note..."
                             rows={4}
+                            disabled={readOnly}
                             className="w-full mt-2 px-4 py-3 rounded-xl border text-sm resize-none bg-light-surface-2 border-light-border text-light-text-primary placeholder:text-light-text-secondary dark:bg-dark-surface-2 dark:border-dark-border dark:text-dark-text-primary dark:placeholder:text-dark-text-secondary focus:outline-none focus:ring-2 focus:ring-ember/50"
                         />
                     </div>
@@ -133,7 +142,7 @@ const QuickAddModal: FC<{
                     </button>
                     <button
                         onClick={handleSave}
-                        disabled={saving || (!title && !content)}
+                        disabled={readOnly || saving || (!title && !content)}
                         className="px-6 py-2 rounded-xl text-sm font-bold bg-gradient-to-r from-ember to-wine text-white hover:shadow-lg hover:shadow-ember/20 transition-all disabled:opacity-50 flex items-center gap-2"
                     >
                         {saving ? (
@@ -144,7 +153,7 @@ const QuickAddModal: FC<{
                         ) : (
                             <>
                                 <Plus className="w-4 h-4" />
-                                Add Note
+                                {readOnly ? 'Read-only' : 'Add Note'}
                             </>
                         )}
                     </button>
@@ -235,7 +244,7 @@ const DayDetailModal: FC<{
                                                 {note.title || 'Untitled Note'}
                                             </p>
                                             <div className="flex items-center gap-2 mt-1">
-                                                <Clock className="w-3 h-3 text-gray-400" />
+                                                <Clock className="w-3 h-3 text-light-text-secondary dark:text-dark-text-secondary" />
                                                 <span className="text-xs text-light-text-secondary dark:text-dark-text-secondary">
                                                     {new Date(note.createdAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
                                                 </span>
@@ -281,6 +290,7 @@ const CalendarNotes: FC = () => {
     const [loading, setLoading] = useState(true);
     const [showQuickAdd, setShowQuickAdd] = useState(false);
     const [showDayDetail, setShowDayDetail] = useState(false);
+    const [isOfflineMock, setIsOfflineMock] = useState(false);
 
     const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
         'July', 'August', 'September', 'October', 'November', 'December'];
@@ -301,18 +311,23 @@ const CalendarNotes: FC = () => {
             return;
         }
 
+        const year = currentDate.getFullYear();
+        const month = currentDate.getMonth() + 1;
         try {
-            const year = currentDate.getFullYear();
-            const month = currentDate.getMonth() + 1;
             const res = await fetch(`${API_BASE_URL}/api/notes/calendar/${year}/${month}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             if (res.ok) {
                 const data = await res.json();
                 setCalendarData(data);
+                setIsOfflineMock(false);
             }
         } catch (err) {
             console.error('Error fetching calendar data:', err);
+            if (isMockEnabled() && isNetworkFailure(err)) {
+                setCalendarData(buildMockCalendarNotes(year, month) as any);
+                setIsOfflineMock(true);
+            }
         } finally {
             setLoading(false);
         }
@@ -357,6 +372,7 @@ const CalendarNotes: FC = () => {
                     onClose={() => setShowQuickAdd(false)}
                     selectedDate={selectedDate}
                     onSuccess={fetchCalendarData}
+                    readOnly={isOfflineMock}
                 />
             )}
 
@@ -381,7 +397,7 @@ const CalendarNotes: FC = () => {
                             {monthNames[currentDate.getMonth()]}
                         </h3>
                         <p className="text-xs text-light-text-secondary dark:text-dark-text-secondary">
-                            {currentDate.getFullYear()} • {calendarData?.totalNotes || 0} notes
+                            {currentDate.getFullYear()} • {calendarData?.totalNotes || 0} notes{isOfflineMock ? ' • Mock' : ''}
                         </p>
                     </div>
                 </div>

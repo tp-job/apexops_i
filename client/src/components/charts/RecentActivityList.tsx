@@ -55,7 +55,7 @@ const RecentActivityList: FC<RecentActivityListProps> = ({ tickets, logs }) => {
             case 'log_warning':
                 return { icon: AlertTriangle, color: 'text-global-yellow', bg: 'bg-global-yellow/10', border: 'border-global-yellow/30' };
             default:
-                return { icon: Activity, color: 'text-gray-500', bg: 'bg-gray-100', border: 'border-gray-200' };
+                return { icon: Activity, color: 'text-light-text-secondary dark:text-dark-text-secondary', bg: 'bg-light-surface-2 dark:bg-dark-surface-2', border: 'border-light-border dark:border-dark-border' };
         }
     };
 

@@ -1,5 +1,7 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
+import { isMockEnabled, isNetworkFailure, readOnlyOfflineMessage } from '@/utils/offlineMock';
+import { mockAccessToken, mockRefreshToken, mockUser, mockUserSettings } from '@/utils/mockData';
 
 interface User {
     id: number;
@@ -110,6 +112,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             }
         } catch (err) {
             console.error('Error fetching profile:', err);
+            if (isMockEnabled() && isNetworkFailure(err)) {
+                // Keep local user; provide default mock settings if missing
+                setSettings((prev) => prev ?? (mockUserSettings as UserSettings));
+                return;
+            }
             logout();
         }
     };
@@ -133,6 +140,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             if (response.ok) {
                 const data = await response.json();
                 localStorage.setItem('accessToken', data.accessToken);
+                if (data.refreshToken) localStorage.setItem('refreshToken', data.refreshToken);
                 if (data.user) {
                     setUser(data.user);
                     localStorage.setItem('user', JSON.stringify(data.user));
@@ -142,6 +150,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             }
         } catch (err) {
             console.error('Error refreshing token:', err);
+            if (isMockEnabled() && isNetworkFailure(err)) {
+                // Offline: keep existing local tokens/user
+                return;
+            }
             logout();
         }
     };
@@ -151,26 +163,37 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         try {
             const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ email, password })
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password }),
             });
 
-            const data = await response.json();
-
+            let data: { error?: string; accessToken?: string; refreshToken?: string; user?: User } = {};
+            if (response.headers.get('content-type')?.includes('application/json')) {
+                data = await response.json();
+            }
             if (!response.ok) {
-                throw new Error(data.error || 'Login failed');
+                throw new Error(data.error || `Login failed (${response.status})`);
             }
 
-            localStorage.setItem('accessToken', data.accessToken);
-            localStorage.setItem('refreshToken', data.refreshToken);
+            localStorage.setItem('accessToken', data.accessToken!);
+            localStorage.setItem('refreshToken', data.refreshToken!);
             localStorage.setItem('user', JSON.stringify(data.user));
-
-            setUser(data.user);
+            setUser(data.user!);
             window.location.href = '/';
         } catch (err: any) {
             console.error('Login error:', err);
+            if (isMockEnabled() && isNetworkFailure(err)) {
+                localStorage.setItem('accessToken', mockAccessToken);
+                localStorage.setItem('refreshToken', mockRefreshToken);
+                localStorage.setItem('user', JSON.stringify(mockUser));
+                setUser(mockUser as User);
+                setSettings(mockUserSettings as UserSettings);
+                window.location.href = '/dashboard';
+                return;
+            }
+            if (err?.message === 'Failed to fetch' || err?.name === 'TypeError') {
+                throw new Error('Cannot reach server. Ensure backend is running at ' + API_BASE_URL);
+            }
             throw err;
         }
     };
@@ -180,26 +203,37 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         try {
             const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ firstName, lastName, email, password })
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ firstName, lastName, email, password }),
             });
 
-            const data = await response.json();
-
+            let data: { error?: string; accessToken?: string; refreshToken?: string; user?: User } = {};
+            if (response.headers.get('content-type')?.includes('application/json')) {
+                data = await response.json();
+            }
             if (!response.ok) {
-                throw new Error(data.error || 'Registration failed');
+                throw new Error(data.error || `Registration failed (${response.status})`);
             }
 
-            localStorage.setItem('accessToken', data.accessToken);
-            localStorage.setItem('refreshToken', data.refreshToken);
+            localStorage.setItem('accessToken', data.accessToken!);
+            localStorage.setItem('refreshToken', data.refreshToken!);
             localStorage.setItem('user', JSON.stringify(data.user));
-
-            setUser(data.user);
+            setUser(data.user!);
             window.location.href = '/';
         } catch (err: any) {
             console.error('Registration error:', err);
+            if (isMockEnabled() && isNetworkFailure(err)) {
+                localStorage.setItem('accessToken', mockAccessToken);
+                localStorage.setItem('refreshToken', mockRefreshToken);
+                localStorage.setItem('user', JSON.stringify(mockUser));
+                setUser(mockUser as User);
+                setSettings(mockUserSettings as UserSettings);
+                window.location.href = '/dashboard';
+                return;
+            }
+            if (err?.message === 'Failed to fetch' || err?.name === 'TypeError') {
+                throw new Error('Cannot reach server. Ensure backend is running at ' + API_BASE_URL);
+            }
             throw err;
         }
     };
@@ -255,6 +289,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             localStorage.setItem('user', JSON.stringify(result.user));
         } catch (err: any) {
             console.error('Update profile error:', err);
+            if (isMockEnabled() && isNetworkFailure(err)) {
+                throw new Error(readOnlyOfflineMessage());
+            }
             throw err;
         }
     };
@@ -283,6 +320,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             setSettings(result.settings);
         } catch (err: any) {
             console.error('Update settings error:', err);
+            if (isMockEnabled() && isNetworkFailure(err)) {
+                throw new Error(readOnlyOfflineMessage());
+            }
             throw err;
         }
     };

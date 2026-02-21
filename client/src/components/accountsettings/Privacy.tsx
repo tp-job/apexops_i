@@ -7,7 +7,7 @@ const Privacy: FC = () => {
                 <h3 className="text-light-text dark:text-dark-text font-semibold text-lg mb-6">Privacy Settings</h3>
                 <div className="space-y-4">
                     <div className="p-4 bg-blue-500/10 dark:bg-blue-500/20 border border-blue-500/20 dark:border-blue-500/30 rounded-lg">
-                        <p className="text-ember dark:text-peach text-sm">
+                        <p className="text-orange-primary text-sm">
                             Your privacy is important to us. These settings help you control how your information is shared and used.
                         </p>
                     </div>
@@ -16,7 +16,7 @@ const Privacy: FC = () => {
                             <p className="text-light-text dark:text-dark-text font-medium">Profile Visibility</p>
                             <p className="text-light-text-secondary dark:text-dark-text-secondary text-sm">Make your profile visible to other team members</p>
                         </div>
-                        <button className="relative w-12 h-6 rounded-full bg-ember">
+                        <button className="relative w-12 h-6 rounded-full bg-orange-primary">
                             <div className="absolute top-1 left-1 w-4 h-4 bg-white rounded-full translate-x-6"></div>
                         </button>
                     </div>
@@ -25,7 +25,7 @@ const Privacy: FC = () => {
                             <p className="text-light-text dark:text-dark-text font-medium">Activity Status</p>
                             <p className="text-light-text-secondary dark:text-dark-text-secondary text-sm">Show when you're online</p>
                         </div>
-                        <button className="relative w-12 h-6 rounded-full bg-ember">
+                        <button className="relative w-12 h-6 rounded-full bg-orange-primary">
                             <div className="absolute top-1 left-1 w-4 h-4 bg-white rounded-full translate-x-6"></div>
                         </button>
                     </div>

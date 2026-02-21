@@ -1,4 +1,7 @@
 import { useState, useEffect, type FC } from 'react';
+import { getIcon } from '@/utils/iconMapping';
+import { isMockEnabled, isNetworkFailure } from '@/utils/offlineMock';
+import { mockNoteStatsOverview } from '@/utils/mockData';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
     ResponsiveContainer
@@ -37,11 +40,14 @@ const NoteActivityChart: FC = () => {
     const navigate = useNavigate();
     const [stats, setStats] = useState<NoteStats | null>(null);
     const [loading, setLoading] = useState(true);
+    const [hasAuth, setHasAuth] = useState<boolean>(true);
+    const [isOffline, setIsOffline] = useState<boolean>(false);
 
     useEffect(() => {
         const fetchStats = async () => {
             const token = localStorage.getItem('accessToken');
             if (!token) {
+                setHasAuth(false);
                 setLoading(false);
                 return;
             }
@@ -53,9 +59,14 @@ const NoteActivityChart: FC = () => {
                 if (res.ok) {
                     const data = await res.json();
                     setStats(data);
+                    setIsOffline(false);
                 }
             } catch (err) {
                 console.error('Error fetching note stats:', err);
+                setIsOffline(true);
+                if (isMockEnabled() && isNetworkFailure(err)) {
+                    setStats(mockNoteStatsOverview);
+                }
             } finally {
                 setLoading(false);
             }
@@ -81,11 +92,26 @@ const NoteActivityChart: FC = () => {
 
     const getTypeIcon = (type: string) => {
         switch (type) {
-            case 'text': return <FileText className="w-4 h-4" />;
-            case 'image': return <i className="ri-image-line text-base"></i>;
-            case 'list': return <i className="ri-list-check text-base"></i>;
-            case 'link': return <i className="ri-link text-base"></i>;
-            default: return <FileText className="w-4 h-4" />;
+            case 'text': {
+                const Icon = getIcon('ri-booklet-line');
+                return Icon ? <Icon className="w-4 h-4" /> : <FileText className="w-4 h-4" />;
+            }
+            case 'image': {
+                const Icon = getIcon('ri-image-line');
+                return Icon ? <Icon className="w-4 h-4" /> : <i className="ri-image-line text-base"></i>;
+            }
+            case 'list': {
+                const Icon = getIcon('ri-list-check');
+                return Icon ? <Icon className="w-4 h-4" /> : <i className="ri-list-check text-base"></i>;
+            }
+            case 'link': {
+                const Icon = getIcon('ri-link-line');
+                return Icon ? <Icon className="w-4 h-4" /> : <i className="ri-link-line text-base"></i>;
+            }
+            default: {
+                const Icon = getIcon('ri-booklet-line');
+                return Icon ? <Icon className="w-4 h-4" /> : <FileText className="w-4 h-4" />;
+            }
         }
     };
 
@@ -124,11 +150,56 @@ const NoteActivityChart: FC = () => {
     }
 
     if (!stats) {
+        const HeaderIcon = getIcon('ri-bar-chart-line');
+        const ClockIcon = getIcon('ri-time-line');
         return (
-            <div className="rounded-2xl overflow-hidden p-6 bg-white border-light-border dark:bg-dark-surface dark:border-dark-border border">
-                <p className="text-center text-light-text-secondary dark:text-dark-text-secondary">
-                    No data available
-                </p>
+            <div className="rounded-2xl overflow-hidden bg-white border-light-border dark:bg-dark-surface dark:border-dark-border border">
+                <div className="px-6 py-4 border-b flex items-center justify-between border-light-border dark:border-dark-border">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-global-green to-indigo flex items-center justify-center">
+                            {HeaderIcon ? <HeaderIcon className="w-5 h-5 text-white" /> : <Activity className="w-5 h-5 text-white" />}
+                        </div>
+                        <div>
+                            <h3 className="font-bold text-light-text-primary dark:text-dark-text-primary">
+                                Note Activity
+                            </h3>
+                            <p className="text-xs text-light-text-secondary dark:text-dark-text-secondary">
+                                {hasAuth ? (isOffline ? 'Waiting for API connection…' : 'Waiting for data…') : 'Login required to load activity'}
+                            </p>
+                        </div>
+                    </div>
+                    <button
+                        onClick={() => navigate('/note')}
+                        className="px-3 py-1.5 rounded-lg text-xs font-medium bg-light-surface-2 text-light-text-secondary hover:text-light-text-primary dark:bg-dark-surface-2 dark:text-dark-text-secondary dark:hover:text-dark-text-primary transition-colors"
+                    >
+                        View All
+                    </button>
+                </div>
+
+                <div className="p-6">
+                    <div className="mb-5 rounded-xl border border-light-border/60 dark:border-dark-border/60 bg-light-surface-2/40 dark:bg-dark-surface-2/40 p-4">
+                        <p className="text-sm font-semibold text-light-text-primary dark:text-dark-text-primary mb-1">
+                            This panel will display
+                        </p>
+                        <ul className="text-xs text-light-text-secondary dark:text-dark-text-secondary space-y-1">
+                            <li>- Weekly notes activity (bar chart)</li>
+                            <li>- Recent note updates with type + time ago</li>
+                            <li>- Quick access to open the note editor</li>
+                        </ul>
+                    </div>
+
+                    <div className="h-[150px] rounded-xl bg-light-surface-2 dark:bg-dark-surface-2 border border-light-border/40 dark:border-dark-border/40 animate-pulse mb-6" />
+
+                    <h4 className="text-sm font-semibold mb-4 flex items-center gap-2 text-light-text-primary dark:text-dark-text-primary">
+                        {ClockIcon ? <ClockIcon className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
+                        Recent Activity
+                    </h4>
+                    <div className="space-y-2">
+                        {Array.from({ length: 4 }).map((_, i) => (
+                            <div key={i} className="h-14 rounded-xl bg-light-surface-2 dark:bg-dark-surface-2 border border-light-border/40 dark:border-dark-border/40 animate-pulse" />
+                        ))}
+                    </div>
+                </div>
             </div>
         );
     }
@@ -139,7 +210,10 @@ const NoteActivityChart: FC = () => {
             <div className="px-6 py-4 border-b flex items-center justify-between border-light-border dark:border-dark-border">
                 <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-global-green to-indigo flex items-center justify-center">
-                        <Activity className="w-5 h-5 text-white" />
+                        {(() => {
+                            const Icon = getIcon('ri-bar-chart-line');
+                            return Icon ? <Icon className="w-5 h-5 text-white" /> : <Activity className="w-5 h-5 text-white" />;
+                        })()}
                     </div>
                     <div>
                         <h3 className="font-bold text-light-text-primary dark:text-dark-text-primary">
@@ -172,19 +246,19 @@ const NoteActivityChart: FC = () => {
                             >
                                 <CartesianGrid
                                     strokeDasharray="3 3"
-                                    className="stroke-gray-200 dark:stroke-gray-700"
+                                    className="stroke-light-border dark:stroke-dark-border"
                                     vertical={false}
                                 />
                                 <XAxis
                                     dataKey="day"
                                     tick={{ fontSize: 11 }}
-                                    className="fill-gray-500 dark:fill-gray-400"
+                                    className="fill-light-text-secondary dark:fill-dark-text-secondary"
                                     axisLine={false}
                                     tickLine={false}
                                 />
                                 <YAxis
                                     tick={{ fontSize: 11 }}
-                                    className="fill-gray-500 dark:fill-gray-400"
+                                    className="fill-light-text-secondary dark:fill-dark-text-secondary"
                                     axisLine={false}
                                     tickLine={false}
                                     allowDecimals={false}
@@ -204,7 +278,10 @@ const NoteActivityChart: FC = () => {
                 {/* Recent Activity */}
                 <div>
                     <h4 className="text-sm font-semibold mb-4 flex items-center gap-2 text-light-text-primary dark:text-dark-text-primary">
-                        <Clock className="w-4 h-4" />
+                        {(() => {
+                            const Icon = getIcon('ri-time-line');
+                            return Icon ? <Icon className="w-4 h-4" /> : <Clock className="w-4 h-4" />;
+                        })()}
                         Recent Activity
                     </h4>
                     <div className="space-y-2 max-h-[250px] overflow-y-auto pr-2 scrollbar-thin">
@@ -241,14 +318,20 @@ const NoteActivityChart: FC = () => {
                                             }}
                                             className="p-1.5 rounded-lg hover:bg-light-surface dark:hover:bg-dark-surface"
                                         >
-                                            <Edit3 className="w-4 h-4 text-indigo" />
+                                            {(() => {
+                                                const Icon = getIcon('ri-edit-line');
+                                                return Icon ? <Icon className="w-4 h-4 text-indigo" /> : <Edit3 className="w-4 h-4 text-indigo" />;
+                                            })()}
                                         </button>
                                     </div>
                                 </div>
                             ))
                         ) : (
                             <div className="text-center py-8 text-light-text-secondary dark:text-dark-text-secondary">
-                                <FileText className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                                {(() => {
+                                    const Icon = getIcon('ri-booklet-line');
+                                    return Icon ? <Icon className="w-12 h-12 mx-auto mb-3 opacity-20" /> : <FileText className="w-12 h-12 mx-auto mb-3 opacity-20" />;
+                                })()}
                                 <p className="text-sm">No recent activity</p>
                                 <button
                                     onClick={() => navigate('/note-editor')}
