@@ -1,17 +1,21 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import type { FC, DragEvent } from 'react';
+import type { FC } from 'react';
 import {
     Search, Plus, Bug, AlertCircle, Terminal,
-    Globe, LayoutDashboard, MoreHorizontal,
-    CheckCircle2, XCircle, Radio, Wifi, WifiOff, Copy, Check
+    Globe, LayoutDashboard,
+    XCircle, Radio, Wifi, WifiOff, Copy, Check
 } from 'lucide-react';
 import type { Log, Ticket } from '@/types/bugTrackerApp';
 import { logsAPI, ticketsAPI, consoleLogsAPI } from '@/services/api';
 import LoadingSpinner from '@/components/common/alert/LoadingSpinner';
 import { io, Socket } from 'socket.io-client';
 import { readOnlyOfflineMessage } from '@/utils/offlineMock';
+import { useToast } from '@/context/ToastContext';
+import { useBugTrackerData } from '@/hooks/useBugTrackerData';
+import { BugTrackerDashboardView } from '@/components/ui/bugtracker/BugTrackerDashboardView';
+import { BugTrackerKanbanView } from '@/components/ui/bugtracker/BugTrackerKanbanView';
+import { BugTrackerTerminalView } from '@/components/ui/bugtracker/BugTrackerTerminalView';
 
-// --- Types ---
 type ViewMode = 'dashboard' | 'kanban' | 'terminal';
 type MonitorMode = 'snapshot' | 'realtime';
 
@@ -22,234 +26,22 @@ interface TargetApp {
     connectedAt: string;
 }
 
-// --- Helper Components ---
-
-const StatCard: FC<{ title: string; value: string | number; icon: any; trend?: string; color: string }> = ({ title, value, icon: Icon, trend, color }) => (
-    <div className="stat-card">
-        <div className="flex justify-between items-start">
-            <div>
-                <p className="text-sm font-medium text-light-text-secondary dark:text-dark-text-secondary">{title}</p>
-                <h3 className="text-2xl font-bold mt-1 text-light-text-primary dark:text-dark-text-primary">{value}</h3>
-            </div>
-            <div className={`p-2 rounded-lg ${color} bg-opacity-10 text-opacity-100`}>
-                <Icon className={`w-5 h-5 ${color.replace('bg-', 'text-')}`} />
-            </div>
-        </div>
-        {trend && (
-            <div className="mt-4 flex items-center text-xs text-green">
-                <span className="font-medium">{trend}</span>
-                <span className="ml-1 text-light-text-secondary dark:text-dark-text-secondary">vs last week</span>
-            </div>
-        )}
-    </div>
-);
-
-// --- Sub-Views ---
-
-const DashboardView: FC<{ tickets: Ticket[]; logs: Log[] }> = ({ tickets, logs }) => {
-    const totalTickets = tickets.length;
-    const criticalTickets = tickets.filter(t => t.priority === 'critical').length;
-    const resolvedTickets = tickets.filter(t => t.status === 'resolved' || t.status === 'closed').length;
-    const errorLogs = logs.filter(l => l.level === 'error').length;
-
-    return (
-        <div className="space-y-6 animate-fade-in">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <StatCard title="Total Tickets" value={totalTickets} icon={Bug} color="bg-blue-primary" />
-                <StatCard title="Critical Issues" value={criticalTickets} icon={AlertCircle} color="bg-orange-primary" />
-                <StatCard title="Resolved" value={resolvedTickets} icon={CheckCircle2} color="bg-green" />
-                <StatCard title="Error Logs" value={errorLogs} icon={Terminal} color="bg-orange-primary" />
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div className="card-modern p-6">
-                    <h3 className="text-lg font-bold mb-4 dark:text-white">Recent Activity</h3>
-                    <div className="space-y-4">
-                        {tickets.slice(0, 5).map(ticket => (
-                            <div key={ticket.id} className="flex items-center gap-3 pb-3 border-b border-light-border dark:border-dark-border last:border-0 last:pb-0">
-                                <div className={`w-2 h-2 rounded-full ${ticket.status === 'resolved' ? 'bg-green' : 'bg-blue-primary'}`} />
-                                <div className="flex-1">
-                                    <p className="text-sm font-medium text-light-text-primary dark:text-dark-text-primary">{ticket.title}</p>
-                                    <p className="text-xs text-light-text-secondary dark:text-dark-text-secondary">{new Date(ticket.updatedAt).toLocaleDateString()}</p>
-                                </div>
-                                <span className="text-xs font-mono bg-light-surface-2 dark:bg-white/10 px-2 py-1 rounded text-light-text-secondary dark:text-dark-text-secondary">
-                                    {ticket.status}
-                                </span>
-                            </div>
-                        ))}
-                        {tickets.length === 0 && <p className="text-light-text-secondary dark:text-dark-text-secondary text-sm">No recent activity</p>}
-                    </div>
-                </div>
-
-                <div className="card-modern p-6">
-                    <h3 className="text-lg font-bold mb-4 dark:text-white">System Health</h3>
-                    <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                            <span className="text-sm text-light-text dark:text-dark-text">Error Rate</span>
-                            <span className="text-sm font-bold text-orange-primary">{logs.length > 0 ? ((errorLogs / logs.length) * 100).toFixed(1) : 0}%</span>
-                        </div>
-                        <div className="w-full bg-light-surface-2 dark:bg-dark-surface-2 rounded-full h-2">
-                            <div
-                                className="bg-orange-primary h-2 rounded-full transition-all duration-500"
-                                style={{ width: `${logs.length > 0 ? (errorLogs / logs.length) * 100 : 0}%` }}
-                            />
-                        </div>
-                        <p className="text-xs text-light-text-secondary dark:text-dark-text-secondary mt-2">Based on {logs.length} captured logs</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-const KanbanView: FC<{
-    tickets: Ticket[];
-    onUpdateStatus: (id: string, status: Ticket['status']) => void;
-    onSelectTicket: (ticket: Ticket) => void;
-}> = ({ tickets, onUpdateStatus, onSelectTicket }) => {
-    const columns: { id: Ticket['status']; label: string; color: string }[] = [
-        { id: 'open', label: 'Open', color: 'border-t-blue-primary' },
-        { id: 'in-progress', label: 'In Progress', color: 'border-t-blue-secondary' },
-        { id: 'resolved', label: 'Resolved', color: 'border-t-green' },
-        { id: 'closed', label: 'Closed', color: 'border-t-light-text-secondary' }
-    ];
-
-    const handleDragStart = (e: DragEvent, ticketId: string) => {
-        e.dataTransfer.setData('ticketId', ticketId);
-    };
-
-    const handleDragOver = (e: DragEvent) => {
-        e.preventDefault();
-    };
-
-    const handleDrop = (e: DragEvent, status: Ticket['status']) => {
-        e.preventDefault();
-        const ticketId = e.dataTransfer.getData('ticketId');
-        if (ticketId) {
-            onUpdateStatus(ticketId, status);
-        }
-    };
-
-    return (
-        <div className="kanban-board animate-fade-in">
-            {columns.map(col => (
-                <div
-                    key={col.id}
-                    className={`kanban-column ${col.color} border-t-4`}
-                    onDragOver={handleDragOver}
-                    onDrop={(e) => handleDrop(e, col.id)}
-                >
-                    <div className="kanban-header">
-                        <h4 className="font-bold text-sm text-light-text-primary dark:text-dark-text-primary uppercase tracking-wider">{col.label}</h4>
-                        <span className="bg-white/50 dark:bg-white/10 px-2 py-0.5 rounded text-xs font-mono">
-                            {tickets.filter(t => t.status === col.id).length}
-                        </span>
-                    </div>
-                    {tickets.filter(t => t.status === col.id).map(ticket => (
-                        <div
-                            key={ticket.id}
-                            draggable
-                            onDragStart={(e) => handleDragStart(e, ticket.id)}
-                            onClick={() => onSelectTicket(ticket)}
-                            className="kanban-card group relative"
-                        >
-                            <div className="flex justify-between items-start mb-2">
-                                <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded border ${ticket.priority === 'critical' ? 'text-orange-primary border-orange-primary/20 bg-orange-primary/10' :
-                                    ticket.priority === 'high' ? 'text-orange-primary border-orange-primary/20 bg-orange-primary/5' :
-                                        'text-blue-primary border-blue-primary/20 bg-blue-primary/5'
-                                    }`}>{ticket.priority}</span>
-                                <MoreHorizontal className="w-4 h-4 text-light-text-secondary dark:text-dark-text-secondary opacity-0 group-hover:opacity-100 transition-opacity" />
-                            </div>
-                            <h5 className="font-bold text-sm mb-1 dark:text-dark-text-primary line-clamp-2">{ticket.title}</h5>
-                            <div className="flex items-center justify-between mt-3">
-                                <span className="text-xs font-mono text-light-text-secondary dark:text-dark-text-secondary">#{ticket.id?.slice(0, 4)}</span>
-                                {ticket.assignee && (
-                                    <div className="w-5 h-5 rounded-full bg-blue-primary/20 text-blue-primary flex items-center justify-center text-[10px] font-bold">
-                                        {ticket.assignee[0]}
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            ))}
-        </div>
-    );
-};
-
-const TerminalView: FC<{
-    logs: Log[];
-    onSelectLog: (log: Log) => void;
-    filterLevel: string;
-    setFilterLevel: (l: string) => void;
-}> = ({ logs, onSelectLog, filterLevel, setFilterLevel }) => {
-
-    // Auto scroll to bottom
-    const bottomRef = useRef<HTMLDivElement>(null);
-    useEffect(() => {
-        if (bottomRef.current) {
-            bottomRef.current.scrollIntoView({ behavior: 'smooth' });
-        }
-    }, [logs]);
-
-    const filtered = logs.filter(l => filterLevel === 'all' || l.level === filterLevel);
-
-    return (
-        <div className="terminal-window animate-scale-in">
-            <div className="terminal-header justify-between">
-                <div className="flex items-center gap-2">
-                    <div className="terminal-dot red" />
-                    <div className="terminal-dot yellow" />
-                    <div className="terminal-dot green" />
-                    <span className="ml-2 text-xs font-mono text-light-text-secondary dark:text-dark-text-secondary">console.log --watch</span>
-                </div>
-                <div className="flex gap-2">
-                    {['all', 'error', 'warning', 'info'].map(level => (
-                        <button
-                            key={level}
-                            onClick={() => setFilterLevel(level)}
-                            className={`px-2 py-0.5 text-[10px] uppercase font-bold rounded ${filterLevel === level ? 'bg-white/20 text-white' : 'text-light-text-secondary dark:text-dark-text-secondary hover:text-dark-text-secondary'
-                                }`}
-                        >
-                            {level}
-                        </button>
-                    ))}
-                </div>
-            </div>
-            <div className="terminal-body scrollbar-thin scrollbar-thumb-dark-border scrollbar-track-transparent">
-                {filtered.map((log) => (
-                    <div
-                        key={log.id}
-                        onClick={() => onSelectLog(log)}
-                        className={`terminal-row ${log.level} cursor-pointer group`}
-                    >
-                        <span className="text-light-text-secondary dark:text-dark-text-secondary shrink-0 w-20">{new Date(log.timestamp).toLocaleTimeString()}</span>
-                        <span className={`uppercase font-bold shrink-0 w-16 ${log.level === 'error' ? 'text-orange-primary' :
-                            log.level === 'warning' ? 'text-orange-primary' : 'text-blue-primary'
-                            }`}>[{log.level}]</span>
-                        <span className="font-mono text-dark-text-secondary truncate group-hover:text-white transition-colors">{log.message}</span>
-                    </div>
-                ))}
-                <div ref={bottomRef} />
-                {filtered.length === 0 && (
-                    <div className="p-4 text-light-text-secondary dark:text-dark-text-secondary text-center font-mono text-sm">-- No logs found --</div>
-                )}
-            </div>
-        </div>
-    );
-};
-
 // --- Main Component ---
 
 const BugTrackerApp: FC = () => {
     const [view, setView] = useState<ViewMode>('dashboard');
-
-    // Data State
-    const [logs, setLogs] = useState<Log[]>([]);
-    const [tickets, setTickets] = useState<Ticket[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    const [isOfflineMock, setIsOfflineMock] = useState(false);
+    const { showError: showErrorToast } = useToast();
+    const {
+        logs,
+        setLogs,
+        tickets,
+        setTickets,
+        loading,
+        error,
+        setError,
+        isOfflineMock,
+        refetch: refetchData,
+    } = useBugTrackerData();
 
     // Filter State
     const [searchTerm, setSearchTerm] = useState('');
@@ -377,35 +169,12 @@ const BugTrackerApp: FC = () => {
         setTimeout(() => setCopied(false), 2000);
     };
 
-    // Initial Fetch
-    useEffect(() => {
-        const fetchData = async () => {
-            setLoading(true);
-            try {
-                const [logsData, ticketsData] = await Promise.all([
-                    logsAPI.getAll(),
-                    ticketsAPI.getAll()
-                ]);
-                setLogs(logsData || []);
-                setTickets(ticketsData || []);
-                const offlineMockUsed = !!(logsData as any)?.__isMock || !!(ticketsData as any)?.__isMock;
-                setIsOfflineMock(offlineMockUsed);
-                if (offlineMockUsed) setError(null);
-            } catch (err: any) {
-                console.error("Failed to fetch data", err);
-                setError("Failed to load data. Please check connection.");
-                setIsOfflineMock(false);
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchData();
-    }, []);
-
     // Ticket Actions
     const handleStatusUpdate = async (id: string, newStatus: Ticket['status']) => {
         if (isOfflineMock) {
-            setError(readOnlyOfflineMessage());
+            const msg = readOnlyOfflineMessage();
+            setError(msg);
+            showErrorToast(msg);
             return;
         }
         // Optimistic UI Update directly
@@ -415,17 +184,17 @@ const BugTrackerApp: FC = () => {
             await ticketsAPI.update(id, { status: newStatus });
         } catch (err) {
             console.error("Failed to update ticket status", err);
-            // Revert on error (could implement specific revert logic)
-            // For now, simpler to just re-fetch
             const data = await ticketsAPI.getAll();
-            setTickets(data);
+            setTickets(Array.isArray(data) ? data : []);
         }
     };
 
     const handleCreateTicket = async () => {
         if (!newTicketData.title) return;
         if (isOfflineMock) {
-            setError(readOnlyOfflineMessage());
+            const msg = readOnlyOfflineMessage();
+            setError(msg);
+            showErrorToast(msg);
             return;
         }
         try {
@@ -439,20 +208,22 @@ const BugTrackerApp: FC = () => {
             setNewTicketData({ title: '', description: '', priority: 'medium', assignee: '' });
             setSelectedLog(null);
 
-            // Refresh
             const data = await ticketsAPI.getAll();
-            setTickets(data);
-            setView('kanban'); // Switch to see new ticket
+            setTickets(Array.isArray(data) ? data : []);
+            setView('kanban');
         } catch (err) {
             console.error("Create ticket failed", err);
             setError("Failed to create ticket");
+            showErrorToast("Failed to create ticket");
         }
     };
 
     // Log Actions
     const handleCreateTicketFromLog = (log: Log) => {
         if (isOfflineMock) {
-            setError(readOnlyOfflineMessage());
+            const msg = readOnlyOfflineMessage();
+            setError(msg);
+            showErrorToast(msg);
             return;
         }
         setSelectedLog(log);
@@ -469,17 +240,20 @@ const BugTrackerApp: FC = () => {
     const handleFetchConsole = async () => {
         if (!targetUrl) return;
         if (isOfflineMock) {
-            setError(readOnlyOfflineMessage());
+            const msg = readOnlyOfflineMessage();
+            setError(msg);
+            showErrorToast(msg);
             return;
         }
         setFetchingConsole(true);
         try {
             await consoleLogsAPI.fetchFromUrl(targetUrl);
             const data = await logsAPI.getAll();
-            setLogs(data);
+            setLogs(Array.isArray(data) ? data : []);
             setView('terminal');
         } catch (err) {
             setError("Failed to fetch console logs");
+            showErrorToast("Failed to fetch console logs");
         } finally {
             setFetchingConsole(false);
         }
@@ -533,7 +307,9 @@ const BugTrackerApp: FC = () => {
                         <button
                             onClick={() => {
                                 if (isOfflineMock) {
-                                    setError(readOnlyOfflineMessage());
+                                    const msg = readOnlyOfflineMessage();
+                                    setError(msg);
+                                    showErrorToast(msg);
                                     return;
                                 }
                                 setShowCreateTicket(true);
@@ -681,15 +457,17 @@ const BugTrackerApp: FC = () => {
                     </div>
                 )}
 
-                {view === 'dashboard' && <DashboardView tickets={tickets} logs={logs} />}
+                {view === 'dashboard' && <BugTrackerDashboardView tickets={tickets} logs={logs} />}
 
                 {view === 'kanban' && (
-                    <KanbanView
+                    <BugTrackerKanbanView
                         tickets={tickets.filter(t => t.title.toLowerCase().includes(searchTerm.toLowerCase()))}
                         onUpdateStatus={handleStatusUpdate}
                         onSelectTicket={(t) => {
                             if (isOfflineMock) {
-                                setError(readOnlyOfflineMessage());
+                                const msg = readOnlyOfflineMessage();
+                                setError(msg);
+                                showErrorToast(msg);
                                 return;
                             }
                             setSelectedTicket(t);
@@ -699,7 +477,7 @@ const BugTrackerApp: FC = () => {
                 )}
 
                 {view === 'terminal' && (
-                    <TerminalView
+                    <BugTrackerTerminalView
                         logs={logs.filter(l => l.message.toLowerCase().includes(searchTerm.toLowerCase()))}
                         onSelectLog={handleCreateTicketFromLog}
                         filterLevel={logFilterLevel}
@@ -745,7 +523,7 @@ const BugTrackerApp: FC = () => {
                                     <select
                                         className="input-modern"
                                         value={selectedTicket ? selectedTicket.priority : newTicketData.priority}
-                                        onChange={e => selectedTicket ? setSelectedTicket({ ...selectedTicket, priority: e.target.value as any }) : setNewTicketData({ ...newTicketData, priority: e.target.value as any })}
+                                        onChange={e => selectedTicket ? setSelectedTicket({ ...selectedTicket, priority: e.target.value as Ticket['priority'] }) : setNewTicketData({ ...newTicketData, priority: e.target.value as Ticket['priority'] })}
                                     >
                                         <option value="low">Low</option>
                                         <option value="medium">Medium</option>

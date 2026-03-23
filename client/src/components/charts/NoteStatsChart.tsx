@@ -1,68 +1,15 @@
-import { useState, useEffect, type FC } from 'react';
+import { useState, type FC } from 'react';
 import { getIcon } from '@/utils/iconMapping';
-import { isMockEnabled, isNetworkFailure } from '@/utils/offlineMock';
-import { mockNoteStatsOverview } from '@/utils/mockData';
+import { useNoteStatsOverview } from '@/hooks/useNoteStatsOverview';
 import {
     AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
     ResponsiveContainer, PieChart, Pie, Cell
 } from 'recharts';
-
-interface NoteStats {
-    total: number;
-    byType: {
-        text: number;
-        image: number;
-        list: number;
-        link: number;
-    };
-    pinned: {
-        pinned: number;
-        unpinned: number;
-    };
-    daily: Array<{ date: string; day: string; count: number }>;
-    monthly: Array<{ month: string; monthName: string; count: number }>;
-}
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+import type { RechartsTooltipProps } from '@/types/charts';
 
 const NoteStatsChart: FC = () => {
-    const [stats, setStats] = useState<NoteStats | null>(null);
-    const [loading, setLoading] = useState(true);
+    const { stats, loading, hasAuth, isOffline } = useNoteStatsOverview();
     const [activeView, setActiveView] = useState<'daily' | 'monthly'>('daily');
-    const [hasAuth, setHasAuth] = useState<boolean>(true);
-    const [isOffline, setIsOffline] = useState<boolean>(false);
-
-    useEffect(() => {
-        const fetchStats = async () => {
-            const token = localStorage.getItem('accessToken');
-            if (!token) {
-                setHasAuth(false);
-                setLoading(false);
-                return;
-            }
-
-            try {
-                const res = await fetch(`${API_BASE_URL}/api/notes/stats/overview`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                if (res.ok) {
-                    const data = await res.json();
-                    setStats(data);
-                    setIsOffline(false);
-                }
-            } catch (err) {
-                console.error('Error fetching note stats:', err);
-                setIsOffline(true);
-                if (isMockEnabled() && isNetworkFailure(err)) {
-                    setStats(mockNoteStatsOverview);
-                }
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchStats();
-    }, []);
 
     const typeData = stats ? [
         { name: 'Text', value: stats.byType.text, color: '#3B82F6', iconClass: 'ri-booklet-line' }, // blue-primary
@@ -71,7 +18,7 @@ const NoteStatsChart: FC = () => {
         { name: 'Link', value: stats.byType.link, color: '#FF6F41', iconClass: 'ri-link-line' }, // orange-primary
     ] : [];
 
-    const CustomTooltip = ({ active, payload, label }: any) => {
+    const CustomTooltip = ({ active, payload, label }: RechartsTooltipProps) => {
         if (active && payload && payload.length) {
             return (
                 <div className="px-4 py-3 rounded-xl shadow-xl border backdrop-blur-sm bg-white/95 border-light-border dark:bg-dark-surface/95 dark:border-dark-border">
@@ -87,7 +34,7 @@ const NoteStatsChart: FC = () => {
         return null;
     };
 
-    const PieTooltip = ({ active, payload }: any) => {
+    const PieTooltip = ({ active, payload }: RechartsTooltipProps) => {
         if (active && payload && payload.length) {
             const data = payload[0].payload;
             return (

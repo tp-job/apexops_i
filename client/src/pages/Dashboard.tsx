@@ -1,6 +1,7 @@
 import { useState, useEffect, type FC } from 'react';
 import { getIcon } from '@/utils/iconMapping';
 import type { Ticket as TicketType, Log } from '@/types/bugTrackerApp';
+import { hasMockFlag } from '@/types/api';
 import { ticketsAPI, logsAPI } from '@/services/api';
 // components
 import WelcomeCard from '@/components/ui/bugtracker/WelcomeCard';
@@ -43,7 +44,7 @@ const Dashboard: FC = () => {
                     ticketsAPI.getAll(),
                     logsAPI.getAll()
                 ]);
-                const offlineMockUsed = !!(ticketsData as any)?.__isMock || !!(logsData as any)?.__isMock;
+                const offlineMockUsed = hasMockFlag(ticketsData) || hasMockFlag(logsData);
                 setIsOfflineMock(offlineMockUsed);
                 setTickets(ticketsData || []);
                 setLogs(logsData || []);

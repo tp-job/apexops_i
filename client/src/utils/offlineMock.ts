@@ -15,11 +15,12 @@ export function createReadOnlyOfflineError(): Error {
     return new Error(readOnlyOfflineMessage());
 }
 
-function looksLikeAxiosNetworkError(err: any): boolean {
-    // Axios network errors typically have no response and may carry these fields.
-    const code = typeof err?.code === 'string' ? err.code : '';
-    const msg = typeof err?.message === 'string' ? err.message : '';
-    const hasResponse = !!err?.response;
+function looksLikeAxiosNetworkError(err: unknown): boolean {
+    if (typeof err !== 'object' || err === null) return false;
+    const o = err as { code?: string; message?: string; response?: unknown };
+    const code = typeof o.code === 'string' ? o.code : '';
+    const msg = typeof o.message === 'string' ? o.message : '';
+    const hasResponse = !!o.response;
     if (hasResponse) return false;
     if (code === 'ERR_NETWORK') return true;
     if (msg.toLowerCase() === 'network error') return true;
@@ -31,9 +32,9 @@ export function isNetworkFailure(err: unknown): boolean {
     if (err instanceof TypeError) return true;
 
     // best-effort axios detection without importing axios (avoid bundle duplication)
-    if (looksLikeAxiosNetworkError(err as any)) return true;
+    if (looksLikeAxiosNetworkError(err)) return true;
 
-    const msg = typeof (err as any)?.message === 'string' ? (err as any).message : '';
+    const msg = err instanceof Error ? err.message : (typeof (err as { message?: string })?.message === 'string' ? (err as { message: string }).message : '');
     if (msg.includes('Failed to fetch')) return true;
     if (msg.includes('NetworkError')) return true;
     if (msg.includes('ECONNREFUSED')) return true;

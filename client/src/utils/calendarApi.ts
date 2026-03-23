@@ -1,22 +1,11 @@
 /**
  * Centralized API for calendar/notes data.
- * Reads base URL and token in a null-safe way; no requests if token is missing.
+ * Reads base URL and token from api/config; no requests if token is missing.
  */
 
+import { getApiBaseUrl, getAuthHeaders, getAuthToken } from '@/api/config';
 import { isMockEnabled, isNetworkFailure } from '@/utils/offlineMock';
 import { buildMockCalendarNotes } from '@/utils/mockData';
-
-const getBaseUrl = (): string => {
-    return (import.meta.env.VITE_API_URL as string) || 'http://localhost:3000';
-};
-
-const getAccessToken = (): string | null => {
-    try {
-        return localStorage.getItem('accessToken');
-    } catch {
-        return null;
-    }
-};
 
 export interface CalendarNoteApi {
     id: number;
@@ -45,15 +34,14 @@ export interface FetchCalendarNotesParams {
  * Logs errors consistently.
  */
 export async function fetchCalendarNotes(params: FetchCalendarNotesParams): Promise<CalendarNotesResponse | null> {
-    const token = getAccessToken();
+    const token = getAuthToken();
     if (!token) {
         return null;
     }
-    const baseUrl = getBaseUrl();
     const { year, month } = params;
     try {
-        const res = await fetch(`${baseUrl}/api/notes/calendar/${year}/${month}`, {
-            headers: { Authorization: `Bearer ${token}` },
+        const res = await fetch(`${getApiBaseUrl()}/api/notes/calendar/${year}/${month}`, {
+            headers: getAuthHeaders(),
         });
         if (!res.ok) {
             console.error('Failed to load calendar data', res.status, await res.text());

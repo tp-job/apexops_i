@@ -1,61 +1,21 @@
 import type { FC } from 'react';
 import { Link } from 'react-router-dom';
+import { GridDotsPanel } from '@/components/common/GridDotsPanel';
 
 const Not: FC = () => {
     return (
-        <>
-            <style>
-                {`
-        .dot-intersection {
-            width: 12px;
-            height: 12px;
-            background-color: white;
-            border-radius: 50%;
-            position: absolute;
-            box-shadow: 0 0 15px 2px rgba(255, 255, 255, 0.6);
-        }
-        .grid-line-h {
-            position: absolute;
-            left: 0;
-            right: 0;
-            height: 1px;
-            background: rgba(255, 255, 255, 0.4);
-            border-top: 1px dotted rgba(255, 255, 255, 0.8);
-        }
-        .grid-line-v {
-            position: absolute;
-            top: 0;
-            bottom: 0;
-            width: 1px;
-            background: rgba(255, 255, 255, 0.4);
-            border-left: 1px dotted rgba(255, 255, 255, 0.8);
-        }
-                `}
-            </style>
-            <div className="bg-background-light dark:bg-background-dark min-h-screen flex flex-col lg:flex-row overflow-hidden font-display">
-                {/* Left column */}
-                <div className="w-full lg:w-1/2 h-[50vh] lg:h-screen relative bg-gradient-to-br from-orange-primary via-status-critical to-violet flex items-center justify-center p-8 overflow-hidden">
-                    <div className="absolute inset-0 pointer-events-none">
-                        <div className="grid-line-v left-1/6 lg:left-[15%]" />
-                        <div className="grid-line-v right-1/6 lg:right-[15%]" />
-                        <div className="grid-line-h top-1/4" />
-                        <div className="grid-line-h bottom-1/4" />
-                        <div className="dot-intersection top-[calc(25%-6px)] left-[calc(16.6%-6px)] lg:left-[calc(15%-6px)] ring-4 ring-white/20" />
-                        <div className="dot-intersection top-[calc(25%-6px)] right-[calc(16.6%-6px)] lg:right-[calc(15%-6px)] ring-4 ring-white/20" />
-                        <div className="dot-intersection bottom-[calc(25%-6px)] left-[calc(16.6%-6px)] lg:left-[calc(15%-6px)] ring-4 ring-white/20" />
-                        <div className="dot-intersection bottom-[calc(25%-6px)] right-[calc(16.6%-6px)] lg:right-[calc(15%-6px)] ring-4 ring-white/20" />
-                    </div>
-                    <div className="relative z-10 text-center text-white space-y-2 lg:space-y-6">
-                        <p className="text-sm lg:text-lg font-light tracking-wide opacity-90">
-                            System Connection Lost
-                        </p>
-                        <h1 className="text-7xl lg:text-[10rem] font-bold leading-none tracking-tight">404</h1>
-                        <p className="text-sm lg:text-lg font-light tracking-wide opacity-90">
-                            Resource Not Found
-                        </p>
-                    </div>
-                    <div className="absolute inset-0 opacity-10 bg-[url('https://www.transparenttextures.com/patterns/stardust.png')]" />
+        <div className="bg-background-light dark:bg-background-dark min-h-screen flex flex-col lg:flex-row overflow-hidden font-display">
+            <GridDotsPanel gradientClassName="bg-gradient-to-br from-orange-primary via-status-critical to-violet">
+                <div className="space-y-2 lg:space-y-6">
+                    <p className="text-sm lg:text-lg font-light tracking-wide opacity-90">
+                        System Connection Lost
+                    </p>
+                    <h1 className="text-7xl lg:text-[10rem] font-bold leading-none tracking-tight">404</h1>
+                    <p className="text-sm lg:text-lg font-light tracking-wide opacity-90">
+                        Resource Not Found
+                    </p>
                 </div>
+            </GridDotsPanel>
                 {/* Right column */}
                 <div className="w-full lg:w-1/2 h-auto lg:h-screen bg-background-light dark:bg-background-dark text-light-text-primary dark:text-dark-text-primary p-8 lg:p-20 flex flex-col justify-center relative">
                     <div className="absolute top-8 left-8 lg:left-20 flex w-full pr-16 justify-between text-xs lg:text-sm text-light-text-secondary dark:text-dark-text-secondary uppercase tracking-widest font-medium">
@@ -112,8 +72,7 @@ const Not: FC = () => {
                         </div>
                     </div>
                 </div>
-            </div>
-        </>
+        </div>
     );
 };
 

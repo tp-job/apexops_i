@@ -1,43 +1,13 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
+import { getAuthToken } from '@/api/config';
+import {
+    authApi,
+    getMockLoginResponse,
+    getMockUserSettings,
+} from '@/services/auth';
+import type { User, UserSettings } from '@/types/auth';
 import { isMockEnabled, isNetworkFailure, readOnlyOfflineMessage } from '@/utils/offlineMock';
-import { mockAccessToken, mockRefreshToken, mockUser, mockUserSettings } from '@/utils/mockData';
-
-interface User {
-    id: number;
-    firstName: string;
-    lastName: string;
-    email: string;
-    phone?: string;
-    company?: string;
-    position?: string;
-    location?: string;
-    timezone?: string;
-    bio?: string;
-    avatarUrl?: string;
-    role?: string;
-    gender?: string;
-    birthDate?: string;
-    language?: string;
-    isActive?: boolean;
-    emailVerified?: boolean;
-    createdAt?: string;
-    updatedAt?: string;
-}
-
-interface UserSettings {
-    emailNotifications: boolean;
-    pushNotifications: boolean;
-    bugAlerts: boolean;
-    weeklyReports: boolean;
-    teamUpdates: boolean;
-    twoFactorAuth: boolean;
-    sessionTimeout: number;
-    loginAlerts: boolean;
-    profileVisibility: boolean;
-    activityStatus: boolean;
-    dataCollection: boolean;
-}
 
 interface AuthContextType {
     user: User | null;
@@ -54,8 +24,6 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const [user, setUser] = useState<User | null>(null);
     const [settings, setSettings] = useState<UserSettings | null>(null);
@@ -66,7 +34,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const loadUser = async () => {
             try {
                 const storedUser = localStorage.getItem('user');
-                const storedToken = localStorage.getItem('accessToken');
+                const storedToken = getAuthToken();
 
                 if (storedUser && storedToken) {
                     setUser(JSON.parse(storedUser));
@@ -86,172 +54,108 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         loadUser();
     }, []);
 
-    // Fetch user profile
     const fetchProfile = async () => {
         try {
-            const token = localStorage.getItem('accessToken');
+            const token = getAuthToken();
             if (!token) return;
 
-            const response = await fetch(`${API_BASE_URL}/api/auth/profile`, {
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                }
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                setUser(data.user);
-                setSettings(data.settings);
-                localStorage.setItem('user', JSON.stringify(data.user));
-            } else if (response.status === 401) {
-                // Token expired, try to refresh
-                await refreshToken();
-            } else {
-                throw new Error('Failed to fetch profile');
-            }
+            const data = await authApi.getProfile();
+            setUser(data.user);
+            setSettings(data.settings);
+            localStorage.setItem('user', JSON.stringify(data.user));
         } catch (err) {
             console.error('Error fetching profile:', err);
             if (isMockEnabled() && isNetworkFailure(err)) {
-                // Keep local user; provide default mock settings if missing
-                setSettings((prev) => prev ?? (mockUserSettings as UserSettings));
+                setSettings((prev) => prev ?? getMockUserSettings());
+                return;
+            }
+            if (err instanceof Error && err.message === 'Unauthorized') {
+                await refreshToken();
                 return;
             }
             logout();
         }
     };
 
-    // Refresh access token
     const refreshToken = async () => {
         try {
-            const refreshTokenValue = localStorage.getItem('refreshToken');
-            if (!refreshTokenValue) {
-                throw new Error('No refresh token');
-            }
-
-            const response = await fetch(`${API_BASE_URL}/api/auth/refresh`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ refreshToken: refreshTokenValue })
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                localStorage.setItem('accessToken', data.accessToken);
-                if (data.refreshToken) localStorage.setItem('refreshToken', data.refreshToken);
-                if (data.user) {
-                    setUser(data.user);
-                    localStorage.setItem('user', JSON.stringify(data.user));
-                }
-            } else {
-                throw new Error('Failed to refresh token');
+            const data = await authApi.refreshToken();
+            localStorage.setItem('accessToken', data.accessToken);
+            if (data.refreshToken) localStorage.setItem('refreshToken', data.refreshToken);
+            if (data.user) {
+                setUser(data.user);
+                localStorage.setItem('user', JSON.stringify(data.user));
             }
         } catch (err) {
             console.error('Error refreshing token:', err);
-            if (isMockEnabled() && isNetworkFailure(err)) {
-                // Offline: keep existing local tokens/user
-                return;
-            }
+            if (isMockEnabled() && isNetworkFailure(err)) return;
             logout();
         }
     };
 
-    // Login
     const login = async (email: string, password: string) => {
         try {
-            const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, password }),
-            });
-
-            let data: { error?: string; accessToken?: string; refreshToken?: string; user?: User } = {};
-            if (response.headers.get('content-type')?.includes('application/json')) {
-                data = await response.json();
-            }
-            if (!response.ok) {
-                throw new Error(data.error || `Login failed (${response.status})`);
-            }
-
-            localStorage.setItem('accessToken', data.accessToken!);
-            localStorage.setItem('refreshToken', data.refreshToken!);
+            const data = await authApi.login(email, password);
+            localStorage.setItem('accessToken', data.accessToken);
+            localStorage.setItem('refreshToken', data.refreshToken);
             localStorage.setItem('user', JSON.stringify(data.user));
-            setUser(data.user!);
+            setUser(data.user);
             window.location.href = '/';
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('Login error:', err);
             if (isMockEnabled() && isNetworkFailure(err)) {
-                localStorage.setItem('accessToken', mockAccessToken);
-                localStorage.setItem('refreshToken', mockRefreshToken);
-                localStorage.setItem('user', JSON.stringify(mockUser));
-                setUser(mockUser as User);
-                setSettings(mockUserSettings as UserSettings);
+                const mock = getMockLoginResponse();
+                localStorage.setItem('accessToken', mock.accessToken);
+                localStorage.setItem('refreshToken', mock.refreshToken);
+                localStorage.setItem('user', JSON.stringify(mock.user));
+                setUser(mock.user);
+                setSettings(getMockUserSettings());
                 window.location.href = '/dashboard';
                 return;
             }
-            if (err?.message === 'Failed to fetch' || err?.name === 'TypeError') {
-                throw new Error('Cannot reach server. Ensure backend is running at ' + API_BASE_URL);
+            const msg = err instanceof Error ? err.message : '';
+            const name = err instanceof Error ? err.name : '';
+            if (msg === 'Failed to fetch' || name === 'TypeError') {
+                const { getApiBaseUrl } = await import('@/api/config');
+                throw new Error('Cannot reach server. Ensure backend is running at ' + getApiBaseUrl());
             }
             throw err;
         }
     };
 
-    // Register
     const register = async (firstName: string, lastName: string, email: string, password: string) => {
         try {
-            const response = await fetch(`${API_BASE_URL}/api/auth/register`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ firstName, lastName, email, password }),
-            });
-
-            let data: { error?: string; accessToken?: string; refreshToken?: string; user?: User } = {};
-            if (response.headers.get('content-type')?.includes('application/json')) {
-                data = await response.json();
-            }
-            if (!response.ok) {
-                throw new Error(data.error || `Registration failed (${response.status})`);
-            }
-
-            localStorage.setItem('accessToken', data.accessToken!);
-            localStorage.setItem('refreshToken', data.refreshToken!);
+            const data = await authApi.register(firstName, lastName, email, password);
+            localStorage.setItem('accessToken', data.accessToken);
+            localStorage.setItem('refreshToken', data.refreshToken);
             localStorage.setItem('user', JSON.stringify(data.user));
-            setUser(data.user!);
+            setUser(data.user);
             window.location.href = '/';
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('Registration error:', err);
             if (isMockEnabled() && isNetworkFailure(err)) {
-                localStorage.setItem('accessToken', mockAccessToken);
-                localStorage.setItem('refreshToken', mockRefreshToken);
-                localStorage.setItem('user', JSON.stringify(mockUser));
-                setUser(mockUser as User);
-                setSettings(mockUserSettings as UserSettings);
+                const mock = getMockLoginResponse();
+                localStorage.setItem('accessToken', mock.accessToken);
+                localStorage.setItem('refreshToken', mock.refreshToken);
+                localStorage.setItem('user', JSON.stringify(mock.user));
+                setUser(mock.user);
+                setSettings(getMockUserSettings());
                 window.location.href = '/dashboard';
                 return;
             }
-            if (err?.message === 'Failed to fetch' || err?.name === 'TypeError') {
-                throw new Error('Cannot reach server. Ensure backend is running at ' + API_BASE_URL);
+            const msg = err instanceof Error ? err.message : '';
+            const name = err instanceof Error ? err.name : '';
+            if (msg === 'Failed to fetch' || name === 'TypeError') {
+                const { getApiBaseUrl } = await import('@/api/config');
+                throw new Error('Cannot reach server. Ensure backend is running at ' + getApiBaseUrl());
             }
             throw err;
         }
     };
 
-    // Logout
     const logout = async () => {
         try {
-            const refreshTokenValue = localStorage.getItem('refreshToken');
-            if (refreshTokenValue) {
-                await fetch(`${API_BASE_URL}/api/auth/logout`, {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ refreshToken: refreshTokenValue })
-                });
-            }
+            await authApi.logout();
         } catch (err) {
             console.error('Logout error:', err);
         } finally {
@@ -264,30 +168,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
     };
 
-    // Update profile
     const updateProfile = async (data: Partial<User>) => {
         try {
-            const token = localStorage.getItem('accessToken');
-            if (!token) throw new Error('Not authenticated');
-
-            const response = await fetch(`${API_BASE_URL}/api/auth/profile`, {
-                method: 'PUT',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(data)
-            });
-
-            const result = await response.json();
-
-            if (!response.ok) {
-                throw new Error(result.error || 'Failed to update profile');
-            }
-
+            const result = await authApi.updateProfile(data);
             setUser(result.user);
             localStorage.setItem('user', JSON.stringify(result.user));
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('Update profile error:', err);
             if (isMockEnabled() && isNetworkFailure(err)) {
                 throw new Error(readOnlyOfflineMessage());
@@ -296,29 +182,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
     };
 
-    // Update settings
     const updateSettings = async (data: Partial<UserSettings>) => {
         try {
-            const token = localStorage.getItem('accessToken');
-            if (!token) throw new Error('Not authenticated');
-
-            const response = await fetch(`${API_BASE_URL}/api/auth/settings`, {
-                method: 'PUT',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(data)
-            });
-
-            const result = await response.json();
-
-            if (!response.ok) {
-                throw new Error(result.error || 'Failed to update settings');
-            }
-
+            const result = await authApi.updateSettings(data);
             setSettings(result.settings);
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error('Update settings error:', err);
             if (isMockEnabled() && isNetworkFailure(err)) {
                 throw new Error(readOnlyOfflineMessage());

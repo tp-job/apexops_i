@@ -1,79 +1,17 @@
-import { useState, useEffect, type FC } from 'react';
+import { type FC } from 'react';
 import { getIcon } from '@/utils/iconMapping';
-import { isMockEnabled, isNetworkFailure } from '@/utils/offlineMock';
-import { mockNoteStatsOverview } from '@/utils/mockData';
+import { useNoteStatsOverview } from '@/hooks/useNoteStatsOverview';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
     ResponsiveContainer
 } from 'recharts';
 import { Activity, Clock, FileText, Edit3 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-
-interface RecentActivity {
-    id: string;
-    title: string;
-    type: string;
-    createdAt: string;
-    updatedAt: string;
-}
-
-interface NoteStats {
-    total: number;
-    byType: {
-        text: number;
-        image: number;
-        list: number;
-        link: number;
-    };
-    pinned: {
-        pinned: number;
-        unpinned: number;
-    };
-    daily: Array<{ date: string; day: string; count: number }>;
-    monthly: Array<{ month: string; monthName: string; count: number }>;
-    recentActivity: RecentActivity[];
-}
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+import type { RechartsTooltipProps } from '@/types/charts';
 
 const NoteActivityChart: FC = () => {
     const navigate = useNavigate();
-    const [stats, setStats] = useState<NoteStats | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [hasAuth, setHasAuth] = useState<boolean>(true);
-    const [isOffline, setIsOffline] = useState<boolean>(false);
-
-    useEffect(() => {
-        const fetchStats = async () => {
-            const token = localStorage.getItem('accessToken');
-            if (!token) {
-                setHasAuth(false);
-                setLoading(false);
-                return;
-            }
-
-            try {
-                const res = await fetch(`${API_BASE_URL}/api/notes/stats/overview`, {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                if (res.ok) {
-                    const data = await res.json();
-                    setStats(data);
-                    setIsOffline(false);
-                }
-            } catch (err) {
-                console.error('Error fetching note stats:', err);
-                setIsOffline(true);
-                if (isMockEnabled() && isNetworkFailure(err)) {
-                    setStats(mockNoteStatsOverview);
-                }
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchStats();
-    }, []);
+    const { stats, loading, isOffline, hasAuth } = useNoteStatsOverview();
 
     const formatTimeAgo = (dateString: string) => {
         const date = new Date(dateString);
@@ -125,7 +63,7 @@ const NoteActivityChart: FC = () => {
         }
     };
 
-    const CustomTooltip = ({ active, payload, label }: any) => {
+    const CustomTooltip = ({ active, payload, label }: RechartsTooltipProps) => {
         if (active && payload && payload.length) {
             return (
                 <div className="px-4 py-3 rounded-xl shadow-xl border backdrop-blur-sm bg-white/95 border-light-border dark:bg-dark-surface/95 dark:border-dark-border">
@@ -285,8 +223,8 @@ const NoteActivityChart: FC = () => {
                         Recent Activity
                     </h4>
                     <div className="space-y-2 max-h-[250px] overflow-y-auto pr-2 scrollbar-thin">
-                        {stats.recentActivity.length > 0 ? (
-                            stats.recentActivity.map((activity) => (
+                        {(stats.recentActivity ?? []).length > 0 ? (
+                            (stats.recentActivity ?? []).map((activity) => (
                                 <div
                                     key={activity.id}
                                     onClick={() => navigate(`/note-editor?id=${activity.id}`)}

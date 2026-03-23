@@ -1,6 +1,5 @@
 import {
     useState,
-    useReducer,
     useMemo,
     useCallback,
     useEffect,
@@ -47,8 +46,10 @@ import {
     MdWarning,
 } from 'react-icons/md';
 
-import { useCalendarEvents } from '../hooks/useCalendarEvents';
-import type { CalendarNoteApi } from '../utils/calendarApi';
+import { useOptimizationCalendarEvents } from '../hooks/useOptimizationCalendarEvents';
+import { getCalendarGridCells } from '../utils/calendarGrid';
+import { generateId, defaultFormState } from '../utils/optimizationCalendar';
+import type { CalendarEvent, CategoryId } from '@/types/calendar';
 
 // ── Design tokens (from attached images) ─────────────────────
 const PALETTE = {
@@ -80,22 +81,7 @@ const PALETTE = {
     highlightBorder: '#FF4081',
 };
 
-// ── Event type & categories ──────────────────────────────────
-export type CategoryId = 'development' | 'server' | 'client' | 'marketing';
-
-export interface CalendarEvent {
-    id: string;
-    title: string;
-    description: string;
-    category: CategoryId;
-    date: string; // YYYY-MM-DD
-    hour: number;
-    minute: number;
-    amPm: 'AM' | 'PM';
-    durationMinutes: number;
-    pushNotification: boolean;
-}
-
+// ── Categories ─────────────────────────────────────────────────
 const CATEGORIES: { id: CategoryId; label: string; color: string }[] = [
     { id: 'development', label: 'Development', color: PALETTE.development },
     { id: 'server', label: 'Server Maint.', color: PALETTE.server },
@@ -117,116 +103,6 @@ const INSIGHT_COLORS = [
     PALETTE.insightPink,
     PALETTE.insightOrange,
 ];
-
-// ── Calendar grid helper ─────────────────────────────────────
-export interface CalendarCell {
-    day: number;
-    current: boolean;
-    dateKey: string;
-}
-
-/** Build a 6×7 grid of calendar cells for the given month (ISO weekday: Mon = 1). */
-function getCalendarGridCells(month: Dayjs): CalendarCell[] {
-    const start = month.startOf('month');
-    const startWeekday = start.day();
-    const offset = startWeekday === 0 ? 6 : startWeekday - 1;
-    const daysInMonth = month.daysInMonth();
-    const prevMonth = month.subtract(1, 'month');
-    const prevDays = prevMonth.daysInMonth();
-    const cells: CalendarCell[] = [];
-    for (let i = 0; i < offset; i++) {
-        const d = prevDays - offset + 1 + i;
-        cells.push({ day: d, current: false, dateKey: prevMonth.date(d).format('YYYY-MM-DD') });
-    }
-    for (let i = 1; i <= daysInMonth; i++) {
-        cells.push({ day: i, current: true, dateKey: month.date(i).format('YYYY-MM-DD') });
-    }
-    const remaining = 42 - cells.length;
-    const nextMonth = month.add(1, 'month');
-    for (let i = 1; i <= remaining; i++) {
-        cells.push({ day: i, current: false, dateKey: nextMonth.date(i).format('YYYY-MM-DD') });
-    }
-    return cells.slice(0, 42);
-}
-
-// ── Reducer for CRUD ─────────────────────────────────────────
-type EventsAction =
-    | { type: 'SET'; payload: CalendarEvent[] }
-    | { type: 'ADD'; payload: CalendarEvent }
-    | { type: 'UPDATE'; payload: CalendarEvent }
-    | { type: 'DELETE'; payload: string };
-
-function eventsReducer(state: CalendarEvent[], action: EventsAction): CalendarEvent[] {
-    switch (action.type) {
-        case 'SET':
-            return action.payload;
-        case 'ADD':
-            return [...state, action.payload];
-        case 'UPDATE':
-            return state.map((e) => (e.id === action.payload.id ? action.payload : e));
-        case 'DELETE':
-            return state.filter((e) => e.id !== action.payload);
-        default:
-            return state;
-    }
-}
-
-function generateId(): string {
-    return `evt_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-}
-
-/** Map backend note type to OptimizationCalendar category. */
-function noteTypeToCategory(type: string): CategoryId {
-    const map: Record<string, CategoryId> = {
-        text: 'development',
-        list: 'server',
-        image: 'client',
-        link: 'marketing',
-    };
-    return map[type] ?? 'development';
-}
-
-/**
- * Map API calendar notes to CalendarEvent[] for OptimizationCalendar.
- * Uses createdAt for date/time; defaults duration and pushNotification.
- */
-function mapNotesToCalendarEvents(notesByDay: Record<string, CalendarNoteApi[]>): CalendarEvent[] {
-    const events: CalendarEvent[] = [];
-    Object.entries(notesByDay).forEach(([, notes]) => {
-        notes.forEach((note) => {
-            const d = dayjs(note.createdAt);
-            const h = d.hour();
-            const hour12 = h % 12 || 12;
-            const amPm: 'AM' | 'PM' = h < 12 ? 'AM' : 'PM';
-            events.push({
-                id: `evt_${note.id}`,
-                title: note.title || 'Untitled',
-                description: '',
-                category: noteTypeToCategory(note.type),
-                date: d.format('YYYY-MM-DD'),
-                hour: hour12,
-                minute: d.minute(),
-                amPm,
-                durationMinutes: 60,
-                pushNotification: false,
-            });
-        });
-    });
-    return events;
-}
-
-// ── Default form state ────────────────────────────────────────
-const defaultFormState = (d?: Dayjs): Omit<CalendarEvent, 'id'> => ({
-    title: '',
-    description: '',
-    category: 'development',
-    date: (d || dayjs()).format('YYYY-MM-DD'),
-    hour: 9,
-    minute: 30,
-    amPm: 'AM',
-    durationMinutes: 90,
-    pushNotification: false,
-});
 
 // ── MUI theme (dark) ─────────────────────────────────────────
 const darkTheme = createTheme({
@@ -940,19 +816,12 @@ const OptimizationCalendar: FC = () => {
     const [view, setView] = useState<'month' | 'year'>('month');
     const [currentMonth, setCurrentMonth] = useState<Dayjs>(() => dayjs());
     const [selectedDate, setSelectedDate] = useState<Dayjs | null>(null);
-    const [events, dispatch] = useReducer(eventsReducer, []);
     const [modalOpen, setModalOpen] = useState(false);
     const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
 
-    const { notesByDay } = useCalendarEvents(currentMonth);
+    const { events, dispatch, eventsByDay, loading } = useOptimizationCalendarEvents(currentMonth);
+    const calendarGrid = useMemo(() => getCalendarGridCells(currentMonth), [currentMonth]);
 
-    // Sync backend notes into local events when the API returns data for the current month.
-    useEffect(() => {
-        const mapped = mapNotesToCalendarEvents(notesByDay);
-        dispatch({ type: 'SET', payload: mapped });
-    }, [notesByDay]);
-
-    // TODO: persist create/update/delete to backend when calendar events API exists (POST/PUT/DELETE).
     const handleSave = useCallback((event: CalendarEvent) => {
         if (events.some((e) => e.id === event.id)) {
             dispatch({ type: 'UPDATE', payload: event });
@@ -960,14 +829,14 @@ const OptimizationCalendar: FC = () => {
             dispatch({ type: 'ADD', payload: event });
         }
         setEditingEvent(null);
-    }, [events]);
+    }, [events, dispatch]);
 
     const handleDelete = useCallback((id: string) => {
         if (window.confirm('Delete this event?')) {
             dispatch({ type: 'DELETE', payload: id });
             setEditingEvent(null);
         }
-    }, []);
+    }, [dispatch]);
 
     const openCreate = () => {
         setEditingEvent(null);
@@ -983,18 +852,6 @@ const OptimizationCalendar: FC = () => {
         setModalOpen(false);
         setEditingEvent(null);
     };
-
-    const eventsByDay = useMemo((): Record<string, CalendarEvent[]> => {
-        const map: Record<string, CalendarEvent[]> = {};
-        events.forEach((evt) => {
-            if (!map[evt.date]) map[evt.date] = [];
-            map[evt.date].push(evt);
-        });
-        Object.keys(map).forEach((d) => map[d].sort((a, b) => a.hour - b.hour || a.minute - b.minute));
-        return map;
-    }, [events]);
-
-    const calendarGrid = useMemo(() => getCalendarGridCells(currentMonth), [currentMonth]);
 
     const handleDayClick = useCallback((dateKey: string) => {
         setSelectedDate(dayjs(dateKey));

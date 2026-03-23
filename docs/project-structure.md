@@ -20,17 +20,20 @@ E:/ApexCore/ApexDev/PERN/apexops_i/
 │   │   └───vite.svg
 │   └───src/
 │       ├───App.tsx
-│       ├───index.css
 │       ├───main.tsx
+│       ├───api/              # API base URL, auth headers, optional fetchWithAuth
+│       │   ├───config.ts
+│       │   └───client.ts
 │       ├───assets/
-│       │   └───react.svg
-│       ├───components/
-│       ├───context/
+│       ├───components/        # common/, layouts/, ui/<feature>/, charts/
+│       ├───context/          # Auth, Theme, Toast
+│       ├───hooks/            # useNoteStatsOverview, useCalendarEvents, useBugTrackerData, etc.
 │       ├───layouts/
 │       ├───pages/
 │       ├───routes/
-│       ├───styles/
-│       └───types/
+│       ├───services/         # api.ts (axios), auth.ts
+│       ├───types/            # auth, notes, charts, api, calendar, bugTrackerApp
+│       └───utils/            # error, offlineMock, calendarApi, calendarGrid, optimizationCalendar
 ├───docs/
 │   ├───features.md
 │   ├───overview.md
@@ -67,14 +70,17 @@ E:/ApexCore/ApexDev/PERN/apexops_i/
 
 -   `public/`: Contains public assets that are served directly by the web server.
 -   `src/`: Contains the source code for the React application.
-    -   `assets/`: Contains static assets like images and fonts.
-    -   `components/`: Contains reusable React components.
-    -   `context/`: Contains React context providers for state management.
-    -   `layouts/`: Contains layout components that define the structure of pages.
-    -   `pages/`: Contains the main pages of the application.
-    -   `routes/`: Contains the routing configuration for the application.
-    -   `styles/`: Contains global styles and CSS modules.
-    -   `types/`: Contains TypeScript type definitions.
+    -   `api/`: Shared API config (base URL, auth headers) and optional `fetchWithAuth`.
+    -   `assets/`: Static assets (images, fonts).
+    -   `components/`: Reusable UI (common/, layouts/, ui/feature folders/, charts/).
+    -   `context/`: React context (Auth, Theme, Toast).
+    -   `hooks/`: Data and UI hooks (e.g. useNoteStatsOverview, useCalendarEvents, useBugTrackerData).
+    -   `layouts/`: Layout components.
+    -   `pages/`: Route-level page components.
+    -   `routes/`: Routing configuration.
+    -   `services/`: Axios API (api.ts) and auth service (auth.ts).
+    -   `types/`: Shared TypeScript types (auth, notes, charts, api, calendar).
+    -   `utils/`: Utilities (error, offlineMock, calendarApi, calendarGrid).
 
 ## `docs/` Directory
 

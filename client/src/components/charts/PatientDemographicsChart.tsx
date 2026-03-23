@@ -1,6 +1,7 @@
 import type { FC } from 'react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import { Users, TrendingUp } from 'lucide-react';
+import type { RechartsTooltipProps } from '@/types/charts';
 
 const PatientDemographicsChart: FC = () => {
     const patientDemographics = [
@@ -13,7 +14,7 @@ const PatientDemographicsChart: FC = () => {
 
     const total = patientDemographics.reduce((sum, p) => sum + p.value, 0);
 
-    const CustomTooltip = ({ active, payload }: any) => {
+    const CustomTooltip = ({ active, payload }: RechartsTooltipProps<{ name: string; value: number; label: string }>) => {
         if (active && payload && payload.length) {
             const data = payload[0].payload;
             return (

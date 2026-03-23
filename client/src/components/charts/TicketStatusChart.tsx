@@ -1,6 +1,7 @@
 import type { FC } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { Ticket, ChevronRight, CircleDot, Clock, CheckCircle2, XCircle } from 'lucide-react';
+import type { RechartsTooltipProps } from '@/types/charts';
 
 interface TicketStatusChartProps {
     data: {
@@ -21,7 +22,7 @@ const TicketStatusChart: FC<TicketStatusChartProps> = ({ data }) => {
 
     const total = chartData.reduce((sum, item) => sum + item.value, 0);
 
-    const CustomTooltip = ({ active, payload }: any) => {
+    const CustomTooltip = ({ active, payload }: RechartsTooltipProps<{ name: string; value: number }>) => {
         if (active && payload && payload.length) {
             const data = payload[0].payload;
             const percentage = total > 0 ? Math.round((data.value / total) * 100) : 0;

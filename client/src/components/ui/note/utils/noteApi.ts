@@ -6,32 +6,10 @@
  * without changing any behavior.
  */
 
+import { getApiBaseUrl, getAuthHeaders, getAuthToken } from '@/api/config';
+import type { Note } from '@/components/ui/note/utils/noteTypes';
 import { isMockEnabled, isNetworkFailure, readOnlyOfflineMessage } from '@/utils/offlineMock';
 import { mockNotes } from '@/utils/mockData';
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-
-/**
- * Get the authorization token from localStorage
- */
-const getAuthToken = (): string | null => {
-    return localStorage.getItem('accessToken');
-};
-
-/**
- * Create authorization headers
- */
-const getAuthHeaders = (token: string, includeContentType = false): HeadersInit => {
-    const headers: HeadersInit = {
-        'Authorization': `Bearer ${token}`
-    };
-
-    if (includeContentType) {
-        headers['Content-Type'] = 'application/json';
-    }
-
-    return headers;
-};
 
 // ============================================================================
 // FETCH OPERATIONS
@@ -41,15 +19,15 @@ const getAuthHeaders = (token: string, includeContentType = false): HeadersInit 
  * Fetch all notes for the current user
  * Used by: NoteDashboard
  */
-export const fetchNotes = async (): Promise<{ success: boolean; data?: any[]; error?: string }> => {
+export const fetchNotes = async (): Promise<{ success: boolean; data?: Note[]; error?: string }> => {
     const token = getAuthToken();
     if (!token) {
         return { success: false, error: 'No authentication token found' };
     }
 
     try {
-        const res = await fetch(`${API_BASE_URL}/api/notes`, {
-            headers: getAuthHeaders(token)
+        const res = await fetch(`${getApiBaseUrl()}/api/notes`, {
+            headers: getAuthHeaders(true)
         });
 
         if (res.ok) {
@@ -61,7 +39,7 @@ export const fetchNotes = async (): Promise<{ success: boolean; data?: any[]; er
     } catch (err) {
         console.error('Error fetching notes:', err);
         if (isMockEnabled() && isNetworkFailure(err)) {
-            return { success: true, data: mockNotes as any[] };
+            return { success: true, data: mockNotes as Note[] };
         }
         return { success: false, error: 'Failed to fetch notes' };
     }
@@ -71,15 +49,15 @@ export const fetchNotes = async (): Promise<{ success: boolean; data?: any[]; er
  * Fetch a single note by ID
  * Used by: NoteEditor
  */
-export const fetchNoteById = async (noteId: string): Promise<{ success: boolean; data?: any; error?: string }> => {
+export const fetchNoteById = async (noteId: string): Promise<{ success: boolean; data?: Note; error?: string }> => {
     const token = getAuthToken();
     if (!token) {
         return { success: false, error: 'No authentication token found' };
     }
 
     try {
-        const res = await fetch(`${API_BASE_URL}/api/notes/${noteId}`, {
-            headers: getAuthHeaders(token)
+        const res = await fetch(`${getApiBaseUrl()}/api/notes/${noteId}`, {
+            headers: getAuthHeaders(true)
         });
 
         if (res.ok) {
@@ -91,7 +69,7 @@ export const fetchNoteById = async (noteId: string): Promise<{ success: boolean;
     } catch (err) {
         console.error('Error fetching note:', err);
         if (isMockEnabled() && isNetworkFailure(err)) {
-            const found = (mockNotes as any[]).find((n) => String(n.id) === String(noteId));
+            const found = (mockNotes as Note[]).find((n) => String(n.id) === String(noteId));
             if (found) return { success: true, data: found };
             return { success: false, error: 'Note not found' };
         }
@@ -116,16 +94,16 @@ interface CreateNoteParams {
  * Create a new note
  * Used by: NoteDashboard, NoteEditor
  */
-export const createNote = async (params: CreateNoteParams): Promise<{ success: boolean; data?: any; error?: string }> => {
+export const createNote = async (params: CreateNoteParams): Promise<{ success: boolean; data?: Note; error?: string }> => {
     const token = getAuthToken();
     if (!token) {
         return { success: false, error: 'Please login to add notes' };
     }
 
     try {
-        const res = await fetch(`${API_BASE_URL}/api/notes`, {
+        const res = await fetch(`${getApiBaseUrl()}/api/notes`, {
             method: 'POST',
-            headers: getAuthHeaders(token, true),
+            headers: getAuthHeaders(true),
             body: JSON.stringify({
                 title: params.title,
                 content: params.content,
@@ -170,16 +148,16 @@ interface UpdateNoteParams {
  * Update an existing note
  * Used by: NoteEditor
  */
-export const updateNote = async (noteId: string, params: UpdateNoteParams): Promise<{ success: boolean; data?: any; error?: string }> => {
+export const updateNote = async (noteId: string, params: UpdateNoteParams): Promise<{ success: boolean; data?: Note; error?: string }> => {
     const token = getAuthToken();
     if (!token) {
         return { success: false, error: 'No authentication token found' };
     }
 
     try {
-        const res = await fetch(`${API_BASE_URL}/api/notes/${noteId}`, {
+        const res = await fetch(`${getApiBaseUrl()}/api/notes/${noteId}`, {
             method: 'PATCH',
-            headers: getAuthHeaders(token, true),
+            headers: getAuthHeaders(true),
             body: JSON.stringify(params)
         });
 
@@ -210,9 +188,9 @@ export const toggleNotePin = async (noteId: string, isPinned: boolean): Promise<
     }
 
     try {
-        const res = await fetch(`${API_BASE_URL}/api/notes/${noteId}`, {
+        const res = await fetch(`${getApiBaseUrl()}/api/notes/${noteId}`, {
             method: 'PUT',
-            headers: getAuthHeaders(token, true),
+            headers: getAuthHeaders(true),
             body: JSON.stringify({ isPinned: !isPinned })
         });
 
@@ -245,9 +223,9 @@ export const deleteNote = async (noteId: string): Promise<{ success: boolean; er
     }
 
     try {
-        const res = await fetch(`${API_BASE_URL}/api/notes/${noteId}`, {
+        const res = await fetch(`${getApiBaseUrl()}/api/notes/${noteId}`, {
             method: 'DELETE',
-            headers: getAuthHeaders(token)
+            headers: getAuthHeaders(true)
         });
 
         if (res.ok) {

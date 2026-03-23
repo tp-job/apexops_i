@@ -1,6 +1,7 @@
 import type { FC } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { getIcon } from '@/utils/iconMapping';
+import type { RechartsTooltipPayloadItem } from '@/types/charts';
 
 interface LogsOverviewChartProps {
     data: {
@@ -25,14 +26,14 @@ const LogsOverviewChart: FC<LogsOverviewChartProps> = ({ data, chartData }) => {
     const total = data.errors + data.warnings + data.info;
     const errorRate = total > 0 ? Math.round((data.errors / total) * 100) : 0;
 
-    const CustomTooltip = ({ active, payload, label }: any) => {
+    const CustomTooltip = ({ active, payload, label }: { active?: boolean; payload?: RechartsTooltipPayloadItem[]; label?: string }) => {
         if (active && payload && payload.length) {
             return (
                 <div className="px-4 py-3 rounded-xl shadow-lg border bg-white border-light-border dark:bg-dark-surface dark:border-dark-border">
                     <p className="text-sm font-bold mb-2 text-light-text-primary dark:text-dark-text-primary">
                         {label}
                     </p>
-                    {payload.map((entry: any, index: number) => (
+                    {payload.map((entry, index: number) => (
                         <div key={index} className="flex items-center gap-2 text-xs">
                             <div 
                                 className="w-2 h-2 rounded-full"

@@ -2,10 +2,13 @@ import React, { useState } from 'react';
 import { Shield, AlertCircle } from 'lucide-react';
 import { getIcon } from '@/utils/iconMapping';
 import { useAuth } from '@/context/AuthContext';
+import { useToast } from '@/context/ToastContext';
+import { getErrorMessage } from '@/utils/error';
 import '@/styles/components/socalmedia.css'
 
 const Auth: React.FC = () => {
     const { login, register } = useAuth();
+    const { showError } = useToast();
     const [isSignUp, setIsSignUp] = useState(false);
     const [firstName, setFirstName] = useState('');
     const [lastName, setLastName] = useState('');
@@ -40,8 +43,10 @@ const Auth: React.FC = () => {
                 }
                 await login(email, password);
             }
-        } catch (err: any) {
-            setError(err.message || 'An error occurred');
+        } catch (err: unknown) {
+            const msg = getErrorMessage(err) || 'An error occurred';
+            setError(msg);
+            showError(msg);
         } finally {
             setLoading(false);
         }

@@ -1,6 +1,7 @@
 import type { FC } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { DollarSign, TrendingUp, ArrowUpRight } from 'lucide-react';
+import type { RechartsTooltipProps } from '@/types/charts';
 
 const MonthlyRevenueChart: FC = () => {
     const monthlyRevenue = [
@@ -18,8 +19,8 @@ const MonthlyRevenueChart: FC = () => {
     const prevMonth = monthlyRevenue[monthlyRevenue.length - 2].revenue;
     const growth = Math.round(((lastMonth - prevMonth) / prevMonth) * 100);
 
-    const CustomTooltip = ({ active, payload, label }: any) => {
-        if (active && payload && payload.length) {
+    const CustomTooltip = ({ active, payload, label }: RechartsTooltipProps) => {
+        if (active && payload && payload.length && typeof payload[0].value === 'number') {
             return (
                 <div className="px-4 py-3 rounded-xl shadow-lg border bg-white border-light-border dark:bg-dark-surface dark:border-dark-border">
                     <p className="text-sm font-bold mb-1 text-light-text-primary dark:text-dark-text-primary">

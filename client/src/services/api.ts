@@ -1,17 +1,18 @@
 import axios from 'axios';
+import { getApiBaseUrl } from '@/api/config';
+import type { Log, Ticket } from '@/types/bugTrackerApp';
+import type { LogsStats, TicketsStats, WithMockFlagArray } from '@/types/api';
 import { createReadOnlyOfflineError, isMockEnabled, isNetworkFailure } from '@/utils/offlineMock';
 import { mockLogs, mockTickets } from '@/utils/mockData';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-
 const api = axios.create({
-    baseURL: API_BASE_URL,
+    baseURL: getApiBaseUrl(),
     headers: {
         'Content-Type': 'application/json',
     },
 });
 
-const filterLogs = (params?: { level?: string; source?: string; limit?: number }) => {
+function filterLogs(params?: { level?: string; source?: string; limit?: number }): WithMockFlagArray<Log> {
     const level = params?.level;
     const source = params?.source?.toLowerCase();
     const limit = typeof params?.limit === 'number' ? params?.limit : undefined;
@@ -19,11 +20,12 @@ const filterLogs = (params?: { level?: string; source?: string; limit?: number }
     if (level) rows = rows.filter((l) => l.level === level);
     if (source) rows = rows.filter((l) => (l.source || '').toLowerCase().includes(source));
     if (limit !== undefined) rows = rows.slice(0, limit);
-    (rows as any).__isMock = true;
-    return rows;
-};
+    const result = rows as WithMockFlagArray<Log>;
+    result.__isMock = true;
+    return result;
+}
 
-const filterTickets = (params?: { status?: string; priority?: string; assignee?: string; limit?: number }) => {
+function filterTickets(params?: { status?: string; priority?: string; assignee?: string; limit?: number }): WithMockFlagArray<Ticket> {
     const status = params?.status;
     const priority = params?.priority;
     const assignee = params?.assignee?.toLowerCase();
@@ -33,24 +35,25 @@ const filterTickets = (params?: { status?: string; priority?: string; assignee?:
     if (priority) rows = rows.filter((t) => t.priority === priority);
     if (assignee) rows = rows.filter((t) => (t.assignee || '').toLowerCase().includes(assignee));
     if (limit !== undefined) rows = rows.slice(0, limit);
-    (rows as any).__isMock = true;
-    return rows;
-};
+    const result = rows as WithMockFlagArray<Ticket>;
+    result.__isMock = true;
+    return result;
+}
 
 // Logs API
 export const logsAPI = {
-    getAll: async (params?: { level?: string; source?: string; limit?: number }) => {
+    getAll: async (params?: { level?: string; source?: string; limit?: number }): Promise<Log[] | WithMockFlagArray<Log>> => {
         try {
-            const response = await api.get('/api/logs', { params });
+            const response = await api.get<Log[]>('/api/logs', { params });
             return response.data;
         } catch (err) {
             if (isMockEnabled() && isNetworkFailure(err)) return filterLogs(params);
             throw err;
         }
     },
-    getById: async (id: string) => {
+    getById: async (id: string): Promise<Log | null> => {
         try {
-            const response = await api.get(`/api/logs/${id}`);
+            const response = await api.get<Log>(`/api/logs/${id}`);
             return response.data;
         } catch (err) {
             if (isMockEnabled() && isNetworkFailure(err)) {
@@ -59,9 +62,9 @@ export const logsAPI = {
             throw err;
         }
     },
-    getStats: async () => {
+    getStats: async (): Promise<LogsStats> => {
         try {
-            const response = await api.get('/api/logs/stats');
+            const response = await api.get<LogsStats>('/api/logs/stats');
             return response.data;
         } catch (err) {
             if (isMockEnabled() && isNetworkFailure(err)) {
@@ -73,19 +76,18 @@ export const logsAPI = {
             throw err;
         }
     },
-    create: async (log: { level: string; message: string; source?: string; stack?: string }) => {
+    create: async (log: { level: string; message: string; source?: string; stack?: string }): Promise<Log> => {
         try {
-            const response = await api.post('/api/logs', log);
+            const response = await api.post<Log>('/api/logs', log);
             return response.data;
         } catch (err) {
             if (isMockEnabled() && isNetworkFailure(err)) throw createReadOnlyOfflineError();
             throw err;
         }
     },
-    delete: async (id: string) => {
+    delete: async (id: string): Promise<void> => {
         try {
-            const response = await api.delete(`/api/logs/${id}`);
-            return response.data;
+            await api.delete(`/api/logs/${id}`);
         } catch (err) {
             if (isMockEnabled() && isNetworkFailure(err)) throw createReadOnlyOfflineError();
             throw err;
@@ -95,18 +97,18 @@ export const logsAPI = {
 
 // Tickets API
 export const ticketsAPI = {
-    getAll: async (params?: { status?: string; priority?: string; assignee?: string; limit?: number }) => {
+    getAll: async (params?: { status?: string; priority?: string; assignee?: string; limit?: number }): Promise<Ticket[] | WithMockFlagArray<Ticket>> => {
         try {
-            const response = await api.get('/api/tickets', { params });
+            const response = await api.get<Ticket[]>('/api/tickets', { params });
             return response.data;
         } catch (err) {
             if (isMockEnabled() && isNetworkFailure(err)) return filterTickets(params);
             throw err;
         }
     },
-    getById: async (id: string) => {
+    getById: async (id: string): Promise<Ticket | null> => {
         try {
-            const response = await api.get(`/api/tickets/${id}`);
+            const response = await api.get<Ticket>(`/api/tickets/${id}`);
             return response.data;
         } catch (err) {
             if (isMockEnabled() && isNetworkFailure(err)) {
@@ -115,9 +117,9 @@ export const ticketsAPI = {
             throw err;
         }
     },
-    getStats: async () => {
+    getStats: async (): Promise<TicketsStats> => {
         try {
-            const response = await api.get('/api/tickets/stats');
+            const response = await api.get<TicketsStats>('/api/tickets/stats');
             return response.data;
         } catch (err) {
             if (isMockEnabled() && isNetworkFailure(err)) {
@@ -147,9 +149,9 @@ export const ticketsAPI = {
         reporter?: string;
         tags?: string[];
         relatedLogs?: string[];
-    }) => {
+    }): Promise<Ticket> => {
         try {
-            const response = await api.post('/api/tickets', ticket);
+            const response = await api.post<Ticket>('/api/tickets', ticket);
             return response.data;
         } catch (err) {
             if (isMockEnabled() && isNetworkFailure(err)) throw createReadOnlyOfflineError();
@@ -163,19 +165,18 @@ export const ticketsAPI = {
         priority?: string;
         assignee?: string;
         tags?: string[];
-    }) => {
+    }): Promise<Ticket> => {
         try {
-            const response = await api.put(`/api/tickets/${id}`, ticket);
+            const response = await api.put<Ticket>(`/api/tickets/${id}`, ticket);
             return response.data;
         } catch (err) {
             if (isMockEnabled() && isNetworkFailure(err)) throw createReadOnlyOfflineError();
             throw err;
         }
     },
-    delete: async (id: string) => {
+    delete: async (id: string): Promise<void> => {
         try {
-            const response = await api.delete(`/api/tickets/${id}`);
-            return response.data;
+            await api.delete(`/api/tickets/${id}`);
         } catch (err) {
             if (isMockEnabled() && isNetworkFailure(err)) throw createReadOnlyOfflineError();
             throw err;
@@ -185,7 +186,7 @@ export const ticketsAPI = {
 
 // Console Logs API
 export const consoleLogsAPI = {
-    fetchFromUrl: async (url: string) => {
+    fetchFromUrl: async (url: string): Promise<unknown> => {
         try {
             const response = await api.post('/api/console-logs', { url });
             return response.data;

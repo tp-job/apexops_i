@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef, type FC } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import ShareNoteModal from './ShareNoteModal';
-import { type Note, contentToBlocks, blocksToContent, fetchNoteById, createNote, updateNote, useNoteAutosave, fetchNotes as fetchAllNotes } from './utils';
-import { isMockEnabled, isNetworkFailure } from '@/utils/offlineMock';
-import { mockAiReply } from '@/utils/mockData';
+import { type Note, contentToBlocks, blocksToContent, fetchNoteById, createNote, updateNote, useNoteAutosave } from './utils';
+import { useNoteList } from '@/hooks/useNoteList';
+import { useNoteAiChat } from '@/hooks/useNoteAiChat';
+import { useToast } from '@/context/ToastContext';
+import { getErrorMessage } from '@/utils/error';
 
 // ── TipTap Editor ─────────────────────────────────────────────
 import { useEditor, EditorContent, type Editor } from '@tiptap/react';
@@ -27,15 +29,6 @@ const DEMO_ATTACHMENTS: Array<{ id: string; name: string; size: string; type: st
     { id: 'a3', name: 'Roadmap_Slides.pptx', size: '3.6 MB', type: 'PPTX' },
 ];
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-
-interface AiMessage {
-    id: string;
-    role: 'user' | 'model';
-    text: string;
-    timestamp: number;
-}
-
 interface NoteComment {
     id: string;
     author: string;
@@ -46,52 +39,15 @@ interface NoteComment {
     createdAt: string;
 }
 
-const generateAiReply = async (history: AiMessage[], prompt: string): Promise<string> => {
-    try {
-        const response = await fetch(`${API_BASE_URL}/api/ai/chat`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                prompt,
-                history: history.map((msg) => ({
-                    role: msg.role,
-                    text: msg.text,
-                })),
-            }),
-        });
-
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            console.error('AI API Error:', errorData);
-
-            if (response.status === 429) {
-                return '⚠️ Rate limit exceeded. Please wait a moment and try again.';
-            }
-            if (response.status === 403) {
-                return '⚠️ AI service access denied. Please check your API key configuration.';
-            }
-
-            return errorData.error || 'Sorry, I encountered an error. Please try again.';
-        }
-
-        const data = await response.json();
-        return data.text || "I couldn't generate a response.";
-    } catch (error) {
-        console.error('Generation failed', error);
-        if (isMockEnabled() && isNetworkFailure(error)) {
-            return mockAiReply(prompt);
-        }
-        return "Sorry, I couldn't connect to the AI service. Please check if the server is running.";
-    }
-};
-
 const NoteEditor: FC = () => {
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
     const noteId = searchParams.get('id');
     const isNewNote = !noteId;
+
+    const { showError } = useToast();
+    const { notesList, loading: notesLoading, refetch: refetchNotes } = useNoteList();
+    const { messages: aiMessages, input: aiInput, setInput: setAiInput, loading: aiLoading, sendMessage: handleSendAi, reset: resetAiChat } = useNoteAiChat();
 
     const [note, setNote] = useState<Note | null>(null);
     const [loading, setLoading] = useState(!isNewNote);
@@ -101,12 +57,7 @@ const NoteEditor: FC = () => {
     const [activeRightTab, setActiveRightTab] = useState<'Context' | 'Assistant' | 'Comments'>('Context');
     const [zoom, setZoom] = useState(1);
     const [wordCount, setWordCount] = useState(0);
-    const [notesList, setNotesList] = useState<Note[]>([]);
-    const [notesLoading, setNotesLoading] = useState(false);
     const [sidebarSearch, setSidebarSearch] = useState('');
-    const [aiMessages, setAiMessages] = useState<AiMessage[]>([]);
-    const [aiInput, setAiInput] = useState('');
-    const [aiLoading, setAiLoading] = useState(false);
     const [comments, setComments] = useState<NoteComment[]>([]);
     const [newCommentText, setNewCommentText] = useState('');
     const [showCommentDialog, setShowCommentDialog] = useState(false);
@@ -238,24 +189,6 @@ const NoteEditor: FC = () => {
         content: note?.content || '',
     });
 
-    // Load notes list for left sidebar
-    useEffect(() => {
-        const loadNotes = async () => {
-            setNotesLoading(true);
-            try {
-                const res = await fetchAllNotes();
-                if (res.success && res.data) {
-                    setNotesList(res.data as Note[]);
-                }
-            } catch (err) {
-                console.error('Error loading notes list:', err);
-            } finally {
-                setNotesLoading(false);
-            }
-        };
-        void loadNotes();
-    }, []);
-
     const handleSave = async () => {
         if (!note || !editor) return;
         setSaving(true);
@@ -266,57 +199,34 @@ const NoteEditor: FC = () => {
         try {
             if (isNewNote) {
                 const result = await createNote({ title, content, type: 'text', isPinned: note.isPinned, tags: note.tags });
-                if (result.success && result.data) {
-                    const created = result.data as Note;
-                    navigate(`/note-editor?id=${created.id}`, { replace: true });
-                    setLastSaved(new Date().toLocaleTimeString());
-                }
+if (result.success && result.data) {
+                const created = result.data as Note;
+                refetchNotes();
+                navigate(`/note-editor?id=${created.id}`, { replace: true });
+                setLastSaved(new Date().toLocaleTimeString());
+            }
             } else {
                 const result = await updateNote(noteId!, { title, content });
                 if (result.success && result.data) {
                     setLastSaved(new Date().toLocaleTimeString());
                 }
             }
-        } catch (err) { console.error(err); } finally { setSaving(false); }
+        } catch (err) {
+            console.error(err);
+            showError(getErrorMessage(err) || 'Failed to save note');
+        } finally { setSaving(false); }
     };
 
     useEffect(() => {
-        // Reset per-note ephemeral state when切换笔记
         setComments([]);
         setNewCommentText('');
-        setAiMessages([]);
-        setAiInput('');
+        resetAiChat();
         setShowCommentDialog(false);
         setSelectedText('');
         setSelectedLine(0);
         setSelectionRange(null);
         setCommentButtonPosition(prev => ({ ...prev, visible: false }));
-    }, [noteId]);
-
-    const handleSendAi = async () => {
-        const text = aiInput.trim();
-        if (!text) return;
-        const baseHistory = aiMessages;
-        const userMsg: AiMessage = {
-            id: String(Date.now()),
-            role: 'user',
-            text,
-            timestamp: Date.now(),
-        };
-        const historyWithUser = [...baseHistory, userMsg];
-        setAiMessages(historyWithUser);
-        setAiInput('');
-        setAiLoading(true);
-        const replyText = await generateAiReply(historyWithUser, text);
-        const replyMsg: AiMessage = {
-            id: String(Date.now() + 1),
-            role: 'model',
-            text: replyText,
-            timestamp: Date.now(),
-        };
-        setAiMessages((prev) => [...prev, replyMsg]);
-        setAiLoading(false);
-    };
+    }, [noteId, resetAiChat]);
 
     const handleOpenCommentDialog = () => {
         if (!selectedText.trim() || !selectionRange) return;
