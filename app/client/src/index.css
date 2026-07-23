@@ -1,0 +1,156 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+@import './styles/globals.css';
+@import './styles/scrollbar.css';
+@import './styles/responsive.css';
+@import './styles/components/animations.css';
+@import './styles/components/card.css';
+@import "tw-animate-css";
+
+
+@theme {
+    /* ──────────────────────────────────────────────────────────
+     * Glass Dashboard UI Brand Palette
+     * ────────────────────────────────────────────────────────── */
+    --color-brand-accent: #C5F43A;
+    --color-brand-dark: #222222;
+    --color-brand-gray: #F3F4F6;
+    --color-brand-glass: rgba(255, 255, 255, 0.70);
+    --color-brand-glassDark: rgba(34, 34, 34, 0.85);
+    --color-brand-glassBlue: rgba(156, 179, 196, 0.90);
+    --color-brand-steel: #9CB3C4;
+    --color-brand-steelDark: #7C97AA;
+    --color-brand-nearBlack: #141414;
+    --color-brand-nearBlack2: #1C1C1C;
+
+    /* Light/Dark Mode Palette */
+    --color-light-bg: #f8fafc;
+    --color-dark-bg: #1a1a1a;
+    --color-light-surface: #ffffff;
+    --color-dark-surface: #222222;
+    --color-light-surface-2: #f3f4f6;
+    --color-dark-surface-2: #2d2d2d;
+    --color-light-border: #e5e7eb;
+    --color-dark-border: rgba(255, 255, 255, 0.1);
+    --color-light-text: #222222;
+    --color-dark-text: #f3f4f6;
+    --color-light-text-secondary: #6b7280;
+    --color-dark-text-secondary: #9ca3af;
+
+    /* Status Colors */
+    --color-global-blue: #3b82f6;
+    --color-global-red: #ef4444;
+    --color-global-yellow: #f59e0b;
+    --color-global-green: #10b981;
+
+    /* Legacy Mappings to Neutral + Lime */
+    --color-blue-primary: #222222;
+    --color-blue-secondary: #333333;
+    --color-orange-primary: #C5F43A;
+    --color-ember: #C5F43A;
+    --color-wine: #222222;
+    --color-peach: #f3f4f6;
+
+    /* ──────────────────────────────────────────────────────────
+     * Typography tokens
+     * ────────────────────────────────────────────────────────── */
+    --font-heading: "DM Sans", sans-serif;
+    --font-body: "Inter", sans-serif;
+    --font-mono: "JetBrains Mono", monospace;
+
+    /* ──────────────────────────────────────────────────────────
+     * Design System v2 "Luxe" — motion, elevation & glow tokens
+     * ────────────────────────────────────────────────────────── */
+
+    /* Accent scale (lime) for hover / glow / tint layers */
+    --color-brand-accentHover: #b0dc34;
+    --color-brand-accentSoft: rgba(197, 244, 58, 0.14);
+    --color-brand-accentGlow: rgba(197, 244, 58, 0.45);
+
+    /* Elevation shadows — soft, wide, low-opacity (luxury restraint) */
+    --shadow-ds-1: 0 1px 2px rgba(17, 24, 39, 0.04), 0 1px 3px rgba(17, 24, 39, 0.03);
+    --shadow-ds-2: 0 8px 24px rgba(31, 38, 135, 0.06), 0 2px 6px rgba(31, 38, 135, 0.04);
+    --shadow-ds-3: 0 18px 48px rgba(31, 38, 135, 0.10), 0 6px 16px rgba(31, 38, 135, 0.06);
+    --shadow-ds-glow: 0 0 0 1px rgba(197, 244, 58, 0.35), 0 8px 28px rgba(197, 244, 58, 0.25);
+
+    /* Motion easing — one cutting-edge spring-like curve + a soft one */
+    --ease-lux: cubic-bezier(0.22, 1, 0.36, 1);
+    --ease-lux-soft: cubic-bezier(0.4, 0, 0.2, 1);
+    --dur-fast: 160ms;
+    --dur-base: 280ms;
+    --dur-slow: 520ms;
+}
+
+/* ──────────────────────────────────────────────────────────
+ * shadcn/ui — neutral base tokens (Tailwind v4 CSS variables)
+ * Added additively; the Luxe @theme above is unchanged. These
+ * back the shadcn primitives in components/ui/* only.
+ * ────────────────────────────────────────────────────────── */
+:root {
+    --radius: 0.625rem;
+    --background: oklch(1 0 0);
+    --foreground: oklch(0.145 0 0);
+    --card: oklch(1 0 0);
+    --card-foreground: oklch(0.145 0 0);
+    --popover: oklch(1 0 0);
+    --popover-foreground: oklch(0.145 0 0);
+    --primary: oklch(0.205 0 0);
+    --primary-foreground: oklch(0.985 0 0);
+    --secondary: oklch(0.97 0 0);
+    --secondary-foreground: oklch(0.205 0 0);
+    --muted: oklch(0.97 0 0);
+    --muted-foreground: oklch(0.556 0 0);
+    --accent: oklch(0.97 0 0);
+    --accent-foreground: oklch(0.205 0 0);
+    --destructive: oklch(0.577 0.245 27.325);
+    --border: oklch(0.922 0 0);
+    --input: oklch(0.922 0 0);
+    --ring: oklch(0.708 0 0);
+}
+
+.dark {
+    --background: oklch(0.145 0 0);
+    --foreground: oklch(0.985 0 0);
+    --card: oklch(0.205 0 0);
+    --card-foreground: oklch(0.985 0 0);
+    --popover: oklch(0.205 0 0);
+    --popover-foreground: oklch(0.985 0 0);
+    --primary: oklch(0.922 0 0);
+    --primary-foreground: oklch(0.205 0 0);
+    --secondary: oklch(0.269 0 0);
+    --secondary-foreground: oklch(0.985 0 0);
+    --muted: oklch(0.269 0 0);
+    --muted-foreground: oklch(0.708 0 0);
+    --accent: oklch(0.269 0 0);
+    --accent-foreground: oklch(0.985 0 0);
+    --destructive: oklch(0.704 0.191 22.216);
+    --border: oklch(1 0 0 / 10%);
+    --input: oklch(1 0 0 / 15%);
+    --ring: oklch(0.556 0 0);
+}
+
+@theme inline {
+    --color-background: var(--background);
+    --color-foreground: var(--foreground);
+    --color-card: var(--card);
+    --color-card-foreground: var(--card-foreground);
+    --color-popover: var(--popover);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-primary: var(--primary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-secondary: var(--secondary);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-muted: var(--muted);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-accent: var(--accent);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-destructive: var(--destructive);
+    --color-border: var(--border);
+    --color-input: var(--input);
+    --color-ring: var(--ring);
+    --radius-sm: calc(var(--radius) - 4px);
+    --radius-md: calc(var(--radius) - 2px);
+    --radius-lg: var(--radius);
+    --radius-xl: calc(var(--radius) + 4px);
+}

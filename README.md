@@ -39,14 +39,17 @@ cd apexops_i
 
 ### 2. Install dependencies
 
-```bash
-# Backend
-cd server
-npm install
+The repo is an npm-workspaces monorepo (`app/client`, `app/server`). From the repo root:
 
-# Frontend (from repo root)
-cd ../client
-npm install
+```bash
+npm run install:all      # installs both workspaces
+```
+
+Or per package:
+
+```bash
+cd app/server && npm install
+cd app/client && npm install
 ```
 
 ### 3. Environment variables
@@ -54,11 +57,11 @@ npm install
 Create and configure environment for the **server** (no secrets in repo).
 
 ```bash
-cd server
+cd app/server
 cp .env.example .env
 ```
 
-Edit `server/.env` with your values. Minimum to run locally:
+Edit `app/server/.env` with your values. Minimum to run locally:
 
 | Variable | Description | Example |
 |----------|-------------|---------|
@@ -69,27 +72,37 @@ Edit `server/.env` with your values. Minimum to run locally:
 | `JWT_REFRESH_SECRET` | Min 32 chars, used for refresh tokens | (strong random string) |
 | `GEMINI_API_KEY` | Optional; for AI features | (from Google AI Studio) |
 
-Then run Prisma migrations and generate client:
+Then run Prisma migrations and generate the client. The schema lives at
+`database/prisma/schema.prisma`; the server package resolves it via its
+`prisma.schema` config, so run these from `app/server`:
 
 ```bash
-npx prisma migrate dev
-npx prisma generate
+cd app/server
+npm run db:migrate      # prisma migrate dev
+npm run db:generate     # prisma generate
+# npm run db:studio     # open Prisma Studio
 ```
 
 ### 4. Run the app
 
 ```bash
-# Terminal 1 — backend
-cd server
+# From the repo root (runs both workspaces):
 npm run dev
 
-# Terminal 2 — frontend
-cd client
-npm run dev
+# …or per package, in separate terminals:
+cd app/server && npm run dev      # backend
+cd app/client && npm run dev      # frontend
 ```
 
 - **Frontend:** http://localhost:5173  
 - **Backend API:** http://localhost:3000  
+
+### 5. Docker (one command)
+
+```bash
+cp .env.example .env     # root env for compose; fill in secrets
+npm run docker:up        # builds client + server + postgres
+```
 
 ---
 
@@ -109,7 +122,7 @@ npm run dev
 
 **Do not commit secrets or API keys to the repository.**
 
-- Store all secrets in **environment variables** (e.g. `server/.env`). Use `server/.env.example` as a template; never put real values in `.env.example`.
+- Store all secrets in **environment variables** (e.g. `app/server/.env`). Use `app/server/.env.example` as a template; never put real values in `.env.example`.
 - **`.gitignore`** is configured to exclude `.env`, `.env.local`, `.env.production`, and similar files so they are never pushed.
 - If a key is ever committed (e.g. by mistake, or as in a past Stripe test key in sample code), remove it from the file, amend or rewrite the commit so the secret is no longer in history, then rotate the key. Rely on **push protection** and **secret scanning** (e.g. GitHub) to catch leaks before they go to the remote.
 
@@ -119,32 +132,44 @@ npm run dev
 
 ```
 apexops_i/
-├── client/                 # Frontend (React + Vite)
-│   ├── public/
-│   └── src/
-│       ├── components/      # Reusable UI (layouts, charts, chat, note, resources)
-│       ├── context/        # Auth and global state
-│       ├── hooks/
-│       ├── layouts/
-│       ├── pages/          # Route pages (Dashboard, Chat, Calendar, Note, etc.)
-│       ├── routes/         # App routes and ProtectedRoute
-│       ├── services/
-│       ├── styles/
-│       ├── types/
-│       └── utils/
-├── server/                 # Backend (Express + Prisma)
-│   ├── prisma/
-│   │   └── schema.prisma   # Models: User, Log, Note, Ticket, etc.
-│   └── src/
-│       ├── api/            # Route handlers (auth, logs, notes, chat, …)
-│       ├── lib/            # Prisma client
-│       ├── middleware/     # Auth, rate limit, validation
-│       ├── schemas/        # Zod schemas
-│       ├── server.ts
-│       ├── types/
-│       └── utils/
-└── docs/                   # Project docs (overview, structure, installation, DB)
+├── app/
+│   ├── client/             # Frontend (React + Vite)
+│   │   ├── public/
+│   │   └── src/
+│   │       ├── components/  # UI (layouts, charts, chat, note, design-system)
+│   │       ├── context/    # Auth and global state
+│   │       ├── hooks/
+│   │       ├── layouts/
+│   │       ├── lib/        # motion variants + shared helpers
+│   │       ├── pages/      # Route pages (Dashboard, Invoices, DesignSystem, …)
+│   │       ├── routes/     # App routes and ProtectedRoute
+│   │       ├── services/
+│   │       ├── styles/
+│   │       ├── types/
+│   │       └── utils/
+│   └── server/             # Backend (Express + Prisma)
+│       ├── Dockerfile      # builds from repo root (needs ../../database/prisma)
+│       └── src/
+│           ├── api/        # Route handlers (auth, logs, notes, chat, …)
+│           ├── lib/        # Prisma client (prisma.ts)
+│           ├── middleware/ # Auth, rate limit, validation
+│           ├── schemas/    # Zod schemas
+│           ├── server.ts
+│           ├── types/
+│           └── utils/
+├── database/
+│   └── prisma/
+│       └── schema.prisma   # Models: User, Log, Note, Ticket, etc.
+│                           # server resolves this via package.json prisma.schema
+├── docker-compose.yml      # postgres + server + client
+└── package.json            # npm workspaces (app/client, app/server) + scripts
 ```
+
+> **Prisma note:** the schema is intentionally kept out of the server package at
+> `database/prisma/`. `app/server/package.json` points to it with
+> `"prisma": { "schema": "../../database/prisma/schema.prisma" }`, and the server
+> Dockerfile mirrors this layout inside the image, so the same relative path
+> resolves in dev and in containers.
 
 For more detail, see [Project Structure](./docs/project-structure.md) and [Installation](./docs/installation.md).
 

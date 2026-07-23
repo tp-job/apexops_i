@@ -73,3 +73,5 @@ coverage/
 #  Generated Files
 # ══════════════════════════════════════════════
 .vscode/
+.agent/
+.claude/

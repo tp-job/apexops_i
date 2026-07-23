@@ -1,0 +1,13 @@
+# Root build context (used by app/server/Dockerfile, which needs database/prisma).
+# Keep the context small: exclude every node_modules, build output, and local env.
+**/node_modules
+**/dist
+**/.env
+**/.env.local
+**/npm-debug.log
+.git
+.agent
+.agents
+.claude
+app/client
+*.md

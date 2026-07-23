@@ -1,0 +1,52 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${PG_USER:-postgres}
+      POSTGRES_PASSWORD: ${PG_PASSWORD:-postgres}
+      POSTGRES_DB: ${PG_DATABASE:-apexops_db}
+    ports:
+      - "${PG_PORT:-5432}:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PG_USER:-postgres}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  server:
+    build:
+      context: .
+      dockerfile: app/server/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://${PG_USER:-postgres}:${PG_PASSWORD:-postgres}@db:5432/${PG_DATABASE:-apexops_db}?schema=public
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      JWT_EXPIRY: ${JWT_EXPIRY:-1h}
+      JWT_REFRESH_EXPIRY: ${JWT_REFRESH_EXPIRY:-7d}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+    ports:
+      - "3000:3000"
+
+  client:
+    build:
+      context: ./app/client
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:3000}
+    restart: unless-stopped
+    depends_on:
+      - server
+    ports:
+      - "80:80"
+
+volumes:
+  db_data:
