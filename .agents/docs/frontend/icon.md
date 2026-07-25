@@ -1,5 +1,10 @@
 # Remix Icons Used in Project
 
+> ⚠️ **Mostly obsolete as of 2026-07-24.** Nearly all files listed below were deleted in the UI
+> reset (`frontend/ui-reset-2026-07-24.md`), and `design-system/design.md` explicitly bans new
+> RemixIcon usage in favor of `react-icons` (`Fi*` from `react-icons/fi`). Treat this as a record
+> of what used to exist, not a guide for what to use going forward.
+
 Here is a list of all 61 Remix Icons found in the project, grouped by file.
 
 ---

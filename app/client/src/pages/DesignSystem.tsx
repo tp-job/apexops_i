@@ -12,6 +12,10 @@ import {
     FiDroplet,
     FiType,
     FiBox,
+    FiGrid,
+    FiEye,
+    FiCheckCircle,
+    FiPaperclip,
 } from 'react-icons/fi';
 import {
     Surface,
@@ -20,6 +24,13 @@ import {
     AccentButton,
     Badge,
     AnimatedNumber,
+    Timeline,
+    Stepper,
+    AvatarStack,
+    SegmentedControl,
+    EmptyState,
+    GanttTrack,
+    type GanttBar,
 } from '@/components/design-system';
 import { PageHeader } from '@/components/common/layout';
 import { fadeUp, scaleIn, stagger, inViewOnce } from '@/lib/motion';
@@ -69,8 +80,19 @@ const TypeRow: FC<{ label: string; cls: string; sample: string }> = ({ label, cl
     </div>
 );
 
+const GANTT_BARS: GanttBar[] = [
+    { id: 'g1', label: 'Discovery & research', start: '2024-12-02', end: '2025-01-10', progress: 100, tone: 'neutral', done: true },
+    { id: 'g2', label: 'Design system v2', start: '2024-12-20', end: '2025-02-14', progress: 80, tone: 'accent' },
+    { id: 'g3', label: 'Invoices rebuild', start: '2025-01-15', end: '2025-03-05', progress: 45, tone: 'dark' },
+    { id: 'g4', label: 'Bug tracker port', start: '2025-02-10', end: '2025-04-20', progress: 10, tone: 'neutral' },
+];
+
 const DesignSystem: FC = () => {
     const [meter, setMeter] = useState(72);
+    const [step, setStep] = useState(2);
+    const [range, setRange] = useState('month');
+    const [charts, setCharts] = useState<string[]>(['column', 'scatter']);
+    const [showDone, setShowDone] = useState('show');
 
     return (
         <div className="flex flex-col gap-10 pb-16 max-w-[1400px] mx-auto w-full">
@@ -205,6 +227,145 @@ const DesignSystem: FC = () => {
                         />
                     </Surface>
                 </div>
+            </Section>
+
+            {/* ── Composition primitives (from .agents/template) ────────── */}
+            <Section id="composition" icon={<FiGrid className="w-4 h-4" />} title="Composition">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <Surface variant="panel" padding="md" className="flex flex-col gap-5">
+                        <p className="text-xs uppercase tracking-wider text-gray-400 font-semibold">
+                            Timeline · activity feed
+                        </p>
+                        <Timeline
+                            items={[
+                                { id: 'a', title: 'Invoice created', meta: 'by Kamil Bachanek', timestamp: '09:41', icon: <FiPlus className="w-3.5 h-3.5" />, tone: 'accent' },
+                                { id: 'b', title: 'Viewed by client', meta: 'Lost Island AB', timestamp: '11:02', icon: <FiEye className="w-3.5 h-3.5" /> },
+                                { id: 'c', title: 'Reminder sent', meta: 'Automatic · 7 days overdue', timestamp: 'Mar 26' },
+                                { id: 'd', title: 'Payment received', meta: '$31,211.00 via Stripe', timestamp: 'Mar 28', icon: <FiCheckCircle className="w-3.5 h-3.5" />, tone: 'positive' },
+                            ]}
+                        />
+                    </Surface>
+
+                    <Surface variant="panel" padding="md" className="flex flex-col gap-6">
+                        <div className="flex items-center justify-between gap-3">
+                            <p className="text-xs uppercase tracking-wider text-gray-400 font-semibold">
+                                Stepper · stage progress
+                            </p>
+                            <AvatarStack
+                                people={[
+                                    { id: '1', name: 'Clair Burge' },
+                                    { id: '2', name: 'Christian Bass' },
+                                    { id: '3', name: 'Craig Curry' },
+                                    { id: '4', name: 'Brandon Crawford' },
+                                    { id: '5', name: 'Helna Julie' },
+                                ]}
+                                max={3}
+                                size="sm"
+                            />
+                        </div>
+
+                        <Stepper
+                            steps={[
+                                { id: 'info', label: 'Task info', hint: 'Title & description' },
+                                { id: 'assign', label: 'Assignment', hint: 'Team & priority' },
+                                { id: 'subtasks', label: 'Subtasks', hint: 'Breakdown steps' },
+                                { id: 'schedule', label: 'Schedule', hint: 'Dates & reminders' },
+                                { id: 'done', label: 'Completion', hint: 'Preview' },
+                            ]}
+                            current={step}
+                            onStepClick={(i) => setStep(i)}
+                        />
+
+                        <div className="flex items-center gap-3">
+                            <AccentButton
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setStep((s) => Math.max(0, s - 1))}
+                            >
+                                Back
+                            </AccentButton>
+                            <AccentButton
+                                variant="dark"
+                                size="sm"
+                                onClick={() => setStep((s) => Math.min(4, s + 1))}
+                            >
+                                Next step
+                            </AccentButton>
+                        </div>
+                    </Surface>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <Surface variant="panel" padding="md" className="flex flex-col gap-5">
+                        <p className="text-xs uppercase tracking-wider text-gray-400 font-semibold">
+                            SegmentedControl · exclusive & capped-multiple
+                        </p>
+                        <SegmentedControl
+                            segments={[
+                                { value: 'week', label: 'Week' },
+                                { value: 'month', label: 'Month' },
+                                { value: 'quarter', label: 'Quarter' },
+                            ]}
+                            value={range}
+                            onChange={setRange}
+                        />
+                        <div className="flex flex-col gap-2">
+                            <SegmentedControl
+                                multiple
+                                maxSelected={2}
+                                size="sm"
+                                segments={[
+                                    { value: 'column', label: 'Column' },
+                                    { value: 'scatter', label: 'Scatter' },
+                                    { value: 'heatmap', label: 'Heatmap' },
+                                    { value: 'boxplot', label: 'Boxplot' },
+                                ]}
+                                value={charts}
+                                onChange={setCharts}
+                            />
+                            <p className="text-xs text-gray-400">
+                                Maximum 2 overlaps — the rest disable at the cap.
+                            </p>
+                        </div>
+                    </Surface>
+
+                    <Surface variant="panel" padding="none" className="flex flex-col justify-center">
+                        <EmptyState
+                            icon={<FiPaperclip className="w-5 h-5" />}
+                            title="No attachments"
+                            description="Files added to this invoice will appear here and travel with every reminder you send."
+                            action={
+                                <AccentButton variant="ghost" size="sm" icon={<FiPlus className="w-4 h-4" />}>
+                                    Add a file
+                                </AccentButton>
+                            }
+                        />
+                    </Surface>
+                </div>
+
+                <Surface variant="panel" padding="md" className="flex flex-col gap-5 overflow-x-auto">
+                    <div className="flex items-center justify-between gap-3">
+                        <p className="text-xs uppercase tracking-wider text-gray-400 font-semibold">
+                            GanttTrack · long-horizon schedule
+                        </p>
+                        <SegmentedControl
+                            size="sm"
+                            segments={[
+                                { value: 'hide', label: 'Hide done' },
+                                { value: 'show', label: 'Show done' },
+                            ]}
+                            value={showDone}
+                            onChange={setShowDone}
+                        />
+                    </div>
+                    <div className="min-w-[640px]">
+                        <GanttTrack
+                            bars={GANTT_BARS.filter((b) => showDone === 'show' || !b.done)}
+                            rangeStart="2024-12-01"
+                            rangeEnd="2025-04-30"
+                        />
+                    </div>
+                </Surface>
             </Section>
         </div>
     );

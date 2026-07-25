@@ -1,3 +1,7 @@
+> ⚠️ **Stale as of 2026-07-24** — this tree shows `client/` at the repo root; the actual path is
+> `app/client/`. See `project-structure.md` for the current tree and `pages/` contents (currently
+> just `DesignSystem.tsx` — see `ui-reset-2026-07-24.md`).
+
 ```
 client/
 └── src/

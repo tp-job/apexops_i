@@ -1,5 +1,11 @@
 # 🛠️ ApexOps - Complete Tech Stack
 
+> ⚠️ **Stale as of 2026-07-24.** Written before Prisma, MUI, shadcn/ui, and `motion` were adopted,
+> and before the repo moved to `app/client`/`app/server`. For the current stack, see
+> `context/devrule.md` (prescriptive, current) and `design-system/design.md` (frontend UI stack).
+> Kept below for historical package-version reference only — don't treat the architecture diagram
+> or dependency lists as current.
+
 ## 📊 ภาพรวม Tech Stack
 
 ApexOps ใช้ **PERN Stack** (PostgreSQL, Express, React, Node.js) พร้อม TypeScript และ Tailwind CSS

@@ -1,132 +1,70 @@
 # 🧭 ApexOps Overview
 
-## 🎯 จุดประสงค์ของเว็บไซต์
+> Rewritten 2026-07-24 against actual `app/server/src/api/*` routes and
+> `database/prisma/schema.prisma` — the previous version (dated 2025-01-27) described features and
+> a directory layout that no longer exist. See [`ui-reset-2026-07-24.md`](frontend/ui-reset-2026-07-24.md)
+> and [`user-flow.md`](frontend/user-flow.md) for the full history and the rebuild plan.
 
-ApexOps คือระบบ **Bug & Log Management System**  
-สำหรับนักพัฒนาในการตรวจสอบ **Console Logs, Errors, Bugs**  
-และสร้าง **Tickets** สำหรับติดตามปัญหา คล้าย JIRA
+## จุดประสงค์ของระบบ
 
-ระบบนี้ช่วยให้นักพัฒนาสามารถ:
-- 📊 จัดการและติดตาม logs จาก application
-- 🐛 ติดตาม bugs และ issues ผ่าน ticket system
-- 🔍 วิเคราะห์ console logs จาก browser
-- 📈 ดูสถิติและ dashboard แบบ real-time
+ApexOps คือระบบ **Bug & Log Management** สำหรับนักพัฒนา — ติดตาม tickets แบบ JIRA, เก็บ log
+จากแอปพลิเคชัน, จับ console log จากเบราว์เซอร์แบบเรียลไทม์ (ผ่าน Puppeteer), และมีระบบ Notes
+ที่ผูกกับมุมมองปฏิทินในตัว
 
----
+## ฟังก์ชันหลัก — อ้างอิงจาก endpoint จริงใน `app/server/src/api/`
 
-## 💡 ฟังก์ชันหลัก
+### 🔐 Authentication (`api/auth.ts`)
+Register (rate-limited), login (rate-limited), JWT access + refresh token, profile/settings/password
+update — ดู `SECURITY-AUTH.md` สำหรับรายละเอียด
 
-### 🔐 Authentication & Authorization
-- **User Registration** - สมัครสมาชิกใหม่
-- **Login/Logout** - เข้าสู่ระบบด้วย JWT
-- **Profile Management** - จัดการข้อมูลส่วนตัว
-- **Token-based Authentication** - ใช้ JWT สำหรับ session management
+### 🎫 Bug Tracker (`api/tickets.ts`)
+Ticket CRUD + stats, ผูกกับ `assignee`/`reporter` (เป็น User จริงผ่าน `assigneeId`/`reporterId`),
+`tags` และ `relatedLogs` เป็น JSON field, realtime ผ่าน `hooks/useBugTrackerSocket.ts`
 
-### 📝 Logs Management
-- **View Logs** - แสดง logs ทั้งหมด (ล่าสุด 100 รายการ)
-- **Filter Logs** - กรองตาม level (info, warning, error)
-- **Search Logs** - ค้นหา logs ตาม message หรือ source
-- **Create Logs** - เพิ่ม log ใหม่
-- **Console Logs Fetching** - ดึง console logs จาก browser URL (Puppeteer)
+### 📝 Logs + Console Monitor (`api/logs.ts`, `api/console-monitor.ts`)
+Log CRUD + stats + batch insert, แยกกับระบบ **Console Monitor** ที่เปิด session แบบ
+per-user (gated ด้วย `session.userId !== req.user.id` ไม่ใช่ role) เพื่อจับ console log จาก URL
+ที่ระบุแบบ real-time หลาย session พร้อมกัน
 
-### 🎫 Ticket Management (JIRA Style)
-- **Create Tickets** - สร้าง ticket ใหม่จาก logs หรือ manual
-- **Update Tickets** - แก้ไข ticket (status, priority, assignee)
-- **Delete Tickets** - ลบ ticket
-- **Ticket Status** - open, in-progress, resolved, closed
-- **Priority Levels** - low, medium, high, critical
-- **Assignee Management** - กำหนดผู้รับผิดชอบ
-- **Tags & Related Logs** - จัดกลุ่ม tickets และเชื่อมโยงกับ logs
+### 🗒️ Notes + Calendar (`api/notes.ts`)
+Note CRUD, rich content (`type`: text/image/list/link, `checklistItems`, `quote`),
+`stats/overview`, และ **`GET /calendar/:year/:month`** — นี่คือฐานข้อมูลเดียวกับที่ทั้งหน้า
+Calendar และ OptimizationCalendar เดิมใช้ (ดู `user-flow.md` Finding 2 — ควรรวมเป็นหน้าเดียว)
 
-### 📊 Dashboard
-- **Statistics Overview** - สถิติ logs และ tickets
-- **Charts & Graphs** - แสดงข้อมูลแบบ visual
-- **Real-time Updates** - อัปเดตข้อมูลแบบ real-time
-- **User Profile** - ข้อมูลผู้ใช้และสถิติ
+### 💬 Chat (`api/chat.ts`) และ AI Chat (`api/ai.ts`)
+Chat ฝั่ง backend มีแค่ `GET /users` — ยังไม่มี endpoint สำหรับ presence หรือ message history
+AI Chat ใช้ Google Gemini ผ่าน `POST /api/ai/chat` — เป็นคนละฟีเจอร์กับ Chat ระหว่างผู้ใช้
 
-### 💬 Chat & AI Chat
-- **Simple Chat** - ระบบ chat พื้นฐาน
-- **AI Chat Assistant** - พูดคุยกับ AI Assistant
-- **Message History** - เก็บประวัติการสนทนา
-- **Real-time Messaging** - ส่งข้อความแบบ real-time
-
-### 🎨 UI/UX Features
-- **Dark/Light Theme** - รองรับทั้ง dark และ light mode
-- **Responsive Design** - ใช้งานได้บนทุกอุปกรณ์
-- **Modern UI** - ใช้ Tailwind CSS และ modern design patterns
-- **Smooth Animations** - อนิเมชันที่ลื่นไหล
+### ❌ ไม่มีจริง: Invoices
+ไม่มี `Invoice` model ใน Prisma schema และไม่มี route ใดใน `app/server` ที่เกี่ยวกับ invoice —
+หน้า Invoices เดิมเป็น mock data ล้วน ๆ ใช้เป็นต้นแบบของ design system (ดู `design.md`) ไม่ใช่
+ฟีเจอร์จริงของสินค้า
 
 ---
 
-## 🧱 โครงสร้างระบบ
+## โครงสร้างระบบ (ปัจจุบัน)
 
-### Frontend
-- **React 19** - UI Framework
-- **TypeScript** - Type Safety
-- **Vite** - Build Tool & Dev Server
-- **Tailwind CSS 4** - Styling Framework
-- **React Router DOM** - Client-side Routing
-- **Axios** - HTTP Client
-- **Recharts** - Data Visualization
-- **Lucide React** - Icon Library
+### Frontend — `app/client/`
+React 19 · TypeScript · Vite · Tailwind CSS v4 · React Router · MUI (widget ที่ซับซ้อนเท่านั้น) ·
+`motion` (ไม่ใช่ framer-motion) · shadcn/ui · react-icons · Recharts
 
-### Backend
-- **Node.js** - JavaScript Runtime
-- **Express.js 5** - Web Framework
-- **PostgreSQL** - Relational Database
-- **JWT** - Authentication
-- **bcryptjs** - Password Hashing
-- **Puppeteer** - Headless Browser (Console Logs)
+### Backend — `app/server/`
+Node.js · Express 5 · Prisma ORM · JWT + bcryptjs · Socket.io · Google Gemini (`@google/genai`) ·
+Puppeteer (console log capture)
 
 ### Database
-- **PostgreSQL** - เก็บข้อมูล users, logs, tickets
-- **Connection Pooling** - ใช้ pg library
+PostgreSQL ผ่าน Prisma, schema อยู่ที่ `database/prisma/schema.prisma` (แยกจาก `app/server`
+โดยตั้งใจ — ดู memory `repo-layout-workspaces`)
 
 ---
 
-## 🚀 เป้าหมาย
+## สถานะปัจจุบันของ UI
 
-สร้างเว็บแอปที่:
-- ✅ **ใช้งานง่าย** - Interface ที่เข้าใจง่ายและใช้งานสะดวก
-- ✅ **ดูเท่แบบ Cyber Developer** - UI แบบ dark neon theme
-- ✅ **มีระบบเก็บบันทึก bug/log ที่เข้าใจได้ทันที** - จัดการ logs และ tickets อย่างเป็นระบบ
-- ✅ **Performance ดี** - โหลดเร็วและ responsive
-- ✅ **Scalable** - ขยายได้ง่ายเมื่อมีผู้ใช้มากขึ้น
+**ตั้งแต่การรื้อ UI เมื่อ 2026-07-24 เหลือแค่ route เดียวที่ใช้งานได้จริง: `/design-system`**
+ทุกหน้าเดิมถูกลบ แต่ business logic (`hooks/`, `services/`, `api/`, `utils/`, `types/`,
+`context/`) ยังอยู่ครบ ไม่ได้ผูกกับหน้าไหน — พร้อมสำหรับ build หน้าใหม่ทีละหน้าตามแผนใน
+[`user-flow.md`](frontend/user-flow.md)
 
 ---
 
-## 🎯 Use Cases
-
-### สำหรับนักพัฒนา
-- ตรวจสอบ console logs จาก browser
-- ติดตาม bugs และ issues
-- จัดการ tickets อย่างเป็นระบบ
-- วิเคราะห์สถิติและ trends
-
-### สำหรับทีมพัฒนา
-- แชร์ logs และ tickets ระหว่างทีม
-- ติดตาม progress ของ bugs
-- จัดการ priorities และ assignments
-
----
-
-## 📈 Roadmap
-
-### Version 1.0 (Current)
-- ✅ Basic authentication
-- ✅ Logs management
-- ✅ Tickets management
-- ✅ Dashboard
-- ✅ Chat & AI Chat
-- ✅ Dark/Light theme
-
-### Future Versions
-- 🔄 Real-time notifications
-- 🔄 Advanced analytics
-- 🔄 Export reports
-- 🔄 Integration with external tools
-- 🔄 Mobile app
-
----
-
-**Last Updated**: 2025-01-27
+**Last Updated**: 2026-07-24

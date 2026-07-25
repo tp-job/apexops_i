@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import {
     authApi,
@@ -7,21 +7,7 @@ import {
 } from '@/services/auth';
 import type { User, UserSettings } from '@/types/auth';
 import { isMockEnabled, isNetworkFailure, readOnlyOfflineMessage } from '@/utils/offlineMock';
-
-interface AuthContextType {
-    user: User | null;
-    settings: UserSettings | null;
-    loading: boolean;
-    isAuthenticated: boolean;
-    login: (email: string, password: string) => Promise<void>;
-    register: (firstName: string, lastName: string, email: string, password: string) => Promise<void>;
-    logout: () => Promise<void>;
-    updateProfile: (data: Partial<User>) => Promise<void>;
-    updateSettings: (data: Partial<UserSettings>) => Promise<void>;
-    refreshToken: () => Promise<void>;
-}
-
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+import { AuthContext, type AuthContextType } from './auth-context';
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const [user, setUser] = useState<User | null>(() => getMockLoginResponse().user);
@@ -165,13 +151,5 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-};
-
-export const useAuth = () => {
-    const context = useContext(AuthContext);
-    if (context === undefined) {
-        throw new Error('useAuth must be used within an AuthProvider');
-    }
-    return context;
 };
 

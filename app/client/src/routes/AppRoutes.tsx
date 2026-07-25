@@ -1,86 +1,39 @@
-import { BrowserRouter as Router, Routes, Route } from"react-router-dom";
-import { Suspense } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import type { FC } from 'react';
+import Home from '@/pages/Home';
+import Dashboard from '@/pages/Dashboard';
+import DesignSystem from '@/pages/DesignSystem';
+import AppLayout from '@/layouts/AppLayout';
 
-// pages
-import Dashboard from"@/pages/Dashboard";
-import BugTrackerApp from"@/pages/BugTrackerApp";
-import Chat from"@/pages/Chat";
-import ChatOptimized from"@/pages/ChatOptimized";
-import ChatNew from"@/pages/ChatNew";
-import AIChat from"@/pages/AIChat";
-import AccountSettings from"@/pages/AccountSettings";
-import NotePage from"@/pages/NotePage";
-import Invoices from "@/pages/Invoices";
-import DesignSystem from "@/pages/DesignSystem";
+/**
+ * Routing surface, rebuilt after the 2026-07-24 UI teardown.
+ *
+ * Two trees:
+ *  - **public** — `/` (landing) and `/design-system`: no chrome, no auth.
+ *  - **workspace** — everything nested under `AppLayout`, which owns the nav
+ *    rail and top bar so pages never re-invent their own chrome.
+ *
+ * NOT YET GATED: `/dashboard` renders for anyone who visits it. `ProtectedRoute`
+ * and the login screen are Phase 0/1 work (see `.agents/docs/development-plan.md`).
+ * Until they land, the page's own `hasAuth` check is what a signed-out visitor
+ * meets — that is a UX guard, not access control. The real boundary is the API,
+ * where every endpoint already requires a bearer token.
+ */
+const AppRoutes: FC = () => (
+    <Router>
+        <Routes>
+            {/* Public */}
+            <Route path="/" element={<Home />} />
+            <Route path="/design-system" element={<DesignSystem />} />
 
-// layout
-import Layout from '@/layouts/Layout';
-import LayoutAbout from '@/layouts/LayoutAbout';
-import { ProtectedRoute } from '@/routes/ProtectedRoute';
+            {/* Workspace */}
+            <Route element={<AppLayout />}>
+                <Route path="/dashboard" element={<Dashboard />} />
+            </Route>
 
-// common
-import LoadingSpinner from '../components/common/alert/LoadingSpinner';
-import Not from '@/components/common/client-error/Not';
-import ServerError from"@/components/common/server-error/ServerError";
-import ServiceUnavailable from"@/components/common/server-error/ServiceUnavailable";
-import GatewayTimeout from"@/components/common/server-error/GatewayTimeout";
-import Auth from"@/pages/Auth";
-import Homepage from"@/pages/Homepage";
-import NoteEditor from"@/components/ui/note/NoteEditor";
-import Section from"@/components/card/Section";
-import Calendar from"@/pages/Calendar";
-import OptimizationCalendar from"@/pages/OptimizationCalendar";
-import AboutApp from"@/pages/feature/about/AboutApp";
-import Documents from"@/pages/feature/about/Documents";
-import Document from"@/pages/feature/about/Document";
-
-const AppRoutes: FC = () => {
-    return (
-        <Router>
-            <Suspense fallback={<LoadingSpinner />}>
-                <Routes>
-                    <Route path="/" element={<Homepage />} />
-
-                    {/* Protected: require login */}
-                    <Route element={<ProtectedRoute />}>
-                        <Route element={<Layout />}>
-                            <Route path="/dashboard" element={<Dashboard />} />
-                            <Route path="/bug-tracker" element={<BugTrackerApp />} />
-                            <Route path="/chat" element={<Chat />} />
-                            <Route path="/chat-optimized" element={<ChatOptimized />} />
-                            <Route path="/chat/new" element={<ChatNew />} />
-                            <Route path="/ai-chat" element={<AIChat />} />
-                            <Route path="/account-settings" element={<AccountSettings />} />
-                            <Route path="/note" element={<NotePage />} />
-                            <Route path="/note-editor" element={<NoteEditor />} />
-                            <Route path="/calendar" element={<Calendar />} />
-                            <Route path="/optimization-calendar" element={<OptimizationCalendar />} />
-                            <Route path="/invoices" element={<Invoices />} />
-                            <Route path="/design-system" element={<DesignSystem />} />
-                        </Route>
-                        <Route element={<LayoutAbout />}>
-                            <Route path="/about" element={<AboutApp />} />
-                            <Route path="/about/docs" element={<Documents />} />
-                            <Route path="/about/docs/:docId" element={<Document />} />
-                        </Route>
-                    </Route>
-
-                    {/* Error pages without Layout */}
-                    <Route path="/server-error" element={<ServerError />} />
-                    <Route path="/service-unavailable" element={<ServiceUnavailable />} />
-                    <Route path="/gateway-timeout" element={<GatewayTimeout />} />
-
-                    {/* 404 - must be last */}
-                    <Route path="*" element={<Not />} />
-
-                    {/* Auth pages without Layout */}
-                    <Route path="/auth" element={<Auth />} />
-                    <Route path="/section" element={<Section />} />
-                </Routes>
-            </Suspense>
-        </Router>
-    );
-};
+            <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+    </Router>
+);
 
 export default AppRoutes;

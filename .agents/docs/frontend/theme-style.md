@@ -1,5 +1,11 @@
 # 🌅 ApexOps — Theme Style Guide
 
+> ⚠️ **Superseded, not just stale.** This "Sunset Gradient" palette (Navy→Indigo→Wine→Pink→Peach)
+> was explicitly removed and replaced — `design-system/design.md` states directly: *"Legacy
+> sunset/wine/ember gradients + colored shadows removed. Design system is intentionally neutral +
+> lime."* The current palette is neutral + `#C5F43A` lime accent. Do not use the colors below;
+> read `design-system/design.md` instead.
+
 ## 🎨 Theme Concept
 
 ธีมหลักคือ **Sunset Gradient Theme**  

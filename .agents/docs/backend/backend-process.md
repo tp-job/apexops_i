@@ -1,3 +1,8 @@
+> ⚠️ **Stale as of 2026-07-24** — this tree shows `server/` at the repo root with `server.js` and
+> raw `pg` models/routes. The actual path is `app/server/`, using Prisma (`database/prisma/schema.prisma`)
+> instead of hand-written models, and `server.ts`. See `project-structure.md` and `devrule.md` §4–5
+> for the current backend architecture.
+
 ```
 server/
 └── src/

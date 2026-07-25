@@ -1,5 +1,11 @@
 # 🚀 ApexOps - Installation Guide
 
+> ⚠️ **Stale as of 2026-07-24.** Written for the pre-`app/`-move layout (`cd server`, raw
+> `PG_USER`/`PG_HOST` env vars, `PORT=3000`) — the repo now uses `app/server`, Prisma with a
+> `DATABASE_URL` connection string, and `PORT=4000` by convention. Follow
+> `context/devrule.md` §2 "Environment Setup" instead; it has the current `npm run dev` /
+> `prisma migrate dev` flow.
+
 ## 📋 Prerequisites
 
 ก่อนเริ่มติดตั้ง ตรวจสอบว่าคุณมีสิ่งต่อไปนี้:

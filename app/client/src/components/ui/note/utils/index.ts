@@ -42,7 +42,8 @@ export const upsertNote = (state: NormalizedNotes, note: Note): NormalizedNotes 
 
 export const removeNote = (state: NormalizedNotes, noteId: string): NormalizedNotes => {
     if (!state.byId[noteId]) return state;
-    const { [noteId]: _removed, ...rest } = state.byId;
+    const rest = { ...state.byId };
+    delete rest[noteId];
     return {
         byId: rest,
         allIds: state.allIds.filter((id) => id !== noteId),

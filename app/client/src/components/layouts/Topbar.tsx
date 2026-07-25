@@ -1,87 +1,66 @@
 import type { FC } from 'react';
-import { NavLink, Link } from 'react-router-dom';
-import { useTheme } from '@/context/ThemeContext';
+import { FiLogOut, FiMenu, FiMoon, FiSun } from 'react-icons/fi';
+import { useAuth } from '@/context/auth-context';
+import { useTheme } from '@/context/theme-context';
+import { Badge } from '@/components/design-system';
 
-const TopBar: FC<{ onLogout?: () => void }> = ({ onLogout }) => {
-    const { toggleTheme } = useTheme();
-    const avatarUrl = 'https://avatars.githubusercontent.com/u/12345678?v=4';
+/**
+ * Workspace top bar: mobile nav trigger, theme toggle, identity, sign-out.
+ *
+ * Kept intentionally thin — search and notifications are not wired to anything
+ * real yet, and a control that does nothing is worse than an absent one.
+ */
+const Topbar: FC<{ onOpenNav: () => void }> = ({ onOpenNav }) => {
+    const { user, logout } = useAuth();
+    const { isDark, toggleTheme } = useTheme();
 
-    const navItems = [
-        { label: 'Dashboard', to: '/dashboard' },
-        { label: 'Bug Tracker', to: '/bug-tracker' },
-        { label: 'Notes', to: '/note' },
-        { label: 'Chat', to: '/chat' },
-        { label: 'AI Chat', to: '/ai-chat' },
-        { label: 'Calendar', to: '/calendar' },
-        { label: 'Invoices', to: '/invoices' },
-        { label: 'System', to: '/design-system' },
-    ];
+    const initials = [user?.firstName?.[0], user?.lastName?.[0]].filter(Boolean).join('').toUpperCase() || '?';
+    const fullName = [user?.firstName, user?.lastName].filter(Boolean).join(' ') || 'Signed in';
 
     return (
-        <header className="glass-panel sticky top-4 mx-6 mt-4 z-50 flex items-center justify-between px-6 py-4 rounded-full backdrop-blur-md">
-            <div className="flex items-center gap-2">
-                <i className="ri-code-s-slash-line text-xl text-brand-dark" />
-                <h1 className="text-lg font-bold font-heading text-brand-dark">
-                    Apex<span className="text-brand-accent">Ops</span>
-                </h1>
-            </div>
+        <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-black/5 bg-light-bg/80 px-4 backdrop-blur-xl dark:border-white/10 dark:bg-dark-bg/80 md:px-6">
+            <button
+                type="button"
+                onClick={onOpenNav}
+                aria-label="Open navigation"
+                className="grid h-9 w-9 place-items-center rounded-xl text-gray-600 transition-colors hover:bg-black/5 dark:text-gray-300 dark:hover:bg-white/10 lg:hidden"
+            >
+                <FiMenu size={18} />
+            </button>
 
-            <nav className="bg-brand-dark text-white rounded-full p-1.5 flex items-center gap-2 text-sm font-medium">
-                {navItems.map((item) => (
-                    <NavLink
-                        key={item.label}
-                        to={item.to}
-                        className={({ isActive }) =>
-                            `px-4 py-2 rounded-full transition ${
-                                isActive
-                                    ? 'bg-brand-accent text-brand-dark flex items-center gap-2'
-                                    : 'hover:bg-white/10 text-white'
-                            }`
-                        }
-                    >
-                        {({ isActive }) => (
-                            <>
-                                {isActive && <span className="w-1.5 h-1.5 rounded-full bg-brand-dark" />}
-                                {item.label}
-                            </>
-                        )}
-                    </NavLink>
-                ))}
-            </nav>
-
-            <div className="flex items-center gap-4">
+            <div className="ml-auto flex items-center gap-2">
                 <button
+                    type="button"
                     onClick={toggleTheme}
-                    className="w-10 h-10 rounded-full border border-gray-300 flex items-center justify-center hover:bg-white/50 transition"
-                    title="Toggle Dark Mode"
+                    aria-label={isDark ? 'Switch to light theme' : 'Switch to dark theme'}
+                    className="grid h-9 w-9 place-items-center rounded-xl text-gray-600 transition-colors hover:bg-black/5 dark:text-gray-300 dark:hover:bg-white/10"
                 >
-                    <i className="ri-moon-line text-gray-600 dark:hidden" />
-                    <i className="ri-sun-line text-gray-600 hidden dark:block" />
+                    {isDark ? <FiSun size={17} /> : <FiMoon size={17} />}
                 </button>
-                <Link
-                    to="/account-settings"
-                    className="w-10 h-10 rounded-full border border-gray-300 flex items-center justify-center hover:bg-white/50 transition"
-                    title="Settings"
+
+                <div className="mx-1 hidden h-6 w-px bg-black/10 dark:bg-white/10 sm:block" />
+
+                <div className="hidden items-center gap-2.5 sm:flex">
+                    <span className="grid h-9 w-9 place-items-center rounded-full bg-brand-dark text-xs font-bold text-brand-accent dark:bg-brand-accent dark:text-brand-dark">
+                        {initials}
+                    </span>
+                    <div className="flex flex-col leading-tight">
+                        <span className="text-sm font-semibold text-brand-dark dark:text-white">{fullName}</span>
+                        {user?.role === 'admin' && <Badge tone="neutral">Admin</Badge>}
+                    </div>
+                </div>
+
+                <button
+                    type="button"
+                    onClick={() => void logout()}
+                    aria-label="Sign out"
+                    className="grid h-9 w-9 place-items-center rounded-xl text-gray-600 transition-colors hover:bg-black/5 dark:text-gray-300 dark:hover:bg-white/10"
                 >
-                    <i className="ri-settings-3-line text-gray-600" />
-                </Link>
-                {onLogout && (
-                    <button
-                        onClick={onLogout}
-                        className="w-10 h-10 rounded-full border border-gray-300 flex items-center justify-center hover:bg-white/50 transition"
-                        title="Logout"
-                    >
-                        <i className="ri-logout-box-line text-red-500" />
-                    </button>
-                )}
-                <img
-                    src={avatarUrl}
-                    alt="profile"
-                    className="w-10 h-10 object-cover rounded-full border-2 border-white"
-                />
+                    <FiLogOut size={17} />
+                </button>
             </div>
         </header>
     );
 };
 
-export default TopBar;
+export default Topbar;

@@ -1,258 +1,445 @@
-import { useState, useEffect, type FC } from 'react';
-import { getIcon } from '@/utils/iconMapping';
-import type { Ticket as TicketType, Log } from '@/types/bugTrackerApp';
-import { hasMockFlag } from '@/types/api';
-import { ticketsAPI, logsAPI } from '@/services/api';
-// components
-import TicketStatusChart from '@/components/charts/TicketStatusChart';
-import PriorityChart from '@/components/charts/PriorityChart';
-import LogsOverviewChart from '@/components/charts/LogsOverviewChart';
-import RecentActivityList from '@/components/charts/RecentActivityList';
-import CalendarNotes from '@/components/charts/CalendarNotes';
-import NoteStatsChart from '@/components/charts/NoteStatsChart';
-import NoteActivityChart from '@/components/charts/NoteActivityChart';
-import LoadingSpinner from '@/components/common/alert/LoadingSpinner';
-import QuickActionsBar from '@/components/ui/dashboard/QuickActionsBar';
-import DashboardPulsePanel from '@/components/ui/dashboard/DashboardPulsePanel';
-import { PageHeader, GlassPanel, KpiCard } from '@/components/common/layout';
-import { FiActivity, FiAlertCircle, FiCheckCircle, FiClock, FiPlus } from 'react-icons/fi';
+import type { FC, ReactNode } from 'react';
+import { useMemo } from 'react';
+import { motion } from 'motion/react';
+import {
+    FiActivity,
+    FiAlertOctagon,
+    FiAlertTriangle,
+    FiCheckCircle,
+    FiClock,
+    FiInbox,
+    FiRefreshCw,
+    FiShield,
+    FiTerminal,
+} from 'react-icons/fi';
+import {
+    Surface,
+    StatTile,
+    Meter,
+    AccentButton,
+    Badge,
+    AnimatedNumber,
+    EmptyState,
+} from '@/components/design-system';
+import { PageHeader } from '@/components/common/layout';
+import { useAuth } from '@/context/auth-context';
+import { useDashboardStats } from '@/hooks/useDashboardStats';
+import type { FocusItem, LogStats, TicketStats } from '@/types/dashboard';
+import { fadeUp, scaleIn, stagger } from '@/lib/motion';
+
+/**
+ * Dashboard — the workspace home.
+ *
+ * Composed from the Luxe primitives only; no template was harvested for the
+ * layout because `dashboard-template.html` is the `#ccff33` file that
+ * `template-adoption.md` flags as the highest contamination risk. Its IA
+ * (KPI band → breakdown → activity) is reflected here; none of its CSS is.
+ *
+ * Data comes from `GET /api/tickets/stats` and `GET /api/logs/stats` via
+ * `useDashboardStats`, which tolerates one endpoint failing without blanking
+ * the page.
+ */
+
+// ── Panel heading ─────────────────────────────────────────────
+const PanelHead: FC<{ icon: ReactNode; title: string; aside?: ReactNode }> = ({ icon, title, aside }) => (
+    <div className="flex items-center gap-3">
+        <span className="grid h-9 w-9 place-items-center rounded-xl bg-brand-accent/20 text-brand-dark dark:text-brand-accent">
+            {icon}
+        </span>
+        <h2 className="text-base font-bold font-heading text-brand-dark dark:text-white">{title}</h2>
+        {aside && <div className="ml-auto">{aside}</div>}
+    </div>
+);
+
+// ── Distribution row: label, count, proportional meter ─────────
+const DistRow: FC<{ label: string; value: number; total: number }> = ({ label, value, total }) => (
+    <div className="flex flex-col gap-1.5">
+        <div className="flex items-baseline justify-between gap-3">
+            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{label}</span>
+            <span className="font-numbers text-sm font-semibold text-brand-dark dark:text-white">
+                <AnimatedNumber value={value} />
+            </span>
+        </div>
+        {/* Zero total is a real state on a fresh install — guard the division. */}
+        <Meter value={total > 0 ? Math.round((value / total) * 100) : 0} knob={false} height={6} />
+    </div>
+);
+
+/**
+ * KPI slot for a metric whose source request failed.
+ *
+ * Deliberately NOT `value={x ?? 0}`. A zero here is a claim — "you have no
+ * errors" — and it is the opposite of the truth when the request simply didn't
+ * land. An em-dash says "unknown", which is what we actually know.
+ */
+const MissingTile: FC<{ label: string; icon: ReactNode }> = ({ label, icon }) => (
+    <Surface variant="frost" radius="2xl" padding="md" className="h-full">
+        <div className="flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+                <span className="text-xs font-medium uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                    {label}
+                </span>
+                <span className="text-gray-400 dark:text-gray-500">{icon}</span>
+            </div>
+            <span className="font-numbers text-3xl font-bold leading-none text-gray-300 dark:text-gray-600" title="Unavailable">
+                —
+            </span>
+            <span className="text-xs text-gray-400 dark:text-gray-500">Unavailable</span>
+        </div>
+    </Surface>
+);
+
+const SkeletonPanel: FC<{ lines?: number }> = ({ lines = 4 }) => (
+    <div className="flex flex-col gap-3" aria-hidden>
+        {Array.from({ length: lines }).map((_, i) => (
+            <div key={i} className="h-9 animate-pulse rounded-xl bg-black/5 dark:bg-white/5" />
+        ))}
+    </div>
+);
+
+/** Panel shown when one endpoint failed but the page still has something to say. */
+const DegradedPanel: FC<{ what: string; onRetry: () => void }> = ({ what, onRetry }) => (
+    <EmptyState
+        size="sm"
+        icon={<FiAlertOctagon size={20} />}
+        title={`${what} unavailable`}
+        description="The rest of the workspace is still live. This panel will fill in once the request succeeds."
+        action={
+            <AccentButton variant="ghost" size="sm" icon={<FiRefreshCw size={14} />} onClick={onRetry}>
+                Retry
+            </AccentButton>
+        }
+    />
+);
+
+// ── Focus rail: what actually needs a human ───────────────────
+function buildFocus(tickets: TicketStats | null, logs: LogStats | null): FocusItem[] {
+    const items: FocusItem[] = [];
+
+    if (tickets) {
+        if (tickets.byPriority.critical > 0) {
+            items.push({
+                id: 'critical',
+                label: 'Critical tickets',
+                count: tickets.byPriority.critical,
+                tone: 'danger',
+                hint: 'Highest priority, needs an owner now',
+            });
+        }
+        if (tickets.byStatus.open > 0) {
+            items.push({
+                id: 'open',
+                label: 'Unstarted tickets',
+                count: tickets.byStatus.open,
+                tone: 'warning',
+                hint: 'Open, not yet in progress',
+            });
+        }
+    }
+
+    if (logs && logs.byLevel.errors > 0) {
+        items.push({
+            id: 'errors',
+            label: 'Error-level logs',
+            count: logs.byLevel.errors,
+            tone: 'danger',
+            hint: 'Across all sources',
+        });
+    }
+
+    return items;
+}
+
+const TONE_DOT: Record<FocusItem['tone'], string> = {
+    danger: 'bg-red-500',
+    warning: 'bg-amber-500',
+    accent: 'bg-brand-accent',
+    neutral: 'bg-gray-300 dark:bg-white/25',
+};
 
 const Dashboard: FC = () => {
-    // data states
-    const [tickets, setTickets] = useState<TicketType[]>([]);
-    const [logs, setLogs] = useState<Log[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [apiReachable, setApiReachable] = useState<boolean | null>(null);
-    const [isOfflineMock, setIsOfflineMock] = useState(false);
+    const { user } = useAuth();
+    const { tickets, logs, loading, error, partial, hasAuth, refetch } = useDashboardStats();
 
-    // fetch data
-    useEffect(() => {
-        const fetchData = async () => {
-            const token = localStorage.getItem('accessToken');
+    const focus = useMemo(() => buildFocus(tickets, logs), [tickets, logs]);
 
-            // 如果尚未登入，就不要打需要驗證的 API，避免 401 error 汙染 console
-            if (!token) {
-                setTickets([]);
-                setLogs([]);
-                setApiReachable(false);
-                setLoading(false);
-                return;
-            }
+    // Resolution rate is only meaningful once tickets exist — otherwise it reads
+    // as "0% resolved", which is a judgement about a team that has no tickets.
+    const resolutionRate =
+        tickets && tickets.total > 0
+            ? Math.round(((tickets.byStatus.resolved + tickets.byStatus.closed) / tickets.total) * 100)
+            : null;
 
-            setLoading(true);
-            try {
-                const [ticketsData, logsData] = await Promise.all([
-                    ticketsAPI.getAll(),
-                    logsAPI.getAll()
-                ]);
-                const offlineMockUsed = hasMockFlag(ticketsData) || hasMockFlag(logsData);
-                setIsOfflineMock(offlineMockUsed);
-                setTickets(ticketsData || []);
-                setLogs(logsData || []);
-                setApiReachable(!offlineMockUsed);
-            } catch {
-                // Offline/API unreachable: 只更新狀態，不再在 console 印錯誤
-                setTickets([]);
-                setLogs([]);
-                setApiReachable(false);
-                setIsOfflineMock(false);
-            } finally {
-                setLoading(false);
-            }
-        };
-        void fetchData();
-    }, []);
+    const greeting = user?.firstName ? `Welcome back, ${user.firstName}` : 'Workspace';
 
-    // calculate stats
-    const ticketStats = {
-        open: tickets.filter(t => t.status === 'open').length,
-        inProgress: tickets.filter(t => t.status === 'in-progress').length,
-        resolved: tickets.filter(t => t.status === 'resolved').length,
-        closed: tickets.filter(t => t.status === 'closed').length,
-    };
-
-    const priorityStats = {
-        critical: tickets.filter(t => t.priority === 'critical').length,
-        high: tickets.filter(t => t.priority === 'high').length,
-        medium: tickets.filter(t => t.priority === 'medium').length,
-        low: tickets.filter(t => t.priority === 'low').length,
-    };
-
-    const logStats = {
-        errors: logs.filter(l => l.level === 'error').length,
-        warnings: logs.filter(l => l.level === 'warning').length,
-        info: logs.filter(l => l.level === 'info').length,
-    };
-
-    const totalTickets = tickets.length;
-    const resolvedRate = totalTickets > 0 ? Math.round((ticketStats.resolved / totalTickets) * 100) : 0;
-
-    const buildWeeklyTrend = (items: TicketType[]) => {
-        if (!items.length) return [];
-        const now = new Date();
-        const buckets = Array.from({ length: 4 }).map((_, idx) => {
-            const start = new Date(now);
-            start.setDate(now.getDate() - (3 - idx) * 7);
-            start.setHours(0, 0, 0, 0);
-            const end = new Date(start);
-            end.setDate(start.getDate() + 7);
-            const count = items.filter((t) => {
-                const d = new Date(t.createdAt || t.updatedAt);
-                return d >= start && d < end;
-            }).length;
-            const label = start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-            return { week: label, tickets: count };
-        });
-        return buckets;
-    };
-
-    // Check connection states
-    const isApiOffline = apiReachable === false && !isOfflineMock;
-    const isApiOnline = apiReachable === true;
-    const hasNoData = !loading && (isApiOnline || isOfflineMock) && tickets.length === 0 && logs.length === 0;
-    void buildWeeklyTrend;
-    void isApiOnline;
+    if (!hasAuth) {
+        return (
+            <div className="mx-auto w-full max-w-7xl">
+                <EmptyState
+                    icon={<FiShield size={22} />}
+                    title="Sign in to see your workspace"
+                    description="Dashboard data is scoped to your account."
+                />
+            </div>
+        );
+    }
 
     return (
-        <div className="flex flex-col gap-5 max-w-[1600px] mx-auto w-full relative z-10">
-            {/* Loading State */}
-                {loading && <LoadingSpinner />}
+        <div className="mx-auto flex w-full max-w-7xl flex-col gap-7">
+            <PageHeader
+                title={greeting}
+                subtitle="Tickets, logs and everything currently asking for attention."
+                actions={
+                    <AccentButton
+                        variant="ghost"
+                        size="sm"
+                        icon={<FiRefreshCw size={14} />}
+                        onClick={refetch}
+                        disabled={loading}
+                    >
+                        {loading ? 'Refreshing…' : 'Refresh'}
+                    </AccentButton>
+                }
+            />
 
-                {/* API Offline Banner */}
-                {isApiOffline && (
-                    <div className="mb-6 rounded-xl bg-orange-500/10 border border-orange-500/20 px-4 py-3 flex items-center gap-3 animate-fade-in">
-                        <div className="shrink-0">
-                            {(() => {
-                                const Icon = getIcon('ri-alert-line');
-                                return Icon ? <Icon className="text-orange-500 text-lg transition-colors duration-200" /> : null;
-                            })()}
-                        </div>
-                        <div className="flex-1">
-                            <p className="text-sm font-bold text-orange-500">
-                                API is offline
-                            </p>
-                            <p className="text-xs text-gray-400 mt-0.5 font-medium">
-                                Showing dashboard layout only. Start the server / connect PostgreSQL to load real metrics.
-                            </p>
-                        </div>
-                    </div>
-                )}
+            {partial && (
+                <Surface variant="panel" radius="2xl" padding="sm">
+                    <p className="flex items-center gap-2.5 text-sm text-gray-600 dark:text-gray-400">
+                        <FiAlertOctagon className="shrink-0 text-amber-500" size={16} />
+                        Some panels couldn&apos;t load. What you see below is current; the rest is missing, not zero.
+                    </p>
+                </Surface>
+            )}
 
-                {/* Offline Mock Banner */}
-                {isOfflineMock && (
-                    <div className="mb-6 rounded-xl bg-blue-500/10 border border-blue-500/20 px-4 py-3 flex items-center gap-3 animate-fade-in">
-                        <div className="shrink-0">
-                            {(() => {
-                                const Icon = getIcon('ri-wifi-off-line');
-                                return Icon ? <Icon className="text-blue-500 text-lg transition-colors duration-200" /> : null;
-                            })()}
-                        </div>
-                        <div className="flex-1">
-                            <p className="text-sm font-bold text-blue-500">
-                                后端不可达（Mock 预览）
-                            </p>
-                            <p className="text-xs text-gray-400 mt-0.5 font-medium">
-                                当前展示的是 mock 数据（只读）。启动后端服务后将自动切回真实数据。
-                            </p>
-                        </div>
-                    </div>
-                )}
-
-                {/* Connection Status Banner */}
-                {hasNoData && (
-                    <div className="mb-6 rounded-xl bg-blue-500/10 border border-blue-500/20 px-4 py-3 flex items-center gap-3 animate-fade-in">
-                        <div className="shrink-0">
-                            {(() => {
-                                const InfoIcon = getIcon('ri-alert-line');
-                                return InfoIcon ? <InfoIcon className="text-blue-500 text-lg transition-colors duration-200" /> : null;
-                            })()}
-                        </div>
-                        <div className="flex-1">
-                            <p className="text-sm font-bold text-blue-500">
-                                Database Connection Status
-                            </p>
-                            <p className="text-xs text-gray-400 mt-0.5 font-medium">
-                                Connected, but no records yet. Layout structure is displayed below.
-                            </p>
-                        </div>
-                    </div>
-                )}
-
-                {/* Page header - Invoices language */}
-                {!loading && (
-                    <PageHeader
-                        title="Dashboard"
-                        subtitle="System monitoring & issue tracking overview"
-                        actions={
-                            <button
-                                type="button"
-                                className="bg-white/60 hover:bg-white border border-gray-200 px-4 py-2 rounded-xl text-sm font-semibold flex items-center gap-2 transition shadow-sm"
-                            >
-                                <FiPlus className="w-4 h-4" />
-                                New Ticket
-                            </button>
+            {error ? (
+                <Surface variant="panel" radius="3xl" padding="lg">
+                    <EmptyState
+                        icon={<FiAlertOctagon size={22} />}
+                        title="Couldn't load the workspace"
+                        description={error.message}
+                        action={
+                            <AccentButton variant="dark" size="sm" icon={<FiRefreshCw size={14} />} onClick={refetch}>
+                                Try again
+                            </AccentButton>
                         }
                     />
-                )}
+                </Surface>
+            ) : (
+                <>
+                    {/* ── KPI band ───────────────────────────────── */}
+                    <motion.div
+                        variants={stagger(0.06)}
+                        initial="hidden"
+                        animate="show"
+                        className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
+                    >
+                        <motion.div variants={scaleIn}>
+                            {tickets ? (
+                                <StatTile
+                                    label="Open tickets"
+                                    value={tickets.byStatus.open}
+                                    icon={<FiInbox size={18} />}
+                                    variant="frost"
+                                />
+                            ) : (
+                                <MissingTile label="Open tickets" icon={<FiInbox size={18} />} />
+                            )}
+                        </motion.div>
+                        <motion.div variants={scaleIn}>
+                            {tickets ? (
+                                <StatTile
+                                    label="In progress"
+                                    value={tickets.byStatus.inProgress}
+                                    icon={<FiClock size={18} />}
+                                    variant="frost"
+                                />
+                            ) : (
+                                <MissingTile label="In progress" icon={<FiClock size={18} />} />
+                            )}
+                        </motion.div>
+                        <motion.div variants={scaleIn}>
+                            {logs ? (
+                                <StatTile
+                                    label="Errors logged"
+                                    value={logs.byLevel.errors}
+                                    icon={<FiAlertTriangle size={18} />}
+                                    variant="frost"
+                                />
+                            ) : (
+                                <MissingTile label="Errors logged" icon={<FiAlertTriangle size={18} />} />
+                            )}
+                        </motion.div>
+                        <motion.div variants={scaleIn}>
+                            {logs ? (
+                                <StatTile
+                                    label="Logs, last 24h"
+                                    value={logs.last24Hours}
+                                    icon={<FiActivity size={18} />}
+                                    variant="frost"
+                                />
+                            ) : (
+                                <MissingTile label="Logs, last 24h" icon={<FiActivity size={18} />} />
+                            )}
+                        </motion.div>
+                    </motion.div>
 
-                {/* KPI row - unified glass-panel with 4 KPIs */}
-                {!loading && (
-                    <GlassPanel padding="md" className="grid grid-cols-2 lg:grid-cols-4 gap-6">
-                        <KpiCard
-                            label="Total tickets"
-                            value={totalTickets}
-                            icon={<FiActivity className="w-5 h-5" />}
-                        />
-                        <KpiCard
-                            label="Open issues"
-                            value={ticketStats.open}
-                            icon={<FiAlertCircle className="w-5 h-5" />}
-                        />
-                        <KpiCard
-                            label="In progress"
-                            value={ticketStats.inProgress}
-                            icon={<FiClock className="w-5 h-5" />}
-                        />
-                        <KpiCard
-                            label="Resolved rate"
-                            value={totalTickets > 0 ? `${resolvedRate}%` : '0%'}
-                            icon={<FiCheckCircle className="w-5 h-5" />}
-                        />
-                    </GlassPanel>
-                )}
+                    <div className="grid gap-5 lg:grid-cols-3">
+                        {/* ── Needs attention ────────────────────── */}
+                        <motion.div variants={fadeUp} initial="hidden" animate="show" className="lg:col-span-2">
+                            <Surface variant="panel" radius="3xl" padding="lg" className="h-full">
+                                <div className="flex h-full flex-col gap-5">
+                                    <PanelHead
+                                        icon={<FiAlertTriangle size={17} />}
+                                        title="Needs attention"
+                                        aside={
+                                            focus.length > 0 ? (
+                                                <Badge tone="neutral">{focus.length} signal{focus.length > 1 ? 's' : ''}</Badge>
+                                            ) : undefined
+                                        }
+                                    />
 
-                {/* dark pulse panel - Profit / Payment score / Activity */}
-                {!loading && (
-                    <article className="mt-6">
-                        <DashboardPulsePanel />
-                    </article>
-                )}
+                                    {loading ? (
+                                        <SkeletonPanel lines={3} />
+                                    ) : focus.length === 0 ? (
+                                        <EmptyState
+                                            size="sm"
+                                            icon={<FiCheckCircle size={20} />}
+                                            title="Nothing needs you right now"
+                                            description="No critical tickets, no unstarted work, no error-level logs."
+                                        />
+                                    ) : (
+                                        <ul className="flex flex-col gap-2">
+                                            {focus.map((item) => (
+                                                <li
+                                                    key={item.id}
+                                                    className="flex items-center gap-3 rounded-2xl bg-black/[0.03] px-4 py-3 dark:bg-white/5"
+                                                >
+                                                    <span className={`h-2 w-2 shrink-0 rounded-full ${TONE_DOT[item.tone]}`} />
+                                                    <div className="flex min-w-0 flex-col">
+                                                        <span className="truncate text-sm font-semibold text-brand-dark dark:text-white">
+                                                            {item.label}
+                                                        </span>
+                                                        <span className="truncate text-xs text-gray-500 dark:text-gray-400">
+                                                            {item.hint}
+                                                        </span>
+                                                    </div>
+                                                    <span className="ml-auto font-numbers text-xl font-bold text-brand-dark dark:text-white">
+                                                        <AnimatedNumber value={item.count} />
+                                                    </span>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    )}
+                                </div>
+                            </Surface>
+                        </motion.div>
 
-                {/* main content grid - Always show layout structure */}
-                {!loading && (
-                    <article className="mt-6 grid grid-cols-1 gap-6">
-                        {/* ticket overview - 3 chart (2 row) */}
-                        <section className="grid grid-cols-1 w-full space-y-6">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <TicketStatusChart data={ticketStats} />
-                                <PriorityChart data={priorityStats} />
-                            </div>
-                            <LogsOverviewChart data={logStats} />
-                        </section>
-                        {/* workspace overview - Calendar & Activity (2 cols) */}
-                        <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <RecentActivityList tickets={tickets} logs={logs} />
-                            <CalendarNotes />
-                        </section>
-                        {/* note overview - Notes & Actions (2 cols) */}
-                        <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <NoteStatsChart />
-                            <NoteActivityChart />
-                        </section>
-                        {/* quick actions */}
-                        <QuickActionsBar />
-                    </article>
-                )}
+                        {/* ── Resolution ─────────────────────────── */}
+                        <motion.div variants={fadeUp} initial="hidden" animate="show">
+                            <Surface variant="dark" radius="3xl" padding="lg" className="h-full">
+                                <div className="flex h-full flex-col gap-5">
+                                    <div className="flex items-center gap-3">
+                                        <span className="grid h-9 w-9 place-items-center rounded-xl bg-white/10 text-brand-accent">
+                                            <FiCheckCircle size={17} />
+                                        </span>
+                                        <h2 className="text-base font-bold font-heading text-white">Resolution</h2>
+                                    </div>
+
+                                    {loading ? (
+                                        <SkeletonPanel lines={2} />
+                                    ) : resolutionRate === null ? (
+                                        <p className="text-sm leading-relaxed text-gray-400">
+                                            No tickets yet — a rate will appear once there&apos;s something to resolve.
+                                        </p>
+                                    ) : (
+                                        <>
+                                            <div className="flex items-end gap-2">
+                                                <span className="font-numbers text-5xl font-bold leading-none text-white">
+                                                    <AnimatedNumber value={resolutionRate} />
+                                                </span>
+                                                <span className="pb-1 text-lg font-semibold text-brand-accent">%</span>
+                                            </div>
+                                            <Meter value={resolutionRate} />
+                                            <p className="mt-auto text-sm text-gray-400">
+                                                <span className="font-numbers font-semibold text-white">
+                                                    {(tickets?.byStatus.resolved ?? 0) + (tickets?.byStatus.closed ?? 0)}
+                                                </span>{' '}
+                                                of{' '}
+                                                <span className="font-numbers font-semibold text-white">
+                                                    {tickets?.total ?? 0}
+                                                </span>{' '}
+                                                tickets resolved or closed.
+                                            </p>
+                                        </>
+                                    )}
+                                </div>
+                            </Surface>
+                        </motion.div>
+                    </div>
+
+                    {/* ── Breakdowns ─────────────────────────────── */}
+                    <div className="grid gap-5 lg:grid-cols-2">
+                        <motion.div variants={fadeUp} initial="hidden" animate="show">
+                            <Surface variant="panel" radius="3xl" padding="lg" className="h-full">
+                                <div className="flex flex-col gap-5">
+                                    <PanelHead
+                                        icon={<FiAlertTriangle size={17} />}
+                                        title="Tickets by priority"
+                                        aside={
+                                            tickets ? (
+                                                <span className="font-numbers text-sm text-gray-500 dark:text-gray-400">
+                                                    {tickets.total} total
+                                                </span>
+                                            ) : undefined
+                                        }
+                                    />
+                                    {loading ? (
+                                        <SkeletonPanel />
+                                    ) : !tickets ? (
+                                        <DegradedPanel what="Ticket stats" onRetry={refetch} />
+                                    ) : (
+                                        <div className="flex flex-col gap-4">
+                                            <DistRow label="Critical" value={tickets.byPriority.critical} total={tickets.total} />
+                                            <DistRow label="High" value={tickets.byPriority.high} total={tickets.total} />
+                                            <DistRow label="Medium" value={tickets.byPriority.medium} total={tickets.total} />
+                                            <DistRow label="Low" value={tickets.byPriority.low} total={tickets.total} />
+                                        </div>
+                                    )}
+                                </div>
+                            </Surface>
+                        </motion.div>
+
+                        <motion.div variants={fadeUp} initial="hidden" animate="show">
+                            <Surface variant="panel" radius="3xl" padding="lg" className="h-full">
+                                <div className="flex flex-col gap-5">
+                                    <PanelHead
+                                        icon={<FiTerminal size={17} />}
+                                        title="Logs by level"
+                                        aside={
+                                            logs ? (
+                                                <span className="font-numbers text-sm text-gray-500 dark:text-gray-400">
+                                                    {logs.last7Days} in 7d
+                                                </span>
+                                            ) : undefined
+                                        }
+                                    />
+                                    {loading ? (
+                                        <SkeletonPanel />
+                                    ) : !logs ? (
+                                        <DegradedPanel what="Log stats" onRetry={refetch} />
+                                    ) : (
+                                        <div className="flex flex-col gap-4">
+                                            <DistRow label="Errors" value={logs.byLevel.errors} total={logs.total} />
+                                            <DistRow label="Warnings" value={logs.byLevel.warnings} total={logs.total} />
+                                            <DistRow label="Info" value={logs.byLevel.info} total={logs.total} />
+                                        </div>
+                                    )}
+                                </div>
+                            </Surface>
+                        </motion.div>
+                    </div>
+                </>
+            )}
         </div>
     );
 };
