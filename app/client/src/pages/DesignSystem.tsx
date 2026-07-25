@@ -16,6 +16,9 @@ import {
     FiEye,
     FiCheckCircle,
     FiPaperclip,
+    FiEdit3,
+    FiMail,
+    FiLock,
 } from 'react-icons/fi';
 import {
     Surface,
@@ -30,6 +33,8 @@ import {
     SegmentedControl,
     EmptyState,
     GanttTrack,
+    Field,
+    Input,
     type GanttBar,
 } from '@/components/design-system';
 import { PageHeader } from '@/components/common/layout';
@@ -93,6 +98,8 @@ const DesignSystem: FC = () => {
     const [range, setRange] = useState('month');
     const [charts, setCharts] = useState<string[]>(['column', 'scatter']);
     const [showDone, setShowDone] = useState('show');
+    const [dsEmail, setDsEmail] = useState('');
+    const [dsPassword, setDsPassword] = useState('');
 
     return (
         <div className="flex flex-col gap-10 pb-16 max-w-[1400px] mx-auto w-full">
@@ -227,6 +234,65 @@ const DesignSystem: FC = () => {
                         />
                     </Surface>
                 </div>
+            </Section>
+
+            {/* ── Form kit (Sprint 1 — the auth pages' primitives) ───────── */}
+            <Section id="forms" icon={<FiEdit3 className="w-4 h-4" />} title="Form kit">
+                <Surface variant="panel" padding="md" className="flex flex-col gap-6">
+                    <p className="text-sm text-gray-500 dark:text-gray-400 max-w-2xl">
+                        <strong className="text-brand-dark dark:text-white">Field</strong> owns the label,
+                        hint, error and required marker, and wires <code className="font-mono text-xs">htmlFor</code>,{' '}
+                        <code className="font-mono text-xs">aria-describedby</code>,{' '}
+                        <code className="font-mono text-xs">aria-invalid</code> and{' '}
+                        <code className="font-mono text-xs">aria-required</code> onto the control it wraps.
+                        Controls read that out of context — never from props — so the accessibility is
+                        solved once here rather than re-remembered per form. Select, Checkbox, Switch,
+                        RadioGroup and <code className="font-mono text-xs">useFormState</code> land with the
+                        full kit in Sprint 2.
+                    </p>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-6 gap-y-5">
+                        <Field label="Email" hint="We only use this to sign you in." required id="ds-email">
+                            <Input
+                                type="email"
+                                placeholder="you@company.com"
+                                icon={<FiMail className="w-4 h-4" />}
+                                value={dsEmail}
+                                onChange={(e) => setDsEmail(e.target.value)}
+                            />
+                        </Field>
+
+                        <Field label="Password" required id="ds-password">
+                            <Input
+                                type="password"
+                                placeholder="••••••••"
+                                icon={<FiLock className="w-4 h-4" />}
+                                revealable
+                                value={dsPassword}
+                                onChange={(e) => setDsPassword(e.target.value)}
+                            />
+                        </Field>
+
+                        <Field
+                            label="Workspace name"
+                            error="That name is already taken."
+                            required
+                            id="ds-invalid"
+                        >
+                            <Input defaultValue="apexops" />
+                        </Field>
+
+                        <Field label="Billing reference" hint="Optional — appears on invoices." id="ds-disabled">
+                            <Input placeholder="Unavailable on this plan" disabled />
+                        </Field>
+                    </div>
+
+                    <p className="text-xs text-gray-400">
+                        The third field shows the error state: the message is{' '}
+                        <code className="font-mono">role=&quot;alert&quot;</code> and replaces the hint rather
+                        than stacking under it, so there is only ever one line of guidance to read.
+                    </p>
+                </Surface>
             </Section>
 
             {/* ── Composition primitives (from .agents/template) ────────── */}
