@@ -40,7 +40,8 @@ export const DEV_CREDENTIALS: Record<DevRole, { email: string; password: string 
 };
 
 const SESSIONS_KEY = 'devSessions';
-const ACTIVE_KEY = 'devActiveRole';
+/** Legacy key, no longer written. Still cleared so old browser state doesn't linger. */
+const LEGACY_ACTIVE_KEY = 'devActiveRole';
 
 /** Belt-and-braces: `import.meta.env.DEV` already dead-codes these away in a build. */
 export function devSwitcherEnabled(): boolean {
@@ -61,15 +62,41 @@ function writeSessions(sessions: DevSessionMap): void {
     localStorage.setItem(SESSIONS_KEY, JSON.stringify(sessions));
 }
 
+/**
+ * Which role is signed in right now, **derived** from the canonical session rather
+ * than tracked alongside it.
+ *
+ * This was originally a separate `devActiveRole` key, and that was a bug: signing
+ * out via the app's own top bar (or signing in as anyone else through the normal
+ * form) left the key saying `admin` while the real session was something else. The
+ * switcher then marked admin as active and *disabled that button* — so the control
+ * lied about who was signed in and blocked the one click that would fix it.
+ *
+ * Two places recording the same fact will disagree eventually. Deriving it from the
+ * `user` entry that `AuthContext` actually reads makes disagreement impossible, and
+ * it self-corrects no matter how the session changed.
+ *
+ * Returns null when signed out, or when signed in as an account that isn't one of
+ * the seeded pair.
+ */
 export function readActiveRole(): DevRole | null {
     if (!devSwitcherEnabled()) return null;
-    const value = localStorage.getItem(ACTIVE_KEY);
-    return value === 'user' || value === 'admin' ? value : null;
+    try {
+        const raw = localStorage.getItem('user');
+        if (!raw) return null;
+        const { email } = JSON.parse(raw) as User;
+        const match = (Object.entries(DEV_CREDENTIALS) as [DevRole, { email: string }][]).find(
+            ([, creds]) => creds.email === email
+        );
+        return match ? match[0] : null;
+    } catch {
+        return null;
+    }
 }
 
 export function clearDevSessions(): void {
     localStorage.removeItem(SESSIONS_KEY);
-    localStorage.removeItem(ACTIVE_KEY);
+    localStorage.removeItem(LEGACY_ACTIVE_KEY);
 }
 
 /** Seconds left on a JWT, or 0 if it can't be read. Unsigned parse — display only. */
@@ -175,13 +202,29 @@ export async function activateRole(role: DevRole): Promise<DevSession> {
     const stored = sessions[role];
     if (!stored) throw new Error(`No stored ${role} session. Sign in to both first.`);
 
-    const fresh = await refreshIfStale(stored);
+    // Refresh, and if that fails, sign in again from scratch.
+    //
+    // The fallback is load-bearing, not defensive padding. The app's own Sign out
+    // button calls POST /api/auth/logout, which deletes *the active session's*
+    // refresh token server-side — so signing out while on admin leaves the stored
+    // admin refresh token dead. Without this, switching back to admin after its
+    // access token expired would dump you at /login, which is precisely the thing
+    // this tool exists to avoid. Re-login is available because the seeded
+    // credentials are known constants.
+    let fresh = await refreshIfStale(stored);
     if (!fresh) {
-        throw new Error(`The ${role} session expired and could not be refreshed. Sign in to both again.`);
+        try {
+            fresh = await loginAs(role);
+        } catch (err) {
+            throw new Error(
+                `The ${role} session expired and could not be renewed ` +
+                    `(${err instanceof Error ? err.message : 'unknown error'}). ` +
+                    'Try "Re-sign in to both".'
+            );
+        }
     }
 
     writeSessions({ ...sessions, [role]: fresh });
-    localStorage.setItem(ACTIVE_KEY, role);
     localStorage.setItem('accessToken', fresh.accessToken);
     localStorage.setItem('refreshToken', fresh.refreshToken);
     localStorage.setItem('user', JSON.stringify(fresh.user));
