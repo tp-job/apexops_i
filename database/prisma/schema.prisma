@@ -34,8 +34,9 @@ model User {
   notes           Note[]
   logs            Log[]
   refreshTokens   RefreshToken[]
-  assignedTickets Ticket[] @relation("assignee")
-  reportedTickets Ticket[] @relation("reporter")
+  assignedTickets Ticket[]        @relation("assignee")
+  reportedTickets Ticket[]        @relation("reporter")
+  ticketComments  TicketComment[] @relation("commentAuthor")
 
   @@map("users")
 }
@@ -94,6 +95,12 @@ model Note {
   linkUrl        String?  @map("link_url")
   checklistItems Json     @default("[]") @map("checklist_items")
   quote          Json     @default("{}")
+  /// The day this note is *planned for*. Null means unscheduled, in which case
+  /// the calendar falls back to `createdAt` — so existing rows keep appearing
+  /// exactly where they did before this field existed.
+  scheduledFor   DateTime? @map("scheduled_for")
+  /// Optional deadline, independent of `scheduledFor` (plan a task Monday, due Friday).
+  dueDate        DateTime? @map("due_date")
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @default(now()) @updatedAt @map("updated_at")
 
@@ -101,32 +108,92 @@ model Note {
 
   @@index([userId])
   @@index([isPinned])
+  @@index([userId, scheduledFor])
+  @@index([userId, dueDate])
   @@map("notes")
 }
 
 // ── Tickets ──────────────────────────────────────────────────
+
+/// Wire values stay hyphenated (`in-progress`) — the API maps enum <-> wire so the
+/// client's discriminated unions in `types/bugTrackerApp.ts` keep working unchanged.
+enum TicketStatus {
+  open
+  in_progress @map("in-progress")
+  resolved
+  closed
+
+  @@map("ticket_status")
+}
+
+enum TicketPriority {
+  low
+  medium
+  high
+  critical
+
+  @@map("ticket_priority")
+}
+
 model Ticket {
-  id          Int      @id @default(autoincrement())
+  id          Int            @id @default(autoincrement())
   title       String
   description String?
-  status      String?  @default("open")
-  priority    String?  @default("medium")
+  status      TicketStatus   @default(open)
+  priority    TicketPriority @default(medium)
+  /// Legacy free-text names, kept only as a display denorm while the FK columns
+  /// below become the source of truth (spec D2). Dropped once no reads remain.
   assignee    String?
-  reporter    String?  @default("System")
-  assigneeId  Int?     @map("assignee_id")
-  reporterId  Int?     @map("reporter_id")
-  tags        Json     @default("[]")
-  relatedLogs Json     @default("[]") @map("related_logs")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at")
+  reporter    String?        @default("System")
+  assigneeId  Int?           @map("assignee_id")
+  reporterId  Int?           @map("reporter_id")
+  tags        Json           @default("[]")
+  relatedLogs Json           @default("[]") @map("related_logs")
+  /// Soft delete (spec D4) — `DELETE /:id` archives instead of destroying.
+  archivedAt  DateTime?      @map("archived_at")
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @default(now()) @updatedAt @map("updated_at")
 
-  assigneeUser User? @relation("assignee", fields: [assigneeId], references: [id], onDelete: SetNull)
-  reporterUser User? @relation("reporter", fields: [reporterId], references: [id], onDelete: SetNull)
+  assigneeUser User?           @relation("assignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  reporterUser User?           @relation("reporter", fields: [reporterId], references: [id], onDelete: SetNull)
+  comments     TicketComment[]
 
   @@index([assigneeId])
   @@index([reporterId])
   @@index([status])
+  @@index([archivedAt])
   @@map("tickets")
+}
+
+// ── Ticket comments / activity ───────────────────────────────
+
+enum TicketCommentKind {
+  comment
+  activity
+
+  @@map("ticket_comment_kind")
+}
+
+/// One thread per ticket carrying both human comments and system-generated
+/// activity entries (status/priority/assignee changes), so triage history reads
+/// in a single chronological stream.
+model TicketComment {
+  id        Int               @id @default(autoincrement())
+  ticketId  Int               @map("ticket_id")
+  authorId  Int?              @map("author_id")
+  kind      TicketCommentKind @default(comment)
+  body      String
+  /// For `activity` entries: `{ field, from, to }`. Empty for human comments.
+  meta      Json              @default("{}")
+  createdAt DateTime          @default(now()) @map("created_at")
+  updatedAt DateTime          @default(now()) @updatedAt @map("updated_at")
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  author User?  @relation("commentAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([ticketId, createdAt])
+  @@index([authorId])
+  @@map("ticket_comments")
 }
 
 // ── Refresh Tokens ───────────────────────────────────────────

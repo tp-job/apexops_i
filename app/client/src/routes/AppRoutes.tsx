@@ -4,6 +4,9 @@ import Home from '@/pages/Home';
 import Login from '@/pages/Login';
 import Register from '@/pages/Register';
 import Dashboard from '@/pages/Dashboard';
+import BugTracker from '@/pages/BugTracker';
+import NotesCalendar from '@/pages/NotesCalendar';
+import Chat from '@/pages/Chat';
 import DesignSystem from '@/pages/DesignSystem';
 import AppLayout from '@/layouts/AppLayout';
 import ProtectedRoute from '@/routes/ProtectedRoute';
@@ -37,6 +40,9 @@ const AppRoutes: FC = () => (
             <Route element={<ProtectedRoute />}>
                 <Route element={<AppLayout />}>
                     <Route path="/dashboard" element={<Dashboard />} />
+                    <Route path="/bug-tracker" element={<BugTracker />} />
+                    <Route path="/notes" element={<NotesCalendar />} />
+                    <Route path="/chat" element={<Chat />} />
                 </Route>
             </Route>
 

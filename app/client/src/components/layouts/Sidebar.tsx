@@ -37,9 +37,9 @@ export interface NavItem {
 
 const PRIMARY: NavItem[] = [
     { to: '/dashboard', label: 'Dashboard', icon: <FiGrid size={18} />, ready: true },
-    { to: '/bug-tracker', label: 'Bug Tracker', icon: <FiAlertTriangle size={18} /> },
-    { to: '/notes', label: 'Notes & Calendar', icon: <FiCalendar size={18} /> },
-    { to: '/chat', label: 'Chat', icon: <FiMessageSquare size={18} /> },
+    { to: '/bug-tracker', label: 'Bug Tracker', icon: <FiAlertTriangle size={18} />, ready: true },
+    { to: '/notes', label: 'Notes & Calendar', icon: <FiCalendar size={18} />, ready: true },
+    { to: '/chat', label: 'Chat', icon: <FiMessageSquare size={18} />, ready: true },
 ];
 
 const ADMIN: NavItem[] = [

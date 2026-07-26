@@ -12,6 +12,11 @@ export interface CalendarNoteApi {
     title: string;
     type: string;
     color?: string | null;
+    /** The day the note is planned for. Null means unscheduled — falls back to `createdAt`. */
+    scheduledFor?: string | null;
+    dueDate?: string | null;
+    /** False when the note appears on this day only because it was written then. */
+    isScheduled?: boolean;
     createdAt: string;
     updatedAt: string;
 }
@@ -19,6 +24,8 @@ export interface CalendarNoteApi {
 export interface CalendarNotesResponse {
     year: number;
     month: number;
+    /** IANA zone the server used to bucket days — resolved from the user's profile. */
+    timeZone?: string;
     notesByDay: Record<string, CalendarNoteApi[]>;
     totalNotes: number;
 }
@@ -51,6 +58,7 @@ export async function fetchCalendarNotes(params: FetchCalendarNotesParams): Prom
         return {
             year: data.year ?? year,
             month: data.month ?? month,
+            timeZone: data.timeZone,
             notesByDay: data.notesByDay ?? {},
             totalNotes: data.totalNotes ?? 0,
         };

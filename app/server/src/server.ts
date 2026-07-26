@@ -17,7 +17,14 @@ import http from 'http';
 import path from 'path';
 import WebSocket from 'ws';
 import { Server as SocketIOServer } from 'socket.io';
+import jwt from 'jsonwebtoken';
 import type { ChatMessage } from './utils/chat';
+import {
+    parseDirectRoom,
+    isParticipant,
+    sanitizeMessageContent,
+    RateLimiter,
+} from './utils/chatRoom';
 import prisma from './lib/prisma';
 
 // ── Express App ──────────────────────────────────────────────
@@ -121,6 +128,53 @@ const connectedClients = {
 // Simple in-memory registry for chat clients (Instagram-style DM demo)
 const chatClients = new Map<string, { userId: string }>();
 
+interface SocketUser {
+    id: number;
+    email: string;
+    name: string;
+}
+
+/** Sockets that presented a valid token, keyed by socket id. */
+const socketUsers = new Map<string, SocketUser>();
+const chatLimiters = new Map<string, RateLimiter>();
+
+/**
+ * Handshake authentication.
+ *
+ * Deliberately *optional*: the console-monitor `target-app` clients and
+ * `useBugTrackerSocket` connect without a token and must keep working. A token
+ * that is present but invalid is rejected outright rather than downgraded to
+ * anonymous — that combination is only ever a bug or an attack.
+ *
+ * Chat handlers below then require `socketUsers` to hold an entry, so the chat
+ * surface is authenticated even though the transport is shared.
+ */
+io.use(async (socket, next) => {
+    const token = (socket.handshake.auth as { token?: unknown } | undefined)?.token;
+    if (typeof token !== 'string' || !token) return next();
+
+    try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'mySecretKey') as {
+            id: number;
+            email: string;
+        };
+        const user = await prisma.user.findUnique({
+            where: { id: decoded.id },
+            select: { id: true, firstName: true, lastName: true, email: true },
+        });
+        if (!user) return next(new Error('Unauthorized'));
+
+        socketUsers.set(socket.id, {
+            id: user.id,
+            email: user.email,
+            name: `${user.firstName} ${user.lastName}`.trim(),
+        });
+        return next();
+    } catch {
+        return next(new Error('Unauthorized'));
+    }
+});
+
 io.on('connection', (socket) => {
     console.log('👤 User connected via WebSocket:', socket.id);
 
@@ -137,29 +191,86 @@ io.on('connection', (socket) => {
             connectedClients.targetApps.set(socket.id, appInfo);
             socket.join('target-apps');
             io.to('monitors').emit('target-app-connected', appInfo);
-        } else if (data.clientType === 'chat' && data.userId) {
-            // Chat client (used by frontend Chat page)
-            chatClients.set(socket.id, { userId: data.userId });
-            socket.join('chat-users');
-            console.log('💬 Chat client registered:', data.userId, 'via', socket.id);
+        } else if (data.clientType === 'chat') {
+            // Identity comes from the verified token, never from the payload —
+            // `data.userId` is ignored precisely because a client controls it.
+            const user = socketUsers.get(socket.id);
+            if (!user) {
+                socket.emit('chat-error', { error: 'Authentication required for chat' });
+                return;
+            }
+            chatClients.set(socket.id, { userId: String(user.id) });
+            chatLimiters.set(socket.id, new RateLimiter(30, 10_000));
+            console.log('💬 Chat client registered:', user.id, 'via', socket.id);
         }
     });
 
-    // Real-time chat message broadcast (Instagram-style DM UI)
-    socket.on('chat-message', (msg: ChatMessage) => {
-        // Basic validation: must have roomId and senderId
-        if (!msg?.roomId || !msg?.senderId) return;
+    /**
+     * Join a direct conversation.
+     *
+     * The room id encodes its two participants, so membership is verified here
+     * rather than assumed. Previously every chat client sat in one global
+     * `chat-users` room and the *browser* filtered by roomId — which meant the
+     * server had already handed every message to everyone.
+     */
+    socket.on('chat-join', (data: { roomId?: unknown }) => {
+        const user = socketUsers.get(socket.id);
+        if (!user) {
+            socket.emit('chat-error', { error: 'Authentication required for chat' });
+            return;
+        }
 
-        // Echo message to all connected chat clients (frontend filters by roomId)
-        io.to('chat-users').emit('chat-message', msg);
+        const room = parseDirectRoom(data?.roomId);
+        if (!room || !isParticipant(room, user.id)) {
+            socket.emit('chat-error', { error: 'Not a participant in that conversation' });
+            return;
+        }
+
+        // One conversation at a time: leaving the others keeps the socket's room
+        // set equal to what the user is actually looking at.
+        socket.rooms.forEach((r) => {
+            if (r !== socket.id && parseDirectRoom(r)) socket.leave(r);
+        });
+        socket.join(room.id);
     });
 
-    // Typing indicator
-    socket.on('user-typing', (data: { roomId: string; userId: string }) => {
-        if (!data?.roomId || !data?.userId) return;
+    // Real-time chat message relay, scoped to the conversation's participants.
+    socket.on('chat-message', (msg: Partial<ChatMessage>) => {
+        const user = socketUsers.get(socket.id);
+        if (!user) return;
 
-        // Broadcast to other chat users (except sender)
-        socket.to('chat-users').emit('user-typing', data);
+        if (!chatLimiters.get(socket.id)?.allow()) {
+            socket.emit('chat-error', { error: 'Slow down' });
+            return;
+        }
+
+        const room = parseDirectRoom(msg?.roomId);
+        if (!room || !isParticipant(room, user.id)) return;
+
+        const content = sanitizeMessageContent(msg?.content);
+        if (!content) return;
+
+        // Rebuilt server-side. Nothing the client claimed about *who sent this*
+        // survives, so a client cannot post as another user.
+        io.to(room.id).emit('chat-message', {
+            id: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+            roomId: room.id,
+            senderId: String(user.id),
+            senderName: user.name,
+            content,
+            createdAt: new Date().toISOString(),
+        });
+    });
+
+    // Typing indicator — same authorisation, same room scope.
+    socket.on('user-typing', (data: { roomId?: unknown }) => {
+        const user = socketUsers.get(socket.id);
+        if (!user) return;
+
+        const room = parseDirectRoom(data?.roomId);
+        if (!room || !isParticipant(room, user.id)) return;
+
+        socket.to(room.id).emit('user-typing', { roomId: room.id, userId: String(user.id) });
     });
 
     socket.on('console-logs', async (data: { logs: any[] }) => {
@@ -179,6 +290,8 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => {
         connectedClients.monitors.delete(socket.id);
         chatClients.delete(socket.id);
+        socketUsers.delete(socket.id);
+        chatLimiters.delete(socket.id);
         if (connectedClients.targetApps.has(socket.id)) {
             const appInfo = connectedClients.targetApps.get(socket.id);
             connectedClients.targetApps.delete(socket.id);

@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
+import { getAuthToken } from '@/api/config';
 import type { ChatMessage, TypingEvent } from '@/types/chat';
 
 interface UseChatOptions {
+    /** Only used to decide whether to connect and to label own messages — the
+     *  server derives the real sender identity from the access token. */
     currentUserId: number | null;
-    currentUserName: string;
-    currentUserAvatar?: string;
     /** Conversation to join — from `utils/chatApi.ts`'s `getDirectRoomId`. `null` while no chat is open. */
     roomId: string | null;
 }
@@ -15,6 +16,8 @@ export interface UseChatResult {
     connected: boolean;
     /** Other participants currently typing in this room. */
     typingUserIds: string[];
+    /** Server-side rejection (auth, room membership, rate limit), or null. */
+    error: string | null;
     sendMessage: (content: string) => void;
     notifyTyping: () => void;
 }
@@ -32,20 +35,23 @@ const TYPING_TIMEOUT_MS = 3000;
  * not survive the 2026-07-24 UI reset. See `.agents/docs/frontend/user-flow.md`
  * Finding 3.
  *
- * Messages are **not persisted** — the server only relays (`io.to('chat-users')
- * .emit(...)`, no `ChatMessage` Prisma model, no history endpoint). Sent messages
- * are added to local state from the server's own echo, not optimistically, since
- * the server broadcasts to the whole room including the sender.
+ * **Authorisation lives on the server.** The handshake carries the access token;
+ * the server verifies it, derives the sender from it, and emits only into the
+ * conversation's own room after checking the caller is one of its two
+ * participants. The `roomId` comparisons below are a *display* concern (ignore
+ * echoes for a room you've since navigated away from) — they are no longer what
+ * keeps one user's messages away from another. Do not reintroduce a global room.
+ *
+ * Messages are still **not persisted** — the server relays, there is no
+ * `ChatMessage` model and no history endpoint. Sent messages appear from the
+ * server's own echo rather than optimistically, so what you see is what was
+ * actually accepted.
  */
-export function useChat({
-    currentUserId,
-    currentUserName,
-    currentUserAvatar,
-    roomId,
-}: UseChatOptions): UseChatResult {
+export function useChat({ currentUserId, roomId }: UseChatOptions): UseChatResult {
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [connected, setConnected] = useState(false);
     const [typingUserIds, setTypingUserIds] = useState<string[]>([]);
+    const [error, setError] = useState<string | null>(null);
     const socketRef = useRef<Socket | null>(null);
     const typingTimeouts = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
@@ -56,9 +62,14 @@ export function useChat({
     roomIdRef.current = roomId;
 
     // Switching conversations starts with a clean pane — there's no history to fetch.
+    // The server is told too, so the socket leaves the old room instead of
+    // lingering in it.
     useEffect(() => {
         setMessages([]);
         setTypingUserIds([]);
+        if (roomId && socketRef.current?.connected) {
+            socketRef.current.emit('chat-join', { roomId });
+        }
     }, [roomId]);
 
     useEffect(() => {
@@ -70,16 +81,28 @@ export function useChat({
             reconnection: true,
             reconnectionAttempts: 5,
             reconnectionDelay: 1000,
+            // Verified server-side on every connect, including reconnects.
+            auth: { token: getAuthToken() },
         });
         socketRef.current = socket;
 
         socket.on('connect', () => {
             setConnected(true);
-            socket.emit('register', { clientType: 'chat', userId: String(currentUserId) });
+            setError(null);
+            socket.emit('register', { clientType: 'chat' });
+            // Re-join after a reconnect, otherwise the socket is authenticated
+            // but sitting in no conversation.
+            if (roomIdRef.current) socket.emit('chat-join', { roomId: roomIdRef.current });
         });
 
         socket.on('disconnect', () => setConnected(false));
-        socket.on('connect_error', () => setConnected(false));
+        socket.on('connect_error', (err: Error) => {
+            setConnected(false);
+            setError(err.message === 'Unauthorized' ? 'Your session has expired. Sign in again.' : null);
+        });
+        socket.on('chat-error', (payload: { error?: string }) => {
+            setError(payload?.error ?? 'The server rejected that.');
+        });
 
         socket.on('chat-message', (msg: ChatMessage) => {
             if (msg.roomId !== roomIdRef.current) return;
@@ -108,24 +131,18 @@ export function useChat({
         (content: string) => {
             const trimmed = content.trim();
             if (!trimmed || !roomId || !currentUserId || !socketRef.current) return;
-            const msg: ChatMessage = {
-                id: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
-                roomId,
-                senderId: String(currentUserId),
-                senderName: currentUserName,
-                senderAvatar: currentUserAvatar,
-                content: trimmed,
-                createdAt: new Date().toISOString(),
-            };
-            socketRef.current.emit('chat-message', msg);
+            // Only the room and the text are sent. Identity and message id are
+            // assigned server-side from the verified token — anything this client
+            // claimed about the sender would be discarded anyway.
+            socketRef.current.emit('chat-message', { roomId, content: trimmed });
         },
-        [roomId, currentUserId, currentUserName, currentUserAvatar],
+        [roomId, currentUserId],
     );
 
     const notifyTyping = useCallback(() => {
         if (!roomId || !currentUserId || !socketRef.current) return;
-        socketRef.current.emit('user-typing', { roomId, userId: String(currentUserId) } satisfies TypingEvent);
+        socketRef.current.emit('user-typing', { roomId });
     }, [roomId, currentUserId]);
 
-    return { messages, connected, typingUserIds, sendMessage, notifyTyping };
+    return { messages, connected, typingUserIds, error, sendMessage, notifyTyping };
 }
