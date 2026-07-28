@@ -52,7 +52,10 @@ export function mapNotesToCalendarEvents(notesByDay: Record<string, CalendarNote
     const events: CalendarEvent[] = [];
     Object.entries(notesByDay).forEach(([, notes]) => {
         notes.forEach((note) => {
-            const d = dayjs(note.createdAt);
+            // A note sits on its scheduled day when it has one; unscheduled notes
+            // still fall back to when they were written, so nothing disappears from
+            // the calendar just because it predates scheduling.
+            const d = dayjs(note.scheduledFor ?? note.createdAt);
             const h = d.hour();
             const hour12 = h % 12 || 12;
             const amPm: 'AM' | 'PM' = h < 12 ? 'AM' : 'PM';

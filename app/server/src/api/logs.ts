@@ -1,6 +1,6 @@
 import express, { Request, Response } from 'express';
 import prisma from '../lib/prisma';
-import { authenticate } from '../middleware/auth';
+import { authenticate, authorize } from '../middleware/auth';
 import { validate } from '../middleware/validate';
 import { createLogSchema, batchLogSchema } from '../schemas/log.schema';
 import { Prisma } from '@prisma/client';
@@ -122,14 +122,47 @@ router.delete('/:id', async (req: Request, res: Response): Promise<void> => {
 });
 
 // ── DELETE / ─────────────────────────────────────────────────
-router.delete('/', async (req: Request, res: Response): Promise<void> => {
+/**
+ * Bulk log deletion. Closed 2026-07-27 (spec G2).
+ *
+ * This route previously took `authenticate` only and built `where` from optional
+ * query params — so `DELETE /api/logs` with no parameters was `deleteMany({})`,
+ * an unrecoverable wipe of every log row, reachable by **any** signed-in user.
+ * Two independent problems, so two independent fixes:
+ *
+ *   1. `authorize('admin')` — bulk destruction is not a normal-user action.
+ *   2. A filter is now REQUIRED. Even an admin cannot issue an unfiltered wipe by
+ *      accident; deleting everything has to be spelled out as `all=true`.
+ *
+ * Defence in depth on purpose: the role check is the boundary, and the required
+ * filter is what stops a mis-typed curl from an account that legitimately holds
+ * the role.
+ */
+router.delete('/', authorize('admin'), async (req: Request, res: Response): Promise<void> => {
     try {
-        const { level, olderThan } = req.query;
+        const { level, olderThan, all } = req.query;
+
         const where: Prisma.LogWhereInput = {};
         if (level) where.level = level as string;
-        if (olderThan) where.createdAt = { lt: new Date(olderThan as string) };
+        if (olderThan) {
+            const cutoff = new Date(olderThan as string);
+            if (Number.isNaN(cutoff.getTime())) {
+                res.status(400).json({ error: 'olderThan must be a valid date' });
+                return;
+            }
+            where.createdAt = { lt: cutoff };
+        }
+
+        if (!Object.keys(where).length && all !== 'true') {
+            res.status(400).json({
+                error: 'Refusing to delete every log without an explicit filter',
+                detail: 'Pass level and/or olderThan, or all=true to confirm a full wipe.',
+            });
+            return;
+        }
 
         const result = await prisma.log.deleteMany({ where });
+        console.warn(`⚠️  ${req.user?.email} deleted ${result.count} log(s) with filter ${JSON.stringify(req.query)}`);
         res.json({ deleted: result.count });
     } catch (err: any) {
         console.error('Error deleting logs:', err);

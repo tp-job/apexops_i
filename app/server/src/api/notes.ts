@@ -2,7 +2,8 @@ import express, { Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import { authenticate } from '../middleware/auth';
 import { validate } from '../middleware/validate';
-import { createNoteSchema, updateNoteSchema } from '../schemas/note.schema';
+import { createNoteSchema, updateNoteSchema, calendarParamsSchema } from '../schemas/note.schema';
+import { resolveTimeZone, zonedDayOfMonth, zonedMonthRange } from '../utils/timezone';
 
 const router = express.Router();
 
@@ -19,9 +20,24 @@ const formatNote = (n: any) => ({
     linkUrl: n.linkUrl,
     checklistItems: n.checklistItems || [],
     quote: n.quote || {},
+    scheduledFor: n.scheduledFor ?? null,
+    dueDate: n.dueDate ?? null,
     createdAt: n.createdAt,
     updatedAt: n.updatedAt,
 });
+
+/**
+ * Parses a route id, returning null for anything non-numeric so the caller can
+ * answer 404 instead of handing `NaN` to Prisma and 500-ing.
+ */
+const parseNoteId = (raw: string | string[] | undefined): number | null => {
+    if (typeof raw !== 'string') return null;
+    const id = Number.parseInt(raw, 10);
+    return Number.isSafeInteger(id) && id > 0 ? id : null;
+};
+
+/** Optional date fields arrive as ISO strings or explicit null; both are meaningful. */
+const toDateOrNull = (v: unknown): Date | null => (typeof v === 'string' ? new Date(v) : null);
 
 // ── GET / ────────────────────────────────────────────────────
 router.get('/', authenticate, async (req: Request, res: Response): Promise<void> => {
@@ -118,31 +134,55 @@ router.get('/stats/overview', authenticate, async (req: Request, res: Response):
 
 // ── GET /calendar/:year/:month ───────────────────────────────
 router.get('/calendar/:year/:month', authenticate, async (req: Request, res: Response): Promise<void> => {
+    const params = calendarParamsSchema.safeParse(req.params);
+    if (!params.success) {
+        res.status(400).json({ error: 'Invalid year or month' });
+        return;
+    }
+    const { year, month } = params.data;
+
     try {
-        const year = parseInt(req.params.year as string);
-        const month = parseInt(req.params.month as string);
         const userId = req.user!.id;
 
-        const startDate = new Date(year, month - 1, 1);
-        const endDate = new Date(year, month, 1);
+        // Buckets resolve in the *user's* zone, not the server's.
+        const user = await prisma.user.findUnique({ where: { id: userId }, select: { timezone: true } });
+        const timeZone = resolveTimeZone(user?.timezone);
+        const { start, end } = zonedMonthRange(year, month, timeZone);
 
+        // A note's calendar date is `scheduledFor` when set, otherwise `createdAt`.
+        // The fallback is what keeps every pre-existing note exactly where it was
+        // before scheduling existed, instead of emptying the calendar on migration.
+        const inMonth = { gte: start, lt: end };
         const notes = await prisma.note.findMany({
-            where: { userId, createdAt: { gte: startDate, lt: endDate } },
-            select: { id: true, title: true, type: true, color: true, createdAt: true, updatedAt: true },
-            orderBy: { createdAt: 'asc' },
+            where: {
+                userId,
+                OR: [
+                    { scheduledFor: inMonth },
+                    { scheduledFor: null, createdAt: inMonth },
+                ],
+            },
+            select: {
+                id: true, title: true, type: true, color: true,
+                scheduledFor: true, dueDate: true, createdAt: true, updatedAt: true,
+            },
         });
 
         const notesByDay: Record<number, any[]> = {};
-        notes.forEach((note) => {
-            const day = note.createdAt.getDate();
-            if (!notesByDay[day]) notesByDay[day] = [];
-            notesByDay[day].push({
-                id: note.id, title: note.title, type: note.type,
-                color: note.color, createdAt: note.createdAt, updatedAt: note.updatedAt,
+        notes
+            .map((note) => ({ note, on: note.scheduledFor ?? note.createdAt }))
+            .sort((a, b) => a.on.getTime() - b.on.getTime())
+            .forEach(({ note, on }) => {
+                const day = zonedDayOfMonth(on, timeZone);
+                (notesByDay[day] ??= []).push({
+                    id: note.id, title: note.title, type: note.type, color: note.color,
+                    scheduledFor: note.scheduledFor, dueDate: note.dueDate,
+                    createdAt: note.createdAt, updatedAt: note.updatedAt,
+                    /** False when the note is only shown here because it was written that day. */
+                    isScheduled: note.scheduledFor !== null,
+                });
             });
-        });
 
-        res.json({ year, month, notesByDay, totalNotes: notes.length });
+        res.json({ year, month, timeZone, notesByDay, totalNotes: notes.length });
     } catch (err: any) {
         console.error('Error fetching calendar notes:', err);
         res.status(500).json({ error: 'Failed to fetch calendar notes' });
@@ -151,9 +191,12 @@ router.get('/calendar/:year/:month', authenticate, async (req: Request, res: Res
 
 // ── GET /:id ─────────────────────────────────────────────────
 router.get('/:id', authenticate, async (req: Request, res: Response): Promise<void> => {
+    const noteId = parseNoteId(req.params.id);
+    if (noteId === null) { res.status(404).json({ error: 'Note not found' }); return; }
+
     try {
         const note = await prisma.note.findFirst({
-            where: { id: parseInt(req.params.id as string), userId: req.user!.id },
+            where: { id: noteId, userId: req.user!.id },
         });
         if (!note) { res.status(404).json({ error: 'Note not found' }); return; }
         res.json(formatNote(note));
@@ -166,7 +209,7 @@ router.get('/:id', authenticate, async (req: Request, res: Response): Promise<vo
 // ── POST / ───────────────────────────────────────────────────
 router.post('/', authenticate, validate(createNoteSchema), async (req: Request, res: Response): Promise<void> => {
     try {
-        const { title, content, type, isPinned, color, tags, imageUrl, linkUrl, checklistItems, quote } = req.body;
+        const { title, content, type, isPinned, color, tags, imageUrl, linkUrl, checklistItems, quote, scheduledFor, dueDate } = req.body;
 
         const note = await prisma.note.create({
             data: {
@@ -174,6 +217,8 @@ router.post('/', authenticate, validate(createNoteSchema), async (req: Request, 
                 isPinned, color: color || null, tags,
                 imageUrl: imageUrl || null, linkUrl: linkUrl || null,
                 checklistItems, quote,
+                scheduledFor: toDateOrNull(scheduledFor),
+                dueDate: toDateOrNull(dueDate),
             },
         });
 
@@ -185,11 +230,19 @@ router.post('/', authenticate, validate(createNoteSchema), async (req: Request, 
 });
 
 const updateNoteHandler = async (req: Request, res: Response): Promise<void> => {
+    const noteId = parseNoteId(req.params.id);
+    if (noteId === null) { res.status(404).json({ error: 'Note not found' }); return; }
+
     try {
         const data: any = {};
         const fields = ['title', 'content', 'type', 'isPinned', 'color', 'tags', 'imageUrl', 'linkUrl', 'checklistItems', 'quote'];
         for (const f of fields) {
             if (req.body[f] !== undefined) data[f] = req.body[f];
+        }
+        // Date fields need coercion, and an explicit `null` means "unschedule" —
+        // so they can't ride along in the loop above.
+        for (const f of ['scheduledFor', 'dueDate'] as const) {
+            if (req.body[f] !== undefined) data[f] = toDateOrNull(req.body[f]);
         }
 
         if (Object.keys(data).length === 0) {
@@ -197,13 +250,13 @@ const updateNoteHandler = async (req: Request, res: Response): Promise<void> => 
         }
 
         const note = await prisma.note.updateMany({
-            where: { id: parseInt(req.params.id as string), userId: req.user!.id },
+            where: { id: noteId, userId: req.user!.id },
             data,
         });
 
         if (note.count === 0) { res.status(404).json({ error: 'Note not found or no changes made' }); return; }
 
-        const updated = await prisma.note.findUnique({ where: { id: parseInt(req.params.id as string) } });
+        const updated = await prisma.note.findUnique({ where: { id: noteId } });
         res.json(formatNote(updated));
     } catch (err: any) {
         console.error('Error updating note:', err);
@@ -219,9 +272,12 @@ router.patch('/:id', authenticate, validate(updateNoteSchema), updateNoteHandler
 
 // ── DELETE /:id ──────────────────────────────────────────────
 router.delete('/:id', authenticate, async (req: Request, res: Response): Promise<void> => {
+    const noteId = parseNoteId(req.params.id);
+    if (noteId === null) { res.status(404).json({ error: 'Note not found' }); return; }
+
     try {
         const result = await prisma.note.deleteMany({
-            where: { id: parseInt(req.params.id as string), userId: req.user!.id },
+            where: { id: noteId, userId: req.user!.id },
         });
         if (result.count === 0) { res.status(404).json({ error: 'Note not found' }); return; }
         res.json({ message: 'Note deleted successfully', deleted: true, id: req.params.id });

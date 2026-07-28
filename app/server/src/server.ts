@@ -15,10 +15,17 @@ import cors from 'cors';
 import helmet from 'helmet';
 import http from 'http';
 import path from 'path';
-import WebSocket from 'ws';
 import { Server as SocketIOServer } from 'socket.io';
+import jwt from 'jsonwebtoken';
 import type { ChatMessage } from './utils/chat';
+import {
+    parseDirectRoom,
+    isParticipant,
+    sanitizeMessageContent,
+    RateLimiter,
+} from './utils/chatRoom';
 import prisma from './lib/prisma';
+import { scheduleRetentionPrune } from './lib/retention';
 
 // ── Express App ──────────────────────────────────────────────
 const app = express();
@@ -40,70 +47,14 @@ const io = new SocketIOServer(server, {
     cors: { origin: '*', methods: ['GET', 'POST'] },
 });
 
-// ── Native WebSocket Server ──────────────────────────────────
-const NATIVE_WS_PORT = parseInt(process.env.NATIVE_WS_PORT || '8082');
-const wss = new WebSocket.Server({ port: NATIVE_WS_PORT });
-
-interface ClientInfo {
-    appName: string;
-    url: string;
-    connectedAt: string;
-}
-
-const nativeWsClients = {
-    monitors: new Set<WebSocket>(),
-    targetApps: new Map<WebSocket, ClientInfo>(),
-};
+// The native WebSocket relay that used to listen on :8082 was REMOVED (spec D6,
+// .agents/docs/features/project-workspaces-and-sdk.md). It accepted unauthenticated
+// connections and re-broadcast every target app's console logs to every listener in
+// the `monitors` room — a cross-project leak in the one feature whose purpose is
+// per-project isolation. Ingest is now HTTP-only via `POST /api/ingest`, which is
+// keyed, rate limited and scoped to a single project.
 
 let dbConnected = false;
-
-wss.on('listening', () => console.log(`🔌 Native WebSocket server listening on port ${NATIVE_WS_PORT}`));
-wss.on('error', (err: NodeJS.ErrnoException) => {
-    if (err.code === 'EADDRINUSE') console.warn(`⚠️ Native WebSocket port ${NATIVE_WS_PORT} is in use`);
-    else console.error('Native WebSocket error:', err);
-});
-
-wss.on('connection', (ws: WebSocket) => {
-    console.log('🎯 Target app connected via Native WebSocket');
-    let clientInfo: ClientInfo | null = null;
-
-    ws.on('message', (data: WebSocket.RawData) => {
-        try {
-            const message = JSON.parse(data.toString());
-
-            if (message.type === 'register') {
-                clientInfo = { appName: message.appName || 'Unknown', url: message.url || 'Unknown', connectedAt: new Date().toISOString() };
-                nativeWsClients.targetApps.set(ws, clientInfo);
-                io.to('monitors').emit('target-app-connected', { ...clientInfo, socketId: 'native-' + Date.now() });
-            } else if (message.type === 'console-logs') {
-                const logs = message.logs || [];
-                if (logs.length > 0) {
-                    const enrichedLogs = logs.map((log: any) => ({
-                        ...log, appName: clientInfo?.appName || log.appName, receivedAt: new Date().toISOString(),
-                    }));
-                    io.to('monitors').emit('console-logs', enrichedLogs);
-
-                    if (dbConnected) {
-                        enrichedLogs.forEach((log: any) => {
-                            prisma.log.create({ data: { level: log.level, message: log.message, source: log.source, stack: log.stack || null } }).catch(() => {});
-                        });
-                    }
-                }
-            }
-        } catch (err) {
-            console.error('Error processing native WS message:', err);
-        }
-    });
-
-    ws.on('close', () => {
-        if (clientInfo) {
-            nativeWsClients.targetApps.delete(ws);
-            io.to('monitors').emit('target-app-disconnected', clientInfo);
-        }
-    });
-
-    ws.on('error', (err: Error) => console.error('Native WS client error:', err.message));
-});
 
 // ── Socket.IO Events ─────────────────────────────────────────
 interface AppInfo {
@@ -121,6 +72,53 @@ const connectedClients = {
 // Simple in-memory registry for chat clients (Instagram-style DM demo)
 const chatClients = new Map<string, { userId: string }>();
 
+interface SocketUser {
+    id: number;
+    email: string;
+    name: string;
+}
+
+/** Sockets that presented a valid token, keyed by socket id. */
+const socketUsers = new Map<string, SocketUser>();
+const chatLimiters = new Map<string, RateLimiter>();
+
+/**
+ * Handshake authentication.
+ *
+ * Deliberately *optional*: the console-monitor `target-app` clients and
+ * `useBugTrackerSocket` connect without a token and must keep working. A token
+ * that is present but invalid is rejected outright rather than downgraded to
+ * anonymous — that combination is only ever a bug or an attack.
+ *
+ * Chat handlers below then require `socketUsers` to hold an entry, so the chat
+ * surface is authenticated even though the transport is shared.
+ */
+io.use(async (socket, next) => {
+    const token = (socket.handshake.auth as { token?: unknown } | undefined)?.token;
+    if (typeof token !== 'string' || !token) return next();
+
+    try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'mySecretKey') as {
+            id: number;
+            email: string;
+        };
+        const user = await prisma.user.findUnique({
+            where: { id: decoded.id },
+            select: { id: true, firstName: true, lastName: true, email: true },
+        });
+        if (!user) return next(new Error('Unauthorized'));
+
+        socketUsers.set(socket.id, {
+            id: user.id,
+            email: user.email,
+            name: `${user.firstName} ${user.lastName}`.trim(),
+        });
+        return next();
+    } catch {
+        return next(new Error('Unauthorized'));
+    }
+});
+
 io.on('connection', (socket) => {
     console.log('👤 User connected via WebSocket:', socket.id);
 
@@ -137,29 +135,86 @@ io.on('connection', (socket) => {
             connectedClients.targetApps.set(socket.id, appInfo);
             socket.join('target-apps');
             io.to('monitors').emit('target-app-connected', appInfo);
-        } else if (data.clientType === 'chat' && data.userId) {
-            // Chat client (used by frontend Chat page)
-            chatClients.set(socket.id, { userId: data.userId });
-            socket.join('chat-users');
-            console.log('💬 Chat client registered:', data.userId, 'via', socket.id);
+        } else if (data.clientType === 'chat') {
+            // Identity comes from the verified token, never from the payload —
+            // `data.userId` is ignored precisely because a client controls it.
+            const user = socketUsers.get(socket.id);
+            if (!user) {
+                socket.emit('chat-error', { error: 'Authentication required for chat' });
+                return;
+            }
+            chatClients.set(socket.id, { userId: String(user.id) });
+            chatLimiters.set(socket.id, new RateLimiter(30, 10_000));
+            console.log('💬 Chat client registered:', user.id, 'via', socket.id);
         }
     });
 
-    // Real-time chat message broadcast (Instagram-style DM UI)
-    socket.on('chat-message', (msg: ChatMessage) => {
-        // Basic validation: must have roomId and senderId
-        if (!msg?.roomId || !msg?.senderId) return;
+    /**
+     * Join a direct conversation.
+     *
+     * The room id encodes its two participants, so membership is verified here
+     * rather than assumed. Previously every chat client sat in one global
+     * `chat-users` room and the *browser* filtered by roomId — which meant the
+     * server had already handed every message to everyone.
+     */
+    socket.on('chat-join', (data: { roomId?: unknown }) => {
+        const user = socketUsers.get(socket.id);
+        if (!user) {
+            socket.emit('chat-error', { error: 'Authentication required for chat' });
+            return;
+        }
 
-        // Echo message to all connected chat clients (frontend filters by roomId)
-        io.to('chat-users').emit('chat-message', msg);
+        const room = parseDirectRoom(data?.roomId);
+        if (!room || !isParticipant(room, user.id)) {
+            socket.emit('chat-error', { error: 'Not a participant in that conversation' });
+            return;
+        }
+
+        // One conversation at a time: leaving the others keeps the socket's room
+        // set equal to what the user is actually looking at.
+        socket.rooms.forEach((r) => {
+            if (r !== socket.id && parseDirectRoom(r)) socket.leave(r);
+        });
+        socket.join(room.id);
     });
 
-    // Typing indicator
-    socket.on('user-typing', (data: { roomId: string; userId: string }) => {
-        if (!data?.roomId || !data?.userId) return;
+    // Real-time chat message relay, scoped to the conversation's participants.
+    socket.on('chat-message', (msg: Partial<ChatMessage>) => {
+        const user = socketUsers.get(socket.id);
+        if (!user) return;
 
-        // Broadcast to other chat users (except sender)
-        socket.to('chat-users').emit('user-typing', data);
+        if (!chatLimiters.get(socket.id)?.allow()) {
+            socket.emit('chat-error', { error: 'Slow down' });
+            return;
+        }
+
+        const room = parseDirectRoom(msg?.roomId);
+        if (!room || !isParticipant(room, user.id)) return;
+
+        const content = sanitizeMessageContent(msg?.content);
+        if (!content) return;
+
+        // Rebuilt server-side. Nothing the client claimed about *who sent this*
+        // survives, so a client cannot post as another user.
+        io.to(room.id).emit('chat-message', {
+            id: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
+            roomId: room.id,
+            senderId: String(user.id),
+            senderName: user.name,
+            content,
+            createdAt: new Date().toISOString(),
+        });
+    });
+
+    // Typing indicator — same authorisation, same room scope.
+    socket.on('user-typing', (data: { roomId?: unknown }) => {
+        const user = socketUsers.get(socket.id);
+        if (!user) return;
+
+        const room = parseDirectRoom(data?.roomId);
+        if (!room || !isParticipant(room, user.id)) return;
+
+        socket.to(room.id).emit('user-typing', { roomId: room.id, userId: String(user.id) });
     });
 
     socket.on('console-logs', async (data: { logs: any[] }) => {
@@ -179,6 +234,8 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => {
         connectedClients.monitors.delete(socket.id);
         chatClients.delete(socket.id);
+        socketUsers.delete(socket.id);
+        chatLimiters.delete(socket.id);
         if (connectedClients.targetApps.has(socket.id)) {
             const appInfo = connectedClients.targetApps.get(socket.id);
             connectedClients.targetApps.delete(socket.id);
@@ -219,9 +276,11 @@ app.get('/', (_req: Request, res: Response) => {
         endpoints: {
             auth: ['/api/auth/register', '/api/auth/login', '/api/auth/profile'],
             logs: ['/api/logs', '/api/logs/stats', '/api/logs/:id'],
+            projects: ['/api/projects', '/api/projects/:slug', '/api/projects/:slug/rotate-key'],
             tickets: ['/api/tickets', '/api/tickets/stats', '/api/tickets/:id'],
             notes: ['/api/notes', '/api/notes/:id'],
-            consoleLogs: ['/api/console-logs', '/api/console-logs/realtime', '/api/console-logs/script'],
+            ingest: ['/api/ingest'],
+            consoleLogs: ['/api/console-logs', '/api/console-logs/script'],
             ai: ['/api/ai/chat', '/api/ai/status'],
         },
     });
@@ -240,9 +299,17 @@ import consoleLogsRoutes from './api/console-logs';
 import aiRoutes from './api/ai';
 import consoleMonitorRoutes from './api/console-monitor';
 import chatRoutes from './api/chat';
+import projectsRoutes from './api/projects';
+import ingestRoutes from './api/ingest';
+
+// Mounted before the JSON-body and CORS defaults matter to it: `api/ingest` sets
+// its own permissive CORS and 1MB body cap, because it is the only route that
+// legitimately accepts cross-origin posts from sites we do not control.
+app.use('/api/ingest', ingestRoutes);
 
 app.use('/api/auth', authRoutes);
 app.use('/api/logs', logsRoutes);
+app.use('/api/projects', projectsRoutes);
 app.use('/api/tickets', ticketsRoutes);
 app.use('/api/notes', notesRoutes);
 app.use('/api/console-logs', consoleLogsRoutes);
@@ -286,16 +353,22 @@ const startServer = async (): Promise<void> => {
         console.log('⚠️ Server will start without database (real-time features still work)');
     }
 
+    // Only schedule pruning when the database is actually reachable; otherwise the
+    // first tick just logs a connection failure every day.
+    if (dbConnected) scheduleRetentionPrune();
+
     app.listen(PORT, () => {
         console.log(`🚀 Server running on http://localhost:${PORT}`);
         console.log(`📡 Environment: ${process.env.NODE_ENV || 'development'}`);
-        console.log(`🔌 WebSocket ports: ${WS_PORT} (socket.io), ${NATIVE_WS_PORT} (native)`);
+        console.log(`🔌 WebSocket port: ${WS_PORT} (socket.io)`);
         console.log(`💾 Database: ${dbConnected ? '✅ Connected' : '⚠️ Not connected'}`);
         console.log(`🛡️  Security: Helmet.js enabled`);
         console.log(`🤖 AI Status: ${process.env.GEMINI_API_KEY ? '✅ Configured' : '⚠️ GEMINI_API_KEY not set'}`);
         console.log('\n📋 API Endpoints:');
         console.log('  Auth:         /api/auth/*');
         console.log('  Logs:         /api/logs/*');
+        console.log('  Projects:     /api/projects/*');
+        console.log('  Ingest (SDK): /api/ingest');
         console.log('  Tickets:      /api/tickets/*');
         console.log('  Notes:        /api/notes/*');
         console.log('  Console Logs: /api/console-logs/*');

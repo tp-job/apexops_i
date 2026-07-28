@@ -36,6 +36,11 @@ export interface Note {
     linkUrl?: string;
     checklistItems?: ChecklistItem[];
     quote?: Quote;
+    /** ISO date the note is planned for. Null/absent means unscheduled. */
+    scheduledFor?: string | null;
+    /** ISO deadline, independent of `scheduledFor`. */
+    dueDate?: string | null;
+    createdAt?: string;
     updatedAt?: string;
     blocks?: NoteBlock[];
 }

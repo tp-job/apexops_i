@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+
+<html class="h-full" lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>Luminar Documentation - Quick Start</title>
+    <!-- Tailwind CSS v3 CDN -->
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'dark-bg': '#0f0f0f',
+                        'sidebar-bg': '#121212',
+                        'border-gray': '#262626',
+                        'text-muted': '#9ca3af',
+                        'luminar-orange': '#ff4d12',
+                    }
+                }
+            }
+        }
+    </script>
+    <style data-purpose="custom-scrollbars">
+        /* Custom scrollbar for a sleeker dark look */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #0f0f0f;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #333;
+            border-radius: 10px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #444;
+        }
+    </style>
+</head>
+
+<body class="bg-dark-bg text-gray-200 h-full font-sans antialiased">
+    <!-- BEGIN: MainContainer -->
+    <div class="flex flex-col h-full">
+        <!-- BEGIN: TopHeader -->
+        <header
+            class="flex items-center justify-between px-6 py-4 border-b border-border-gray bg-dark-bg sticky top-0 z-50">
+            <div class="flex items-center gap-8">
+                <!-- Brand Logo -->
+                <div class="flex items-center gap-2" data-purpose="brand-logo">
+                    <div class="bg-luminar-orange rounded p-1">
+                        <svg class="w-5 h-5 text-white" fill="currentColor" viewbox="0 0 24 24">
+                            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"></path>
+                        </svg>
+                    </div>
+                    <span class="text-xl font-bold tracking-tight">luminar</span>
+                </div>
+                <!-- Main Navigation Links -->
+                <nav class="hidden md:flex items-center gap-6 text-sm font-medium text-text-muted">
+                    <a class="text-white" href="#">Docs</a>
+                    <a class="hover:text-white" href="#">Components</a>
+                    <a class="hover:text-white" href="#">Guidelines</a>
+                    <a class="hover:text-white" href="#">Branding</a>
+                    <a class="hover:text-white" href="#">Playground</a>
+                </nav>
+            </div>
+            <div class="flex items-center gap-4">
+                <div class="relative hidden sm:block">
+                    <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-text-muted">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+                            <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-linecap="round"
+                                stroke-linejoin="round" stroke-width="2"></path>
+                        </svg>
+                    </span>
+                    <input
+                        class="bg-zinc-900 border-none rounded-md py-1.5 pl-10 pr-4 text-xs w-64 focus:ring-1 focus:ring-luminar-orange"
+                        placeholder="Search" type="text" />
+                    <span class="absolute inset-y-0 right-0 pr-3 flex items-center text-zinc-500 text-[10px]">⌘K</span>
+                </div>
+                <a class="text-sm text-text-muted hover:text-white" href="#">Support</a>
+                <button
+                    class="bg-white text-black text-xs font-bold px-4 py-2 rounded-md hover:bg-gray-200">Contribute</button>
+            </div>
+        </header>
+        <!-- END: TopHeader -->
+        <!-- BEGIN: SubHeader -->
+        <div class="flex items-center justify-between px-6 py-2 border-b border-border-gray bg-dark-bg text-xs">
+            <div class="flex items-center gap-6">
+                <div
+                    class="flex items-center gap-1 text-luminar-orange border-b border-luminar-orange pb-2 mt-2 cursor-pointer font-semibold">
+                    Guides <svg class="w-3 h-3" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+                        <path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+                    </svg>
+                </div>
+                <div class="flex items-center gap-1 text-text-muted hover:text-white cursor-pointer pb-2 mt-2">
+                    API Reference <svg class="w-3 h-3" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+                        <path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+                    </svg>
+                </div>
+                <div class="text-text-muted hover:text-white cursor-pointer pb-2 mt-2">Community</div>
+                <div class="text-text-muted hover:text-white cursor-pointer pb-2 mt-2">Changelog</div>
+            </div>
+        </div>
+        <!-- END: SubHeader -->
+        <div class="flex flex-1 overflow-hidden">
+            <!-- BEGIN: Sidebar -->
+            <aside class="w-64 flex-shrink-0 border-r border-border-gray overflow-y-auto bg-dark-bg p-6 text-sm"
+                data-purpose="sidebar-navigation">
+                <!-- Get Started Section -->
+                <div class="mb-8">
+                    <h3 class="text-[11px] uppercase tracking-widest text-zinc-500 font-bold mb-4">Get Started</h3>
+                    <ul class="space-y-3">
+                        <li><a class="block bg-zinc-800 text-white px-3 py-1.5 rounded-md font-medium" href="#">Quick
+                                Start</a></li>
+                        <li><a class="block text-text-muted hover:text-white px-3 py-1.5 flex items-center justify-between"
+                                href="#">Installation &amp; Setup <svg class="w-3 h-3" fill="none" stroke="currentColor"
+                                    viewbox="0 0 24 24">
+                                    <path d="M9 5l7 7-7 7" stroke-linecap="round" stroke-linejoin="round"
+                                        stroke-width="2"></path>
+                                </svg></a></li>
+                        <li><a class="block text-text-muted hover:text-white px-3 py-1.5" href="#">Authentication</a>
+                        </li>
+                    </ul>
+                </div>
+                <!-- Products Section -->
+                <div class="mb-8">
+                    <h3 class="text-[11px] uppercase tracking-widest text-zinc-500 font-bold mb-4">Products</h3>
+                    <ul class="space-y-3">
+                        <li><a class="block text-text-muted hover:text-white px-3 py-1.5" href="#">Agent
+                                Intelligence</a></li>
+                        <li>
+                            <a class="block text-white px-3 py-1.5 flex items-center justify-between font-medium"
+                                href="#">
+                                Voice Processing
+                                <svg class="w-3 h-3 transform rotate-90" fill="none" stroke="currentColor"
+                                    viewbox="0 0 24 24">
+                                    <path d="M9 5l7 7-7 7" stroke-linecap="round" stroke-linejoin="round"
+                                        stroke-width="2"></path>
+                                </svg>
+                            </a>
+                            <ul class="ml-6 mt-2 space-y-3 text-text-muted border-l border-zinc-800">
+                                <li><a class="block pl-4 hover:text-white" href="#">Overview</a></li>
+                                <li><a class="block pl-4 hover:text-white" href="#">Speech-to-Text Endpoints</a></li>
+                                <li><a class="block pl-4 hover:text-white" href="#">Real-time Transcription</a></li>
+                                <li><a class="block pl-4 hover:text-white" href="#">Voice Analysis</a></li>
+                                <li><a class="block pl-4 hover:text-white" href="#">Language Support</a></li>
+                                <li><a class="block pl-4 hover:text-white" href="#">Integration Examples</a></li>
+                            </ul>
+                        </li>
+                        <li><a class="block text-text-muted hover:text-white px-3 py-1.5" href="#">Voice Interaction</a>
+                        </li>
+                        <li><a class="block text-text-muted hover:text-white px-3 py-1.5" href="#">Agent Intelligence
+                                API</a></li>
+                    </ul>
+                </div>
+                <!-- Tools Section -->
+                <div class="mb-8">
+                    <h3 class="text-[11px] uppercase tracking-widest text-zinc-500 font-bold mb-4">Tools</h3>
+                    <ul class="space-y-3">
+                        <li><a class="block text-text-muted hover:text-white px-3 py-1.5" href="#">Overview</a></li>
+                        <li><a class="block text-text-muted hover:text-white px-3 py-1.5" href="#">Tools usage</a></li>
+                        <li><a class="block text-text-muted hover:text-white px-3 py-1.5" href="#">Tools categories</a>
+                        </li>
+                        <li><a class="block text-text-muted hover:text-white px-3 py-1.5" href="#">Tools list</a></li>
+                    </ul>
+                </div>
+                <!-- Foundation Section -->
+                <div>
+                    <h3 class="text-[11px] uppercase tracking-widest text-zinc-500 font-bold mb-4">Foundation</h3>
+                    <ul class="space-y-3">
+                        <li><a class="block text-text-muted hover:text-white px-3 py-1.5" href="#">Workflows</a></li>
+                        <li><a class="block text-text-muted hover:text-white px-3 py-1.5" href="#">Nodes</a></li>
+                    </ul>
+                </div>
+            </aside>
+            <!-- END: Sidebar -->
+            <!-- BEGIN: ContentArea -->
+            <main class="flex-1 overflow-y-auto p-8 relative">
+                <div class="max-w-4xl mx-auto">
+                    <!-- Welcome Banner Hero -->
+                    <div class="relative w-full h-64 rounded-xl overflow-hidden mb-12" data-purpose="hero-banner">
+                        <img alt="Luminar Background" class="w-full h-full object-cover brightness-50"
+                            src="https://lh3.googleusercontent.com/aida-public/AB6AXuCMGGwRrHqSRRiPS8Hz8vzgcU1q5w6Gffndx-rhheZdsTMAcYmJYw3qwOUAk0aTBIIWtvOHfJhpKTZIBCLI4PvRepwV6jVXRh5d9cNcB43pokbGUSQojt0NzY1Rg81rqwfKTPcF_t964_55D_78UVkb-KFHE2UaHmRbDQez6QCouF6Z__PDzn4duRXNEXzht5olZA7YlI_aRStvu6O2hg7NOzoRLZrJclDjNTNB9nVLcm70fauHuoiLqEMoouAd0u3ulM2gC9qa1Q" />
+                        <div
+                            class="absolute inset-0 flex flex-col justify-center p-12 bg-gradient-to-r from-black/80 to-transparent">
+                            <h1 class="text-4xl font-bold text-white mb-3">Welcome to Luminar</h1>
+                            <p class="text-zinc-400 text-lg max-w-lg leading-relaxed">
+                                Luminar empowers you to create sophisticated voice AI agents that seamlessly integrate
+                                with your contact center operations.
+                            </p>
+                        </div>
+                    </div>
+                    <!-- Documentation Body -->
+                    <div class="flex gap-12">
+                        <div class="flex-1">
+                            <div class="flex items-center justify-between mb-4">
+                                <h2 class="text-2xl font-bold text-white">Quick start</h2>
+                                <a class="text-text-muted text-sm flex items-center gap-1 hover:text-white transition-colors"
+                                    href="#">
+                                    More tutorials <svg class="w-4 h-4" fill="none" stroke="currentColor"
+                                        viewbox="0 0 24 24">
+                                        <path
+                                            d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                                            stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+                                    </svg>
+                                </a>
+                            </div>
+                            <p class="text-text-muted leading-relaxed mb-10">
+                                Our platform enables you to build voice agents that handle customer interactions with
+                                the same proficiency as your best service representatives.
+                            </p>
+                            <h3 class="text-xl font-semibold text-white mb-6">Pre requirements</h3>
+                            <ul class="space-y-4 mb-10 text-text-muted">
+                                <li class="flex items-start gap-3">
+                                    <svg class="w-5 h-5 text-zinc-500 mt-0.5" fill="none" stroke="currentColor"
+                                        viewbox="0 0 24 24">
+                                        <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" stroke-linecap="round"
+                                            stroke-linejoin="round" stroke-width="2"></path>
+                                    </svg>
+                                    Active Voice AI Platform account
+                                </li>
+                                <li class="flex items-start gap-3">
+                                    <svg class="w-5 h-5 text-zinc-500 mt-0.5" fill="none" stroke="currentColor"
+                                        viewbox="0 0 24 24">
+                                        <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" stroke-linecap="round"
+                                            stroke-linejoin="round" stroke-width="2"></path>
+                                    </svg>
+                                    API key (get it from your dashboard settings)
+                                </li>
+                                <li class="flex items-start gap-3">
+                                    <svg class="w-5 h-5 text-zinc-500 mt-0.5" fill="none" stroke="currentColor"
+                                        viewbox="0 0 24 24">
+                                        <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" stroke-linecap="round"
+                                            stroke-linejoin="round" stroke-width="2"></path>
+                                    </svg>
+                                    Basic understanding of REST APIs
+                                </li>
+                                <li class="flex items-start gap-3">
+                                    <svg class="w-5 h-5 text-zinc-500 mt-0.5" fill="none" stroke="currentColor"
+                                        viewbox="0 0 24 24">
+                                        <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" stroke-linecap="round"
+                                            stroke-linejoin="round" stroke-width="2"></path>
+                                    </svg>
+                                    cURL, Python, or Node.js for examples
+                                </li>
+                            </ul>
+                            <p class="text-text-muted mb-6 leading-relaxed">
+                                Before using voice processing features with your agent, you'll need to handle
+                                audio/video files in a specific way:
+                            </p>
+                            <div class="bg-zinc-900 border border-border-gray p-4 rounded-lg font-mono text-sm mb-12 overflow-x-auto"
+                                data-purpose="code-snippet">
+                                <p class="text-zinc-400">First, upload your audio or video file using our upload
+                                    endpoint: <span class="text-emerald-400">POST</span> <code
+                                        class="text-zinc-200">/api/v1/media/upload</code></p>
+                                <p class="text-zinc-400 mt-2">Content-Type: <code
+                                        class="text-zinc-200">multipart/form-data</code></p>
+                            </div>
+                            <h2 class="text-2xl font-bold text-white mb-4">Setup</h2>
+                            <p class="text-text-muted mb-6">Step 1: Installation</p>
+                            <!-- Tabbed Code Window -->
+                            <div class="bg-zinc-900 border border-border-gray rounded-lg overflow-hidden mb-20"
+                                data-purpose="installation-tabs">
+                                <div class="flex border-b border-border-gray px-4 bg-zinc-900/50">
+                                    <button
+                                        class="px-4 py-3 text-xs font-bold border-b-2 border-luminar-orange text-white">NPM</button>
+                                    <button
+                                        class="px-4 py-3 text-xs font-bold text-text-muted hover:text-white">Python</button>
+                                    <button
+                                        class="px-4 py-3 text-xs font-bold text-text-muted hover:text-white">cURL</button>
+                                </div>
+                                <div class="p-4 font-mono text-xs">
+                                    <code class="text-zinc-400">npm install @agent-luminar/sdk</code>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Right Anchor Navigation -->
+                        <aside class="w-48 hidden lg:block" data-purpose="on-this-page-nav">
+                            <h4 class="text-[10px] uppercase font-bold text-zinc-500 mb-4 flex items-center gap-2">
+                                <span class="w-1.5 h-1.5 rounded-full bg-luminar-orange"></span> On this page
+                            </h4>
+                            <nav class="space-y-4 text-xs">
+                                <a class="block text-luminar-orange" href="#">Get Started</a>
+                                <a class="block text-text-muted hover:text-white" href="#">Pre requirements</a>
+                                <div>
+                                    <a class="block text-text-muted hover:text-white mb-3" href="#">Setup</a>
+                                    <div class="ml-4 space-y-3 border-l border-border-gray pl-4">
+                                        <a class="block text-text-muted hover:text-white" href="#">Step 1:
+                                            Installation</a>
+                                        <a class="block text-text-muted hover:text-white" href="#">Step 2: Create new
+                                            agent</a>
+                                        <a class="block text-text-muted hover:text-white" href="#">Step 3: Test
+                                            agent</a>
+                                        <a class="block text-text-muted hover:text-white" href="#">Step 4: Run agent</a>
+                                    </div>
+                                </div>
+                                <a class="block text-text-muted hover:text-white pt-2" href="#">Next steps</a>
+                                <a class="block text-text-muted hover:text-white" href="#">FAQs</a>
+                            </nav>
+                        </aside>
+                    </div>
+                </div>
+                <!-- Floating AI Chat Assistant -->
+                <div class="fixed bottom-8 right-8" data-purpose="ai-chat-widget">
+                    <div
+                        class="bg-zinc-800 p-2 pr-4 rounded-full flex items-center gap-3 shadow-2xl border border-zinc-700 cursor-pointer hover:bg-zinc-700 transition-all">
+                        <div
+                            class="w-10 h-10 rounded-full bg-zinc-900 flex items-center justify-center border border-zinc-600 overflow-hidden">
+                            <!-- Waveform placeholder -->
+                            <div class="flex items-center gap-0.5">
+                                <div class="w-0.5 h-3 bg-zinc-500 animate-pulse"></div>
+                                <div class="w-0.5 h-5 bg-zinc-500 animate-pulse delay-75"></div>
+                                <div class="w-0.5 h-4 bg-zinc-500 animate-pulse delay-150"></div>
+                                <div class="w-0.5 h-6 bg-zinc-500 animate-pulse delay-200"></div>
+                            </div>
+                        </div>
+                        <div>
+                            <p class="text-[11px] font-bold text-white">Ask our AI Docs</p>
+                            <p class="text-[9px] text-zinc-400">Find what you need</p>
+                        </div>
+                        <div class="w-6 h-6 rounded-full bg-luminar-orange flex items-center justify-center ml-2">
+                            <svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+                                <path d="M14 5l7 7m0 0l-7 7m7-7H3" stroke-linecap="round" stroke-linejoin="round"
+                                    stroke-width="3"></path>
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+            </main>
+            <!-- END: ContentArea -->
+        </div>
+    </div>
+    <!-- END: MainContainer -->
+</body>
+
+</html>

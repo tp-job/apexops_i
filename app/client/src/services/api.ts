@@ -1,6 +1,6 @@
 import axios from 'axios';
-import { getApiBaseUrl } from '@/api/config';
-import type { Log, Ticket } from '@/types/bugTrackerApp';
+import { getApiBaseUrl, getAuthToken } from '@/api/config';
+import type { Log, Ticket, TicketComment, TicketPriority, TicketStatus } from '@/types/bugTrackerApp';
 import type { LogsStats, TicketsStats, WithMockFlagArray } from '@/types/api';
 import { createReadOnlyOfflineError, isMockEnabled, isNetworkFailure } from '@/utils/offlineMock';
 import { mockLogs, mockTickets } from '@/utils/mockData';
@@ -10,6 +10,20 @@ const api = axios.create({
     headers: {
         'Content-Type': 'application/json',
     },
+});
+
+/**
+ * Attach the bearer token per request.
+ *
+ * Read at call time rather than baked into `axios.create`, so signing in or
+ * refreshing mid-session is picked up without rebuilding the client. Every
+ * endpoint behind this module is `authenticate`-gated server-side; without this
+ * they answer 401 no matter who is signed in.
+ */
+api.interceptors.request.use((config) => {
+    const token = getAuthToken();
+    if (token) config.headers.Authorization = `Bearer ${token}`;
+    return config;
 });
 
 function filterLogs(params?: { level?: string; source?: string; limit?: number }): WithMockFlagArray<Log> {
@@ -143,10 +157,10 @@ export const ticketsAPI = {
     create: async (ticket: {
         title: string;
         description?: string;
-        status?: string;
-        priority?: string;
-        assignee?: string;
-        reporter?: string;
+        status?: TicketStatus;
+        priority?: TicketPriority;
+        /** Assignment is by user id — the reporter is taken from the bearer token. */
+        assigneeId?: number | null;
         tags?: string[];
         relatedLogs?: string[];
     }): Promise<Ticket> => {
@@ -161,10 +175,17 @@ export const ticketsAPI = {
     update: async (id: string, ticket: {
         title?: string;
         description?: string;
-        status?: string;
-        priority?: string;
-        assignee?: string;
+        status?: TicketStatus;
+        priority?: TicketPriority;
+        assigneeId?: number | null;
         tags?: string[];
+        relatedLogs?: string[];
+        /**
+         * Pass the `updatedAt` the client last read. The server answers 409 with
+         * `{ current }` if the ticket moved since, instead of silently clobbering
+         * another triager's edit.
+         */
+        expectedUpdatedAt?: string;
     }): Promise<Ticket> => {
         try {
             const response = await api.put<Ticket>(`/api/tickets/${id}`, ticket);
@@ -174,9 +195,38 @@ export const ticketsAPI = {
             throw err;
         }
     },
-    delete: async (id: string): Promise<void> => {
+    /** Soft delete — the row is archived and can be restored, never destroyed. */
+    archive: async (id: string): Promise<Ticket> => {
         try {
-            await api.delete(`/api/tickets/${id}`);
+            const response = await api.delete<{ archived: boolean; ticket: Ticket }>(`/api/tickets/${id}`);
+            return response.data.ticket;
+        } catch (err) {
+            if (isMockEnabled() && isNetworkFailure(err)) throw createReadOnlyOfflineError();
+            throw err;
+        }
+    },
+    restore: async (id: string): Promise<Ticket> => {
+        try {
+            const response = await api.post<Ticket>(`/api/tickets/${id}/restore`);
+            return response.data;
+        } catch (err) {
+            if (isMockEnabled() && isNetworkFailure(err)) throw createReadOnlyOfflineError();
+            throw err;
+        }
+    },
+    getComments: async (id: string): Promise<TicketComment[]> => {
+        try {
+            const response = await api.get<TicketComment[]>(`/api/tickets/${id}/comments`);
+            return response.data;
+        } catch (err) {
+            if (isMockEnabled() && isNetworkFailure(err)) return [];
+            throw err;
+        }
+    },
+    addComment: async (id: string, body: string): Promise<TicketComment> => {
+        try {
+            const response = await api.post<TicketComment>(`/api/tickets/${id}/comments`, { body });
+            return response.data;
         } catch (err) {
             if (isMockEnabled() && isNetworkFailure(err)) throw createReadOnlyOfflineError();
             throw err;

@@ -9,6 +9,14 @@ export { default as Meter } from './Meter';
 export { default as AccentButton } from './AccentButton';
 export { default as Badge } from './Badge';
 
+// Form kit — the minimum two primitives the auth pages need. The rest of the kit
+// (Select, Checkbox, Switch, RadioGroup, FormActions, useFormState) is Sprint 2;
+// see .agents/docs/sprint-1-thin-slice.md for why it was deferred, not forgotten.
+export { default as Field } from './Field';
+export { default as Input } from './Input';
+export { useFieldWiring } from './field-context';
+export type { FieldWiring } from './field-context';
+
 // Composition primitives harvested from the `.agents/template` references.
 // See .agents/docs/frontend/template-adoption.md for the mapping.
 export { default as Timeline } from './Timeline';

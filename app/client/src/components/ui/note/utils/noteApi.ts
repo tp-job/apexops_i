@@ -88,6 +88,8 @@ interface CreateNoteParams {
     isPinned?: boolean;
     tags?: string[];
     color?: string;
+    scheduledFor?: string | null;
+    dueDate?: string | null;
 }
 
 /**
@@ -110,7 +112,11 @@ export const createNote = async (params: CreateNoteParams): Promise<{ success: b
                 type: params.type || 'text',
                 isPinned: params.isPinned || false,
                 tags: params.tags || [],
-                color: params.color
+                color: params.color,
+                // Only sent when present — the API treats an explicit `null` as
+                // "unschedule", which is not what an omitted field should mean.
+                ...(params.scheduledFor !== undefined && { scheduledFor: params.scheduledFor }),
+                ...(params.dueDate !== undefined && { dueDate: params.dueDate })
             })
         });
 
@@ -142,6 +148,9 @@ interface UpdateNoteParams {
     tags?: string[];
     color?: string;
     isPinned?: boolean;
+    /** Explicit `null` clears the schedule; omit the key to leave it untouched. */
+    scheduledFor?: string | null;
+    dueDate?: string | null;
 }
 
 /**

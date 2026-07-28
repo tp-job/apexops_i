@@ -5,7 +5,6 @@
 
 import { getApiBaseUrl, getAuthToken } from '@/api/config';
 import type { LoginResponse, ProfileResponse, RefreshResponse, User, UserSettings } from '@/types/auth';
-import { mockAccessToken, mockRefreshToken, mockUser, mockUserSettings } from '@/utils/mockData';
 
 export const authApi = {
     async getProfile(): Promise<ProfileResponse> {
@@ -152,15 +151,9 @@ export const authApi = {
     },
 };
 
-/** Used by AuthContext when offline mock is enabled and network fails */
-export function getMockLoginResponse(): LoginResponse {
-    return {
-        user: mockUser as User,
-        accessToken: mockAccessToken,
-        refreshToken: mockRefreshToken,
-    };
-}
-
-export function getMockUserSettings(): UserSettings {
-    return mockUserSettings as UserSettings;
-}
+/*
+ * `getMockLoginResponse` / `getMockUserSettings` were removed in Sprint 1
+ * (2026-07-25). Their only consumer was `AuthContext`'s login bypass — a helper
+ * that mints a session the server never issued has no place next to the real auth
+ * calls. Fixtures for non-auth surfaces still live in `utils/mockData.ts`.
+ */

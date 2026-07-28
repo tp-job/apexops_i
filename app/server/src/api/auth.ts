@@ -82,7 +82,7 @@ router.post('/register', authRegisterLimiter, validate(registerSchema), async (r
         });
     } catch (err: any) {
         console.error('Registration error:', err);
-        res.status(500).json({ error: err.message || 'Failed to register user' });
+        res.status(500).json({ error: 'Failed to register user. Please try again.' });
     }
 });
 
@@ -115,8 +115,12 @@ router.post('/login', authLoginLimiter, validate(loginSchema), async (req: Reque
             accessToken, refreshToken, token: accessToken,
         });
     } catch (err: any) {
+        // Generic message on purpose. `err.message` here is whatever Prisma threw —
+        // when the DB is unreachable that includes absolute server file paths and the
+        // failing query, handed to an unauthenticated caller. The detail belongs in
+        // the server log, not the response body. Same reasoning in /register.
         console.error('Login error:', err);
-        res.status(500).json({ error: err.message || 'Failed to login' });
+        res.status(500).json({ error: 'Failed to sign in. Please try again.' });
     }
 });
 

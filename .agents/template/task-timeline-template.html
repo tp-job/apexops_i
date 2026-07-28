@@ -1,0 +1,1234 @@
+<!doctype html>
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>Timeline Dashboard Clone</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <style data-purpose="custom-styles">
+      @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+
+      body {
+        font-family: "Inter", sans-serif;
+        background-color: #0d0d0d;
+        color: #e0e0e0;
+        /* Base background color similar to image */
+      }
+
+      /* Custom Scrollbar for better look in dark mode */
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #1a1a1a;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #333;
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #555;
+      }
+
+      /* specific gradient for the highlighted task */
+      .task-gradient {
+        background: linear-gradient(90deg, #9b51e0, #f2994a, #f2c94c);
+      }
+
+      /* Grid background pattern for timeline */
+      .timeline-grid {
+        background-image: repeating-linear-gradient(
+          -45deg,
+          transparent,
+          transparent 10px,
+          rgba(255, 255, 255, 0.02) 10px,
+          rgba(255, 255, 255, 0.02) 11px
+        );
+      }
+    </style>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              "gray-900": "#111111",
+              "gray-800": "#1a1a1a",
+              "gray-700": "#2a2a2a",
+              "gray-400": "#888888",
+              accent: "#9b51e0",
+            },
+            fontSize: {
+              xxs: "0.65rem",
+            },
+          },
+        },
+      };
+    </script>
+  </head>
+  <body class="h-screen w-screen flex overflow-hidden antialiased">
+    <!-- BEGIN: Sidebar -->
+    <aside
+      class="w-64 bg-gray-900 border-r border-gray-800 flex flex-col justify-between shrink-0 h-full overflow-y-auto"
+    >
+      <!-- Top Branding -->
+      <div class="p-4 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <div
+            class="w-8 h-8 rounded-full bg-gradient-to-tr from-pink-500 to-orange-400 flex items-center justify-center text-white font-bold text-xs"
+          >
+            R
+          </div>
+          <div>
+            <h1 class="text-sm font-semibold text-white leading-tight">
+              Relatel wise
+            </h1>
+            <p class="text-xs text-gray-400">microdose.studio</p>
+          </div>
+        </div>
+        <button class="text-gray-400 hover:text-white">
+          <svg
+            class="w-4 h-4"
+            fill="none"
+            stroke="currentColor"
+            viewbox="0 0 24 24"
+          >
+            <path
+              d="M11 19l-7-7 7-7m8 14l-7-7 7-7"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+            ></path>
+          </svg>
+        </button>
+      </div>
+      <!-- Navigation Links -->
+      <nav class="flex-1 px-3 py-4 space-y-6">
+        <!-- Overview Section -->
+        <div>
+          <div
+            class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 px-2 flex items-center justify-between"
+          >
+            <span>Overview</span>
+            <svg
+              class="w-3 h-3"
+              fill="none"
+              stroke="currentColor"
+              viewbox="0 0 24 24"
+            >
+              <path
+                d="M19 9l-7 7-7-7"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+              ></path>
+            </svg>
+          </div>
+          <ul class="space-y-1">
+            <li>
+              <a
+                class="flex items-center gap-3 px-2 py-1.5 text-sm text-gray-300 hover:bg-gray-800 rounded-md transition-colors"
+                href="#"
+              >
+                <svg
+                  class="w-4 h-4 text-gray-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewbox="0 0 24 24"
+                >
+                  <path
+                    d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                  ></path>
+                </svg>
+                Dashboard
+              </a>
+            </li>
+            <li>
+              <a
+                class="flex items-center gap-3 px-2 py-1.5 text-sm text-gray-300 hover:bg-gray-800 rounded-md transition-colors"
+                href="#"
+              >
+                <svg
+                  class="w-4 h-4 text-gray-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewbox="0 0 24 24"
+                >
+                  <path
+                    d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                  ></path>
+                </svg>
+                Calendar
+              </a>
+            </li>
+            <li>
+              <div
+                class="flex items-center justify-between px-2 py-1.5 text-sm text-white bg-gray-800 rounded-md cursor-pointer"
+              >
+                <div class="flex items-center gap-3">
+                  <svg
+                    class="w-4 h-4 text-gray-400"
+                    fill="none"
+                    stroke="currentColor"
+                    viewbox="0 0 24 24"
+                  >
+                    <path
+                      d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                    ></path>
+                  </svg>
+                  Tasks
+                </div>
+                <svg
+                  class="w-3 h-3 text-gray-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewbox="0 0 24 24"
+                >
+                  <path
+                    d="M5 15l7-7 7 7"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                  ></path>
+                </svg>
+              </div>
+              <!-- Sub-tasks -->
+              <ul class="mt-1 ml-6 pl-2 border-l border-gray-700 space-y-1">
+                <li>
+                  <a
+                    class="flex items-center justify-between px-2 py-1 text-sm text-gray-400 hover:text-white transition-colors"
+                    href="#"
+                  >
+                    <div class="flex items-center gap-2">
+                      <div
+                        class="w-1.5 h-1.5 rounded-full border border-gray-500"
+                      ></div>
+                      Backlog
+                    </div>
+                    <span class="text-xs">24</span>
+                  </a>
+                </li>
+                <li>
+                  <a
+                    class="flex items-center justify-between px-2 py-1 text-sm text-gray-400 hover:text-white transition-colors"
+                    href="#"
+                  >
+                    <div class="flex items-center gap-2">
+                      <svg
+                        class="w-3 h-3 text-blue-400"
+                        fill="none"
+                        stroke="currentColor"
+                        viewbox="0 0 24 24"
+                      >
+                        <path
+                          d="M13 10V3L4 14h7v7l9-11h-7z"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          stroke-width="2"
+                        ></path>
+                      </svg>
+                      In progress
+                    </div>
+                    <span class="text-xs">4</span>
+                  </a>
+                </li>
+                <li>
+                  <a
+                    class="flex items-center justify-between px-2 py-1 text-sm text-gray-400 hover:text-white transition-colors"
+                    href="#"
+                  >
+                    <div class="flex items-center gap-2">
+                      <svg
+                        class="w-3 h-3 text-purple-400"
+                        fill="none"
+                        stroke="currentColor"
+                        viewbox="0 0 24 24"
+                      >
+                        <path
+                          d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          stroke-width="2"
+                        ></path>
+                      </svg>
+                      Validation
+                    </div>
+                    <span class="text-xs">7</span>
+                  </a>
+                </li>
+                <li>
+                  <a
+                    class="flex items-center justify-between px-2 py-1 text-sm text-gray-400 hover:text-white transition-colors"
+                    href="#"
+                  >
+                    <div class="flex items-center gap-2">
+                      <svg
+                        class="w-3 h-3 text-green-400"
+                        fill="none"
+                        stroke="currentColor"
+                        viewbox="0 0 24 24"
+                      >
+                        <path
+                          d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          stroke-width="2"
+                        ></path>
+                      </svg>
+                      Done
+                    </div>
+                    <span class="text-xs">13</span>
+                  </a>
+                </li>
+              </ul>
+            </li>
+          </ul>
+        </div>
+        <!-- Tools Section -->
+        <div>
+          <div
+            class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 px-2 flex items-center justify-between"
+          >
+            <span>Tools</span>
+            <svg
+              class="w-3 h-3"
+              fill="none"
+              stroke="currentColor"
+              viewbox="0 0 24 24"
+            >
+              <path
+                d="M19 9l-7 7-7-7"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+              ></path>
+            </svg>
+          </div>
+          <ul class="space-y-1">
+            <li>
+              <a
+                class="flex items-center justify-between px-2 py-1.5 text-sm text-gray-300 hover:bg-gray-800 rounded-md transition-colors"
+                href="#"
+              >
+                <div class="flex items-center gap-3">
+                  <svg
+                    class="w-4 h-4 text-gray-400"
+                    fill="none"
+                    stroke="currentColor"
+                    viewbox="0 0 24 24"
+                  >
+                    <path
+                      d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                    ></path>
+                  </svg>
+                  Notification
+                </div>
+                <span
+                  class="bg-red-500 text-white text-xxs font-bold px-1.5 py-0.5 rounded"
+                  >7</span
+                >
+              </a>
+            </li>
+            <li>
+              <a
+                class="flex items-center gap-3 px-2 py-1.5 text-sm text-gray-300 hover:bg-gray-800 rounded-md transition-colors"
+                href="#"
+              >
+                <svg
+                  class="w-4 h-4 text-gray-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewbox="0 0 24 24"
+                >
+                  <path
+                    d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                  ></path>
+                </svg>
+                Inbox
+              </a>
+            </li>
+            <li>
+              <a
+                class="flex items-center gap-3 px-2 py-1.5 text-sm text-gray-300 hover:bg-gray-800 rounded-md transition-colors"
+                href="#"
+              >
+                <svg
+                  class="w-4 h-4 text-gray-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewbox="0 0 24 24"
+                >
+                  <path
+                    d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                  ></path>
+                </svg>
+                Integration
+              </a>
+            </li>
+            <li>
+              <a
+                class="flex items-center gap-3 px-2 py-1.5 text-sm text-gray-300 hover:bg-gray-800 rounded-md transition-colors"
+                href="#"
+              >
+                <svg
+                  class="w-4 h-4 text-gray-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewbox="0 0 24 24"
+                >
+                  <path
+                    d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                  ></path>
+                </svg>
+                Reporting
+              </a>
+            </li>
+          </ul>
+        </div>
+        <!-- Metrics Section -->
+        <div>
+          <div
+            class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 px-2 flex items-center justify-between"
+          >
+            <span>Metrics</span>
+            <svg
+              class="w-3 h-3"
+              fill="none"
+              stroke="currentColor"
+              viewbox="0 0 24 24"
+            >
+              <path
+                d="M19 9l-7 7-7-7"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+              ></path>
+            </svg>
+          </div>
+          <ul class="space-y-1">
+            <li>
+              <a
+                class="flex items-center justify-between px-2 py-1.5 text-sm text-gray-300 hover:bg-gray-800 rounded-md transition-colors"
+                href="#"
+              >
+                <div class="flex items-center gap-3">
+                  <svg
+                    class="w-4 h-4 text-gray-400"
+                    fill="none"
+                    stroke="currentColor"
+                    viewbox="0 0 24 24"
+                  >
+                    <path
+                      d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                    ></path>
+                  </svg>
+                  Active
+                </div>
+                <span class="text-gray-500 text-xs">!</span>
+              </a>
+            </li>
+            <li>
+              <a
+                class="flex items-center gap-3 px-2 py-1.5 text-sm text-gray-300 hover:bg-gray-800 rounded-md transition-colors"
+                href="#"
+              >
+                <svg
+                  class="w-4 h-4 text-gray-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewbox="0 0 24 24"
+                >
+                  <path
+                    d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                  ></path>
+                </svg>
+                Past
+              </a>
+            </li>
+          </ul>
+        </div>
+      </nav>
+      <!-- Bottom Actions & User Profile -->
+      <div class="p-4 space-y-4 border-t border-gray-800">
+        <ul class="space-y-1">
+          <li>
+            <a
+              class="flex items-center justify-between px-2 py-1.5 text-sm text-gray-400 hover:text-white transition-colors"
+              href="#"
+            >
+              <div class="flex items-center gap-3">
+                <svg
+                  class="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewbox="0 0 24 24"
+                >
+                  <path
+                    d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                  ></path>
+                </svg>
+                Help Center
+              </div>
+              <svg
+                class="w-3 h-3"
+                fill="none"
+                stroke="currentColor"
+                viewbox="0 0 24 24"
+              >
+                <path
+                  d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                ></path>
+              </svg>
+            </a>
+          </li>
+          <li>
+            <a
+              class="flex items-center gap-3 px-2 py-1.5 text-sm text-gray-400 hover:text-white transition-colors"
+              href="#"
+            >
+              <svg
+                class="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewbox="0 0 24 24"
+              >
+                <path
+                  d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                ></path>
+                <path
+                  d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                ></path>
+              </svg>
+              Settings
+            </a>
+          </li>
+          <li>
+            <a
+              class="flex items-center gap-3 px-2 py-1.5 text-sm text-gray-400 hover:text-white transition-colors"
+              href="#"
+            >
+              <svg
+                class="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewbox="0 0 24 24"
+              >
+                <path
+                  d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                ></path>
+              </svg>
+              Invite teams
+            </a>
+          </li>
+        </ul>
+        <!-- User Profile -->
+        <div class="flex items-center justify-between px-2 pt-2 cursor-pointer">
+          <div class="flex items-center gap-3">
+            <img
+              alt="Kamil Bachanek"
+              class="w-8 h-8 rounded-full border border-gray-700"
+              src="https://lh3.googleusercontent.com/aida-public/AB6AXuDoqfBgL3BYsI0bERg7OPQhFsJ6zaaQG8Twt2sB56EqZQtj20xMQ-jD8RqE_PfbyLso6cgQwTVYMRymXCoBY2dK3zdLfPuVVDh3w1yOjigAieaNDYp_JZq3kS7MoDScerAHpN-hFCwpLb9IxFjfxO06dQ1oYFK-IhC_sC2x86112trfeHiDZpgSWXNQ9HedLkuK5RL1x4LN7YjeJFwqWPzU3Opf7KBbZDj_He_JXbag7LJpISTXxoGANa7YBFPuz0DjersHFg--Gw"
+            />
+            <div>
+              <p class="text-sm font-medium text-white">Kamil Bachanek</p>
+              <p class="text-xs text-gray-500">kamil@microdose.studio</p>
+            </div>
+          </div>
+          <div class="w-2 h-2 rounded-full border-2 border-gray-500"></div>
+        </div>
+      </div>
+    </aside>
+    <!-- END: Sidebar -->
+    <!-- BEGIN: Main Content Area -->
+    <main class="flex-1 flex flex-col min-w-0 bg-[#0d0d0d] overflow-hidden">
+      <!-- BEGIN: Top Navigation Bar -->
+      <header
+        class="h-16 border-b border-gray-800 flex items-center justify-between px-6 shrink-0"
+      >
+        <!-- Breadcrumbs & Back -->
+        <div class="flex items-center gap-4">
+          <button class="text-gray-500 hover:text-white">
+            <svg
+              class="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              viewbox="0 0 24 24"
+            >
+              <path
+                d="M10 19l-7-7m0 0l7-7m-7 7h18"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+              ></path>
+            </svg>
+          </button>
+          <div class="flex items-center text-sm text-gray-400 gap-2">
+            <svg
+              class="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              viewbox="0 0 24 24"
+            >
+              <path
+                d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+              ></path>
+            </svg>
+            Tasks
+            <span class="text-gray-600">›</span>
+            <span class="text-white">Tasks report</span>
+          </div>
+        </div>
+        <!-- Search & Actions -->
+        <div class="flex items-center gap-6">
+          <!-- Search Bar -->
+          <div class="relative w-64 hidden md:block">
+            <div
+              class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"
+            >
+              <svg
+                class="w-4 h-4 text-gray-500"
+                fill="none"
+                stroke="currentColor"
+                viewbox="0 0 24 24"
+              >
+                <path
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                ></path>
+              </svg>
+            </div>
+            <input
+              class="block w-full pl-9 pr-8 py-1.5 bg-gray-900 border border-gray-700 rounded-md text-sm text-gray-300 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-600 focus:border-gray-600"
+              placeholder="Search"
+              type="text"
+            />
+            <div
+              class="absolute inset-y-0 right-0 pr-2 flex items-center pointer-events-none"
+            >
+              <span class="text-xs text-gray-600 font-mono">⌘F</span>
+            </div>
+          </div>
+          <!-- Action Buttons -->
+          <div class="flex items-center gap-4 text-sm font-medium">
+            <button
+              class="flex items-center gap-2 text-gray-300 hover:text-white"
+            >
+              <svg
+                class="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewbox="0 0 24 24"
+              >
+                <path
+                  d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                ></path>
+              </svg>
+              Manage
+            </button>
+            <button
+              class="flex items-center gap-2 text-gray-300 hover:text-white"
+            >
+              <svg
+                class="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewbox="0 0 24 24"
+              >
+                <path
+                  d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                ></path>
+              </svg>
+              Share
+            </button>
+            <button
+              class="bg-white text-black px-4 py-1.5 rounded-md hover:bg-gray-200 transition-colors"
+            >
+              Create task
+            </button>
+          </div>
+        </div>
+      </header>
+      <!-- END: Top Navigation Bar -->
+      <!-- BEGIN: Timeline Content -->
+      <div class="flex-1 overflow-auto flex flex-col p-6 timeline-grid">
+        <!-- Header info -->
+        <div class="mb-8 max-w-2xl">
+          <h2 class="text-2xl font-bold text-white mb-2">Timeline</h2>
+          <p class="text-gray-400 text-sm">
+            Detailed, visual representation of a project's journey, highlighting
+            key milestones, progress updates, and upcoming tasks.
+          </p>
+        </div>
+        <!-- Timeline Controls -->
+        <div class="flex items-center justify-between mb-6">
+          <div class="flex items-center gap-4">
+            <!-- View Switcher -->
+            <div class="flex bg-gray-900 border border-gray-800 rounded-md p-1">
+              <button
+                class="px-3 py-1 text-sm text-gray-400 hover:text-white rounded"
+              >
+                Day
+              </button>
+              <button
+                class="px-3 py-1 text-sm text-white bg-gray-800 rounded shadow-sm"
+              >
+                Week
+              </button>
+              <button
+                class="px-3 py-1 text-sm text-gray-400 hover:text-white rounded"
+              >
+                Month
+              </button>
+            </div>
+            <!-- Date Range Selector -->
+            <div
+              class="flex items-center bg-gray-900 border border-gray-800 rounded-md px-3 py-1.5 text-sm text-gray-300"
+            >
+              <button class="text-gray-500 hover:text-white mr-2">&lt;</button>
+              <span>27 Dec - 4 Jan</span>
+              <button class="text-gray-500 hover:text-white ml-2">&gt;</button>
+            </div>
+          </div>
+          <div class="flex items-center gap-6">
+            <!-- Show Done Toggle -->
+            <label
+              class="flex items-center gap-2 cursor-pointer text-sm text-gray-400"
+            >
+              <span>Show done</span>
+              <div class="relative">
+                <input checked="" class="sr-only" type="checkbox" />
+                <div class="block bg-gray-700 w-8 h-4 rounded-full"></div>
+                <div
+                  class="dot absolute left-1 top-0.5 bg-white w-3 h-3 rounded-full transition transform translate-x-4"
+                ></div>
+              </div>
+            </label>
+            <!-- Sort & Filter -->
+            <button
+              class="flex items-center gap-2 text-sm text-gray-400 hover:text-white"
+            >
+              <svg
+                class="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewbox="0 0 24 24"
+              >
+                <path
+                  d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                ></path>
+              </svg>
+              Sort
+            </button>
+            <button
+              class="flex items-center gap-2 text-sm text-gray-400 hover:text-white"
+            >
+              <svg
+                class="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewbox="0 0 24 24"
+              >
+                <path
+                  d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                ></path>
+              </svg>
+              Filter
+            </button>
+            <!-- Team avatars snippet -->
+            <div class="flex -space-x-2 mr-2">
+              <img
+                alt="Team member"
+                class="w-6 h-6 rounded-full border-2 border-[#0d0d0d]"
+                src="https://lh3.googleusercontent.com/aida-public/AB6AXuB8b0AXGrjl-Q4bLU7cF8TEZsXv_DvGxZTdV77QVYXUIuU-6C4FM_-mh_7ftxc5Pn1H8NvsuQBZtSh2zyKPbi0cWKycPPrkmaa421MNeeox12S2f8APSgmWOuB-RMuCh_MdOPTLdoqzfSJ0PUvGsvyFRUmdPPZanhCInYVoe53QBJYzLJqiL16aaiahRbbhGQcusSAFq-_M7A9NZwvLeFhq51zth7ND1umqQGivWHf0T2pcFjHdMcM3ZkWUfbxuaPyFu8s1DX9NTw"
+              />
+              <img
+                alt="Team member"
+                class="w-6 h-6 rounded-full border-2 border-[#0d0d0d]"
+                src="https://lh3.googleusercontent.com/aida-public/AB6AXuBavBO5KF9GzulQPbYWcHxVsv9K76YLmKXBp4cUIvk1_I_hmBYJjTpVkNUgQ41KbgQaw1CrWg9bIet807qqmu1FcXpcchWcw02TyYi3hgBls64KeP_R24tJ-kg8GrbFq3Am6x4ZPIiCq63Vwxjd-JKSLzFZyV2N59jodrTTe8mxp6rwMhzLCZO-uehgmlubKgVgTJEaW8VZxlN5Sq9S3zCiB-HNRgZCDrkIi6ktq4UMzQj32RPg2soMuUMGrGsl5QS5DtZARPPIOA"
+              />
+              <img
+                alt="Team member"
+                class="w-6 h-6 rounded-full border-2 border-[#0d0d0d]"
+                src="https://lh3.googleusercontent.com/aida-public/AB6AXuA-UUeevFx7hcCW2Wzz_KssqgNo0vCFqtEIrkjSA637IN5DDLSsdwW9iaAlJ1KR2blA3NIAeQZl7duJZHWB33z9nHK1ejWU-wTO4Szya3Bly_WedBZpjEfKt6pSBhXP5DmCS1TSMhL76F0d8aqgR5ZrkJ6xieMi5dI2yaPhbbLNdwk6g3ft1nlaV9FCkymyQ3K7cSLcyIsNtnnIBbIQGPFWXbrTMXub_2yObZUwr_b3oyD2vpt8loUnY3LkSUYlv-j7nRp2YoCxNQ"
+              />
+              <img
+                alt="Team member"
+                class="w-6 h-6 rounded-full border-2 border-[#0d0d0d]"
+                src="https://lh3.googleusercontent.com/aida-public/AB6AXuAVQYHroMd4tmZwuRCvDgjjSvHKYOI8iB5thP35iXayLipIo-PN6Uxhd7tFcfi5V2dSEW_v01AiCyG97Y2FW8F17Y1ZJOQIkvDnO1qSxFx_8CQ-gHOWMBX_OOhFEYZAjcfiLg7hCIeF7QYe-LC9La15c-nEV4sGhWuiJlEXaQRhSgEaIWO8R4yTCfXd0WnzHCjd1UCrpHA3JC4T00GIbvb8A7B5lU2BuyN3AxnmsvLn3LWGnFuvM-HGl9BLcWdQWPmtKlYoAicADg"
+              />
+              <button
+                class="w-6 h-6 rounded-full border-2 border-[#0d0d0d] bg-gray-800 text-gray-300 flex items-center justify-center text-xs font-medium"
+              >
+                +
+              </button>
+            </div>
+          </div>
+        </div>
+        <!-- The Timeline Graph Area -->
+        <div
+          class="relative flex-1 mt-4 border-t border-gray-800 pt-4 min-w-[1000px]"
+        >
+          <!-- Axis Labels (Months & Days) -->
+          <div
+            class="flex text-sm text-gray-400 mb-6 sticky top-0 bg-[#0d0d0d] z-10 pb-4 border-b border-gray-800"
+          >
+            <div class="w-1/3">
+              <div class="font-semibold text-white mb-2">December 2024</div>
+              <div class="flex text-xs font-mono justify-between pr-4">
+                <span>M 23</span><span>T 24</span><span>W 25</span
+                ><span class="text-white relative"
+                  >T 26
+                  <div
+                    class="absolute -bottom-4 left-1/2 w-0.5 h-full bg-accent transform -translate-x-1/2"
+                  ></div></span
+                ><span>F 27</span><span>S 28</span><span>S 28</span>
+              </div>
+            </div>
+            <div class="w-1/2 border-l border-gray-800 pl-4">
+              <div class="font-semibold text-white mb-2">January 2025</div>
+              <div class="flex text-xs font-mono justify-between pr-4">
+                <span>M 30</span><span>T 31</span><span>W 1</span
+                ><span>T 2</span><span>F 3</span><span>S 4</span><span>S 5</span
+                ><span>M 6</span>
+              </div>
+            </div>
+            <div class="w-1/6 border-l border-gray-800 pl-4">
+              <div class="font-semibold mb-2">Feb '25</div>
+              <div class="flex text-xs font-mono justify-between">
+                <span>T 7</span><span>W 8</span>
+              </div>
+            </div>
+          </div>
+          <!-- Vertical Current Time Line -->
+          <div
+            class="absolute top-[80px] bottom-0 left-[18%] w-px bg-accent z-0"
+          >
+            <div
+              class="w-2 h-2 rounded-full bg-accent absolute -top-1 -left-[3px] shadow-[0_0_8px_rgba(155,81,224,0.8)]"
+            ></div>
+          </div>
+          <!-- Task Rows Container -->
+          <div class="relative z-10 space-y-6 pt-4">
+            <!-- Task 1: Spline animated logo -->
+            <div class="flex items-center h-12 relative">
+              <div
+                class="absolute left-[15%] w-[35%] bg-gray-900 border border-gray-700 rounded-lg p-2 flex items-center justify-between shadow-lg"
+              >
+                <div>
+                  <h4 class="text-sm font-semibold text-white leading-tight">
+                    Spline animated logo
+                  </h4>
+                  <div
+                    class="flex items-center gap-1 text-xs text-gray-500 mt-0.5"
+                  >
+                    <span
+                      class="w-2 h-2 rounded-full bg-green-500 inline-block"
+                    ></span>
+                    Logo
+                  </div>
+                </div>
+                <div class="flex items-center gap-2">
+                  <div class="flex -space-x-1">
+                    <img
+                      alt="Avatar"
+                      class="w-5 h-5 rounded-full border border-gray-700"
+                      src="https://lh3.googleusercontent.com/aida-public/AB6AXuBAoIKMN56jSnR-mAWGDoOZ9oQXZ1NocTOwPA56riV2Ga_WCjyyac5jF7k_4SzjPTSc8LK5E4VANM1CQMQo7t2d_oFoJYRM2JvrxozY9ei8rbuNRqOkt1VnQQcRc-AN9LFdJ1x8tKtzTs7q5pn4YwzuKFWXwTXwP4XTlhYwEohjIOYLUQ_EWc0_NF088Se1FFGOmVF10P2KxWzPH5LTxFE6ojkiSjM8NzvJAHR3VEvJ7IeKI2qfIchaoUHDRXz-rdLLlv3uRWQnpA"
+                    />
+                    <img
+                      alt="Avatar"
+                      class="w-5 h-5 rounded-full border border-gray-700"
+                      src="https://lh3.googleusercontent.com/aida-public/AB6AXuAIm1TPUVy5yU-EtdjShoi6ESPdGgmHP8aGxE4iGRS3dFDRGZAC-QvunCQBwl80rE5qD33ikmuMgngRYSqf5YV1ZUY_PQJRsa-c7QsF0II8EtEV6YnbdnWinGoLiPqoHJHtmQ9zqZ_nD6Kbo7G0lNWTrRT8luO4sD82IJA3Fsfu43V5VdkKZB1gB0hahARgVsjfP-qn9xT936ol_Nr9RXenquD6-Zoq6Qlop0bQN5T_wAddrwDsGWLje6LhBki9is_075S1rnJOvg"
+                    />
+                  </div>
+                  <button class="text-gray-500 hover:text-white">
+                    <svg
+                      class="w-4 h-4"
+                      fill="currentColor"
+                      viewbox="0 0 20 20"
+                    >
+                      <path
+                        d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"
+                      ></path>
+                    </svg>
+                  </button>
+                </div>
+                <!-- Connection Node Right -->
+                <div
+                  class="absolute -right-1.5 top-1/2 transform -translate-y-1/2 w-3 h-3 rounded-full bg-purple-500 border-2 border-[#0d0d0d]"
+                ></div>
+              </div>
+              <!-- Task 1 Side Note (Case studies) -->
+              <div
+                class="absolute left-[85%] w-[15%] border-l-2 border-orange-500 pl-3"
+              >
+                <h4 class="text-sm font-semibold text-white leading-tight">
+                  Case studies
+                </h4>
+                <div
+                  class="flex items-center gap-1 text-xs text-gray-500 mt-0.5"
+                >
+                  <span
+                    class="w-2 h-2 rounded-full bg-red-500 inline-block"
+                  ></span>
+                  Fin Tech work
+                </div>
+              </div>
+            </div>
+            <!-- Connecting Line SVG -->
+            <svg
+              class="absolute top-[3rem] left-[50%] w-[100px] h-[40px] pointer-events-none"
+              style="z-index: 0"
+            >
+              <path
+                d="M 0 0 C 50 0, 50 40, 100 40"
+                fill="transparent"
+                stroke="#4a4a4a"
+                stroke-width="2"
+              ></path>
+            </svg>
+            <!-- Task 2: New microdose website (Gradient) -->
+            <div class="flex items-center h-14 relative mt-2">
+              <!-- Left floating task part (cut off in image) -->
+              <div
+                class="absolute left-0 w-[12%] bg-gray-900 border border-gray-700 rounded-r-lg p-2 flex items-center justify-between opacity-50"
+              >
+                <div>
+                  <h4 class="text-sm font-semibold text-white leading-tight">
+                    page
+                  </h4>
+                  <div class="text-xs text-gray-500 mt-0.5">us</div>
+                </div>
+                <div class="flex -space-x-1">
+                  <img
+                    alt="Avatar"
+                    class="w-5 h-5 rounded-full border border-gray-700"
+                    src="https://lh3.googleusercontent.com/aida-public/AB6AXuDdFEuOdUvwTLLtqnfZ1m1U6Y198kkav-OYlJF2nw9005yS9YYhEOMEkG0wbkIStyBjr4wCre7IKMXf11ZnR_U-YiCM3u2l2iW3lgAPmgSU312nIpK07gIduP7ASuwuFqFXIEAaxOJAFm9Vo_3pGDebbXT68222Hrda0aaSmI_Wby2ZmEa6KmDYMBOp8T4fSXDk0HFywVoakj64Dt7wxstH2iV1xLKYGZI9zZHwLAv3ofQnx4X03mkodZ7SkaD9zvMltTJJCdoYLA"
+                  />
+                </div>
+              </div>
+              <!-- Main Highlighted Task -->
+              <div
+                class="absolute left-[52%] w-[35%] task-gradient rounded-lg p-3 flex items-center justify-between shadow-xl cursor-pointer hover:opacity-90 transition-opacity"
+              >
+                <!-- Connection Node Left -->
+                <div
+                  class="absolute -left-1.5 top-1/2 transform -translate-y-1/2 w-3 h-3 rounded-full bg-white border-2 border-accent"
+                ></div>
+                <div>
+                  <h4 class="text-sm font-semibold text-white leading-tight">
+                    New microdose website
+                  </h4>
+                  <div
+                    class="flex items-center gap-1 text-xs text-white/80 mt-0.5"
+                  >
+                    <svg
+                      class="w-3 h-3"
+                      fill="none"
+                      stroke="currentColor"
+                      viewbox="0 0 24 24"
+                    >
+                      <path
+                        d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                      ></path>
+                    </svg>
+                    New Homepage
+                  </div>
+                </div>
+                <div class="flex items-center gap-3">
+                  <div class="flex -space-x-1">
+                    <img
+                      alt="Avatar"
+                      class="w-6 h-6 rounded-full border-2 border-white"
+                      src="https://lh3.googleusercontent.com/aida-public/AB6AXuC3tWytuN4rmCW-AfmAs7TASjy_1R9NYENU8UECwpVdlC1MmEJ58EzpoKFQMti8HOEe9gEPPBiEZ0pYCGQn2PonkylveQFPV_4um6ulUHUMaQxbLonNAXG0Pv6hrA9OLIAnQVG_l32A9xoTdLfmp8DcwQACyFTTe8Wf_E25r5fQ9mLCkADjRYBuzYX7iSt8UPtKg0mSgjorsVhZ-5BT6Wu3S1-gTM-30gkd6ouF1l5mj8aNS5GFOPq1w1b3LDuNw22zc7ZndfjTgQ"
+                    />
+                    <img
+                      alt="Avatar"
+                      class="w-6 h-6 rounded-full border-2 border-white"
+                      src="https://lh3.googleusercontent.com/aida-public/AB6AXuD8wrFbMZ5vhCzWyuzuTfh0wi3zZ5r8OwyW2y0eh1VOKcrMszirsYwVNb5IfmeA0wK7KHH4R7su40a3FHY18t7Onw_mmj0mG3zAHm-oAobI3Tju91EWFO-AI_Z57H-KIXDNoXeeGulmWTsIcU8sD21Iy-X6FZVHfXx1ZLEBxnwJXILCZuDWrLEjTmb3LSsiK5LdoOR2DtyAHyhB9vg8R3F_LkYKz-GJ15RcfCQ_LY3qCWLmk0KAdxbWpU9OQWlDCsvM5k9uYC6PNQ"
+                    />
+                    <img
+                      alt="Avatar"
+                      class="w-6 h-6 rounded-full border-2 border-white"
+                      src="https://lh3.googleusercontent.com/aida-public/AB6AXuCj22R_wtBV6Y0YcDVAkzplyPfdpdYQOeiQD1DSy0I8YOIv5cdhgTw0NCSkfA8_JbQhIDH711dbbKZi7Fghc7f137xm9lZhNtX411gGguI6HIYcLpC4Nce1JFa6mH2cbApWt69160oTS6-u9plsciVn9FHxhH8UCtSNJTQbx5ZfQyhc1XG3L-xQBZE69K6B130x4Ftmdlcb6lUslH7W8XoV9jq4OTJKwwmk98egtWKrf9FurRXJRnmYRoXkAelDDqwadcApSZ4BsA"
+                    />
+                  </div>
+                  <div class="text-white">
+                    <svg
+                      class="w-4 h-4"
+                      fill="currentColor"
+                      viewbox="0 0 20 20"
+                    >
+                      <path
+                        d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"
+                      ></path>
+                    </svg>
+                  </div>
+                </div>
+                <!-- Connection Node Right -->
+                <div
+                  class="absolute -right-1.5 top-1/2 transform -translate-y-1/2 w-3 h-3 rounded-full bg-white border-2 border-[#f2c94c]"
+                ></div>
+              </div>
+            </div>
+            <!-- Connecting Line SVG -->
+            <svg
+              class="absolute top-[8rem] left-[25%] w-[300px] h-[100px] pointer-events-none"
+              style="z-index: 0"
+            >
+              <path
+                d="M 0 0 L 0 50 C 0 80, 20 100, 50 100 L 280 100"
+                fill="transparent"
+                stroke="#27ae60"
+                stroke-dasharray="4 4"
+                stroke-width="2"
+              ></path>
+              <circle cx="0" cy="0" fill="#27ae60" r="4"></circle>
+              <circle cx="280" cy="100" fill="#e74c3c" r="4"></circle>
+            </svg>
+            <!-- Task 3: Input Styleguide -->
+            <div class="flex items-center h-12 relative mt-4">
+              <div
+                class="absolute left-[20%] w-[40%] bg-gray-900 border border-gray-700 rounded-lg p-2 flex items-center justify-between opacity-80 hover:opacity-100 transition-opacity"
+              >
+                <!-- Left green border indicator -->
+                <div
+                  class="absolute left-0 top-0 bottom-0 w-1 bg-green-500 rounded-l-lg"
+                ></div>
+                <div class="pl-3">
+                  <h4 class="text-sm font-semibold text-white leading-tight">
+                    Input Styleguide
+                  </h4>
+                  <div
+                    class="flex items-center gap-1 text-xs text-gray-500 mt-0.5"
+                  >
+                    <svg
+                      class="w-3 h-3"
+                      fill="none"
+                      stroke="currentColor"
+                      viewbox="0 0 24 24"
+                    >
+                      <path
+                        d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                      ></path>
+                    </svg>
+                    Contact
+                  </div>
+                </div>
+                <div class="flex items-center gap-2">
+                  <div class="flex -space-x-1">
+                    <img
+                      alt="Avatar"
+                      class="w-5 h-5 rounded-full border border-gray-700"
+                      src="https://lh3.googleusercontent.com/aida-public/AB6AXuCidD42qIERiqbMlyq0PntP3A8ZiAFrHaCxymURaZm6m7MjRBzVl4e5QkOmBf7458vWfieLQ9OilQpxoipgSjJsq6UEVyBzfZrzkrf9x0XBZrd7httqKEnu_qZfm2bmhfTPa6JIDiUwkBPng-AZqz-kwQdfy3GaJJftLZeGy_JonCcuJaG66t593lis0nSVjSwGMMjb6ps7q1X1WyUs78ZPHUmbEvW_Yf4CGAu3vufzQ0myaUmJS-0hPYJArRsRq5TzLt_kdkiTYw"
+                    />
+                    <img
+                      alt="Avatar"
+                      class="w-5 h-5 rounded-full border border-gray-700"
+                      src="https://lh3.googleusercontent.com/aida-public/AB6AXuAJSEgCvmxDPY9aGLwUSdLtuBfzhK4wud-j5RpmHTERIaqpTmppaG_tk4oZ8kKZaIi1RKKV1yinBbT9gqri8uDENOUuL6nlUsIwitvdEY3nhOy6el4ncAdurOIAQwfcEZpEfzxASbsvyvjWx3GAGsWxaC0Jsk0k6dEG62KjCus0zFhdxeDGgqx7ORNksFBRZG76Big7AodTv6oXBHAyow9ZQH_uqFtc8BJwkooFiHKP94ua33LrBejozJic3EK1gCpjM1N5nhnDHA"
+                    />
+                  </div>
+                  <button class="text-gray-500 hover:text-white">
+                    <svg
+                      class="w-4 h-4"
+                      fill="currentColor"
+                      viewbox="0 0 20 20"
+                    >
+                      <path
+                        d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"
+                      ></path>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+            <!-- Task 4 & 5 (Bottom Row) -->
+            <div class="flex items-center h-12 relative mt-8">
+              <!-- Partial Task Left -->
+              <div
+                class="absolute left-0 w-[20%] border-t border-b border-r border-gray-700 bg-gray-900/50 p-2 flex items-center justify-between rounded-r-lg"
+              >
+                <div>
+                  <h4
+                    class="text-sm font-semibold text-white leading-tight truncate"
+                  >
+                    lose pricing
+                  </h4>
+                  <div class="text-xs text-gray-500 mt-0.5">Homepage</div>
+                </div>
+                <img
+                  alt="Avatar"
+                  class="w-5 h-5 rounded-full border border-gray-700"
+                  src="https://lh3.googleusercontent.com/aida-public/AB6AXuB4CjhoPiJHVQkBz5sLMmw69l2LrMhvsYp9fAt4h4ioE_py3avfPMmpZkugr3u1kVIiU7eIYIZjfvgsyni-yFqtP1Q8pUeUqL_xzqCvt8NsHCQy_mpbtfuE9y7Fm6Lqo9Z-KIsD5dXmX9ayT64kQwKVW5-F7ZUHznaaFhHI4EqBuhmyZlduLHzQI3TzNDaJoUh_bzoy54Ws7yQWA0TEGBH4Bo2_27-T1qWTgaXaB2YymVHk2kVi4VquVBOC1jHDgxsTvqxHMgx2RQ"
+                />
+              </div>
+              <!-- Task 4: Sales deck -->
+              <div
+                class="absolute left-[53%] w-[35%] bg-gray-900 border border-gray-700 rounded-lg p-2 flex items-center justify-between"
+              >
+                <!-- Left blue border indicator -->
+                <div
+                  class="absolute left-0 top-0 bottom-0 w-1 bg-indigo-500 rounded-l-lg"
+                ></div>
+                <div class="pl-3">
+                  <h4 class="text-sm font-semibold text-white leading-tight">
+                    Sales deck - iteration ver. 1
+                  </h4>
+                  <div
+                    class="flex items-center gap-1 text-xs text-gray-500 mt-0.5"
+                  >
+                    Marketing
+                  </div>
+                </div>
+                <div class="flex items-center gap-2">
+                  <div class="flex -space-x-1">
+                    <img
+                      alt="Avatar"
+                      class="w-5 h-5 rounded-full border border-gray-700"
+                      src="https://lh3.googleusercontent.com/aida-public/AB6AXuAGExMEKHii9feqYmsYU9X3EFXdZ4xDYHaqrhTecozK1KVGw2rxQJ-3Cn-vA-z4WvB7aqiRU29NzDSRxpFnX-71IRaMLvVnzzQiLyJx-aKdAfbfgJWdvGLFSxsZZ4FjzzomC8V-X7E7ORqynDWZB_8AVUmj7-j3QPyviFsLGUXWhl4l0xkn7lMs7lWBDCOI-Wi0HWEknTZgRNLkM7_k6Lhi1MafkXQrs4ada0Bfke-Mmk1MzTpKFx6Kk_GUfAs301sUs4pYkHDfUw"
+                    />
+                    <img
+                      alt="Avatar"
+                      class="w-5 h-5 rounded-full border border-gray-700"
+                      src="https://lh3.googleusercontent.com/aida-public/AB6AXuBQ76V14SN8doro5jWKB0HuaImoIbgxAreTulcSqprxrMwuCykbC30aRUlZLijA8tEIuCwsFBBRZccpbnqdRxSbsuYGii4YqRu94Xw-qiwsw474GlcbOSTZsjBflxq_J-XHJwmot_oOKOjqkHHpS___cCXofaBH_ac2ClhRJqlef51grzw1VhxcgWGJjl6TDO6n6CtoeuQIRjjxO3zifx79k3FAN-FBgwuMVcE9MfWkjOMpT33OxoEXR5CJHmLak66o62-8KfXJcw"
+                    />
+                  </div>
+                  <button class="text-gray-500 hover:text-white">
+                    <svg
+                      class="w-4 h-4"
+                      fill="currentColor"
+                      viewbox="0 0 20 20"
+                    >
+                      <path
+                        d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"
+                      ></path>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+            <!-- Task 6 & 7 (Lowest Row) -->
+            <div class="flex items-center h-12 relative mt-4 pb-10">
+              <!-- Partial Task Left -->
+              <div class="absolute left-0 w-[18%] bg-transparent p-2">
+                <div>
+                  <h4
+                    class="text-sm font-semibold text-white leading-tight truncate"
+                  >
+                    iding Behance
+                  </h4>
+                  <div class="text-xs text-gray-500 mt-0.5">rand book</div>
+                </div>
+              </div>
+              <!-- Task 7: Demo reel -->
+              <div
+                class="absolute left-[58%] w-[25%] bg-transparent p-2 flex flex-col justify-center"
+              >
+                <div class="flex items-center gap-2">
+                  <!-- Left red line -->
+                  <div class="w-0.5 h-6 bg-red-500"></div>
+                  <div>
+                    <h4 class="text-sm font-semibold text-white leading-tight">
+                      Demo reel
+                    </h4>
+                    <div
+                      class="flex items-center gap-1 text-xs text-gray-500 mt-0.5"
+                    >
+                      <svg
+                        class="w-3 h-3 text-green-500"
+                        fill="none"
+                        stroke="currentColor"
+                        viewbox="0 0 24 24"
+                      >
+                        <path
+                          d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          stroke-width="2"
+                        ></path>
+                        <path
+                          d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          stroke-width="2"
+                        ></path>
+                      </svg>
+                      Animation 2nd
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- END: Timeline Content -->
+    </main>
+    <!-- END: Main Content Area -->
+  </body>
+</html>

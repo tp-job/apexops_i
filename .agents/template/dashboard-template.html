@@ -1,0 +1,431 @@
+<!doctype html>
+<html class="dark" lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>Neon Dark Dashboard</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <script>
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "dash-bg":      "#1e1e1e",
+              "sidebar-bg":   "#242424",
+              "card-bg":      "#2a2a2a",
+              "neon-green":   "#ccff33",
+              "neon-purple":  "#9966ff",
+              "text-main":    "#f0f0f0",
+              "text-muted":   "#a0a0a0",
+              "border-subtle":"#333333",
+            },
+            fontFamily: { sans: ["Inter","sans-serif"] },
+            borderRadius: { xl:"1.5rem", "2xl":"2rem" },
+          },
+        },
+      };
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet" />
+    <style>
+      *, *::before, *::after { box-sizing: border-box; }
+
+      html, body {
+        margin: 0; padding: 0;
+        width: 100%; height: 100%;
+        overflow: hidden;
+        background-color: #1e1e1e;
+        color: #f0f0f0;
+        font-family: "Inter", sans-serif;
+      }
+
+      /* card glass-style */
+      .card {
+        background-color: #2a2a2a;
+        border-radius: 1.5rem;
+        padding: 1.5rem;
+        border: 1px solid rgba(255,255,255,0.05);
+        position: relative;
+        overflow: hidden;
+      }
+      .card::before {
+        content: "";
+        position: absolute;
+        top: -50%; left: -50%;
+        width: 200%; height: 200%;
+        background: radial-gradient(circle, rgba(255,255,255,0.03) 0%, transparent 60%);
+        pointer-events: none;
+      }
+
+      .card-neon-active {
+        background-color: #ccff33;
+        color: #1e1e1e;
+      }
+
+      .icon-btn {
+        width: 40px; height: 40px;
+        border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        background-color: #333333;
+        color: #f0f0f0;
+        transition: all 0.2s;
+        cursor: pointer;
+        flex-shrink: 0;
+      }
+      .icon-btn:hover { background-color: #444; }
+
+      ::-webkit-scrollbar { width: 6px; height: 6px; }
+      ::-webkit-scrollbar-track { background: #1e1e1e; }
+      ::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
+      ::-webkit-scrollbar-thumb:hover { background: #666; }
+    </style>
+  </head>
+
+  <!-- Full-viewport flex row -->
+  <body class="flex h-screen overflow-hidden antialiased text-text-main">
+
+    <!-- ── SIDEBAR ── -->
+    <aside class="w-20 bg-[#242424] flex flex-col items-center py-6 border-r border-[#333] flex-shrink-0">
+      <div class="text-neon-green text-3xl mb-8">
+        <i class="fa-solid fa-bolt"></i>
+      </div>
+      <nav class="flex-1 flex flex-col gap-6 w-full items-center">
+        <div class="w-10 h-10 rounded-full bg-neon-green text-[#1e1e1e] flex items-center justify-center cursor-pointer shadow-[0_0_15px_rgba(204,255,51,0.4)]">
+          <i class="fa-solid fa-house"></i>
+        </div>
+        <div class="w-10 h-10 rounded-full text-text-muted hover:text-white flex items-center justify-center cursor-pointer transition-colors"><i class="fa-solid fa-layer-group"></i></div>
+        <div class="w-10 h-10 rounded-full text-text-muted hover:text-white flex items-center justify-center cursor-pointer transition-colors"><i class="fa-solid fa-chart-simple"></i></div>
+        <div class="w-10 h-10 rounded-full text-text-muted hover:text-white flex items-center justify-center cursor-pointer transition-colors"><i class="fa-solid fa-clipboard-check"></i></div>
+        <div class="w-10 h-10 rounded-full text-text-muted hover:text-white flex items-center justify-center cursor-pointer transition-colors"><i class="fa-solid fa-dollar-sign"></i></div>
+        <div class="w-10 h-10 rounded-full text-text-muted hover:text-white flex items-center justify-center cursor-pointer transition-colors"><i class="fa-solid fa-video"></i></div>
+      </nav>
+      <div class="flex flex-col gap-4 mt-auto">
+        <div class="w-10 h-10 rounded-full text-text-muted hover:text-white flex items-center justify-center cursor-pointer transition-colors"><i class="fa-solid fa-phone"></i></div>
+        <div class="w-10 h-10 rounded-full text-text-muted hover:text-white flex items-center justify-center cursor-pointer transition-colors"><i class="fa-solid fa-gear"></i></div>
+      </div>
+    </aside>
+
+    <!-- ── MAIN ── -->
+    <main class="flex-1 flex flex-col overflow-hidden bg-[#1e1e1e] min-w-0">
+
+      <!-- HEADER -->
+      <header class="flex justify-between items-center px-8 py-5 flex-shrink-0">
+        <div class="flex items-center gap-6">
+          <div class="relative">
+            <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-text-muted text-sm"></i>
+            <input class="bg-[#333] border-none rounded-full py-2 pl-10 pr-4 text-sm text-white placeholder-text-muted w-64 focus:ring-1 focus:ring-neon-green outline-none" placeholder="Start Search Here..." type="text" />
+          </div>
+        </div>
+        <div class="flex items-center gap-4">
+          <button class="icon-btn relative">
+            <i class="fa-regular fa-comment-dots"></i>
+            <span class="absolute top-1 right-1 w-2 h-2 bg-neon-green rounded-full"></span>
+          </button>
+          <button class="icon-btn"><i class="fa-regular fa-bell"></i></button>
+          <div class="w-10 h-10 rounded-full overflow-hidden border-2 border-[#333] cursor-pointer flex-shrink-0">
+            <img alt="User Profile" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuANzVyKwR0oDnScK6HK0k2VqJvqUR4JJas2U_VS7U0kRfrX6yqObMSlpcugJkR3c0Q1HgpEcmH8tfOUxpdyvjpHsRQSlC46poAY7ttW4fYofi9JO_b6Fl9PHRuDulzbneh_SBW6LnK-Hs6gD5YdBYg17AoCqkoZ1zWW_agtqYnJNxP_MgwPiLq0M8Dos019WGkc0CSVI4x19U8TynOHMViIyQ7sODm5Z0PUbhJmH9T_Xac555ck3o8QfIqE4iYF0LADFfOs5kJNggi3" />
+          </div>
+        </div>
+      </header>
+
+      <!-- SCROLLABLE CONTENT -->
+      <div class="flex-1 overflow-y-auto px-8 pb-8 min-h-0">
+
+        <!-- Title row -->
+        <div class="flex justify-between items-center mb-5">
+          <h1 class="text-3xl font-semibold">Dashboard</h1>
+          <div class="flex gap-3">
+            <button class="bg-card-bg border border-[#333] rounded-full px-4 py-2 text-sm flex items-center gap-2 hover:bg-[#333]">
+              <div class="w-4 h-4 rounded-full bg-neon-green text-black flex items-center justify-center text-[10px]"><i class="fa-solid fa-star"></i></div>
+              All Product
+              <i class="fa-solid fa-chevron-down text-xs text-text-muted ml-2"></i>
+            </button>
+            <button class="bg-neon-green text-black rounded-full px-4 py-2 text-sm font-medium flex items-center gap-2 hover:bg-[#b3e62d]">
+              Current Report
+              <i class="fa-solid fa-chevron-down text-xs ml-2"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- ── KPI CARDS ── -->
+        <div class="grid grid-cols-4 gap-5 mb-5">
+
+          <!-- Card 1: Active Neon -->
+          <div class="card card-neon-active flex flex-col justify-between shadow-[0_0_20px_rgba(204,255,51,0.15)]">
+            <div class="absolute top-0 left-0 w-32 h-32 bg-white opacity-10 rounded-full -translate-x-1/4 -translate-y-1/4 blur-xl"></div>
+            <div class="flex justify-between items-start z-10">
+              <div class="w-10 h-10 rounded-full bg-black/10 flex items-center justify-center"><i class="fa-solid fa-users text-black"></i></div>
+              <span class="font-medium text-black text-sm text-right">New Patient Leads</span>
+            </div>
+            <div class="mt-6 flex justify-between items-end z-10">
+              <div>
+                <div class="text-3xl font-bold text-black">$45,56.20</div>
+                <div class="text-sm font-medium text-[#556611] mt-1"><i class="fa-solid fa-arrow-trend-up mr-1"></i>60% This month</div>
+              </div>
+              <div class="flex items-end gap-1 h-12">
+                <div class="w-2 bg-black/40 rounded-t h-1/3"></div>
+                <div class="w-2 bg-black/40 rounded-t h-1/2"></div>
+                <div class="w-2 bg-black/40 rounded-t h-3/4"></div>
+                <div class="w-2 bg-black rounded-t h-full"></div>
+                <div class="w-2 bg-black/40 rounded-t h-2/3"></div>
+                <div class="w-2 bg-black/40 rounded-t h-1/2"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card 2 -->
+          <div class="card flex flex-col justify-between">
+            <div class="flex justify-between items-start">
+              <div class="w-10 h-10 rounded-full bg-neon-green text-black flex items-center justify-center"><i class="fa-regular fa-calendar-check"></i></div>
+              <span class="text-sm text-text-muted">Booked Appts</span>
+            </div>
+            <div class="mt-6 flex justify-between items-end">
+              <div>
+                <div class="text-2xl font-bold">$18,56.20</div>
+                <div class="text-sm text-neon-green mt-1 opacity-80"><i class="fa-solid fa-arrow-trend-up mr-1"></i>45% This month</div>
+              </div>
+              <div class="flex items-end gap-1 h-12 opacity-60">
+                <div class="w-3 bg-white/20 rounded-t h-1/4"></div>
+                <div class="w-3 bg-white/20 rounded-t h-2/4"></div>
+                <div class="w-3 bg-white/20 rounded-t h-3/4"></div>
+                <div class="w-3 bg-neon-green rounded-t h-full shadow-[0_0_8px_rgba(204,255,51,0.5)]"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card 3 -->
+          <div class="card flex flex-col justify-between">
+            <div class="flex justify-between items-start">
+              <div class="w-10 h-10 rounded-full bg-neon-green text-black flex items-center justify-center"><i class="fa-solid fa-percent"></i></div>
+              <span class="text-sm text-text-muted">Conversion Rate</span>
+            </div>
+            <div class="mt-6 flex justify-between items-end">
+              <div>
+                <div class="text-2xl font-bold">$28,56.20</div>
+                <div class="text-sm text-neon-green mt-1 opacity-80"><i class="fa-solid fa-arrow-trend-up mr-1"></i>35% This month</div>
+              </div>
+              <div class="relative w-16 h-10">
+                <svg class="w-full h-full stroke-neon-green fill-none opacity-80 drop-shadow-[0_0_3px_rgba(204,255,51,0.8)]" stroke-width="2" viewBox="0 0 100 40">
+                  <path d="M0,30 L20,25 L40,35 L60,15 L80,20 L100,5"></path>
+                </svg>
+                <div class="absolute right-4 top-0 bottom-0 border-r border-dashed border-white/30"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Card 4 -->
+          <div class="card flex flex-col justify-between">
+            <div class="flex justify-between items-start">
+              <div class="w-10 h-10 rounded-full bg-neon-green text-black flex items-center justify-center"><i class="fa-solid fa-comment-sms"></i></div>
+              <span class="text-sm text-text-muted">SMS Utilization</span>
+            </div>
+            <div class="mt-6 flex justify-between items-end">
+              <div>
+                <div class="text-2xl font-bold">$38,56.20</div>
+                <div class="text-sm text-neon-green mt-1 opacity-80"><i class="fa-solid fa-arrow-trend-up mr-1"></i>25% This month</div>
+              </div>
+              <div class="flex items-center gap-[2px] h-10 opacity-50">
+                <div class="w-1 bg-white rounded-full h-2"></div>
+                <div class="w-1 bg-white rounded-full h-4"></div>
+                <div class="w-1 bg-white rounded-full h-6"></div>
+                <div class="w-1 bg-white rounded-full h-8"></div>
+                <div class="w-1 bg-neon-green rounded-full h-10 shadow-[0_0_8px_rgba(204,255,51,0.8)]"></div>
+                <div class="w-1 bg-white rounded-full h-8"></div>
+                <div class="w-1 bg-white rounded-full h-6"></div>
+                <div class="w-1 bg-white rounded-full h-4"></div>
+                <div class="w-1 bg-white rounded-full h-2"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── MIDDLE ROW ── -->
+        <div class="grid grid-cols-3 gap-5 mb-5">
+
+          <!-- Heatmap -->
+          <div class="card">
+            <div class="flex justify-between items-center mb-4">
+              <div class="flex items-center gap-2">
+                <i class="fa-solid fa-microphone-lines text-text-muted text-sm"></i>
+                <h3 class="font-medium">Avg Voicemail By Day</h3>
+              </div>
+              <button class="w-6 h-6 rounded-full border border-[#333] flex items-center justify-center text-text-muted hover:bg-[#333]"><i class="fa-solid fa-ellipsis"></i></button>
+            </div>
+            <div class="flex gap-3 text-[10px] text-text-muted mb-4 items-center">
+              <div class="flex items-center gap-1"><div class="w-2 h-2 rounded-full bg-[#4a3d7a]"></div>&gt;300</div>
+              <div class="flex items-center gap-1"><div class="w-2 h-2 rounded-full bg-neon-purple opacity-40"></div>&gt;500</div>
+              <div class="flex items-center gap-1"><div class="w-2 h-2 rounded-full bg-neon-purple opacity-70"></div>&gt;700</div>
+              <div class="flex items-center gap-1"><div class="w-2 h-2 rounded-full bg-neon-purple"></div>&gt;900</div>
+            </div>
+            <div class="relative h-48 w-full flex">
+              <div class="flex flex-col justify-between text-[10px] text-text-muted pr-2 h-full pb-6">
+                <span>7.4%</span><span>2.1%</span><span>6.1%</span><span>8.1%</span><span>1.8%</span>
+              </div>
+              <div class="flex-1 grid grid-cols-7 gap-1 pb-6 relative">
+                <div class="flex flex-col gap-1"><div class="flex-1 bg-[#4a3d7a] rounded-sm opacity-50"></div><div class="flex-1 bg-[#6a5acd] rounded-sm opacity-70"></div><div class="flex-1 bg-[#4a3d7a] rounded-sm opacity-50"></div><div class="flex-1 bg-[#6a5acd] rounded-sm opacity-80"></div><div class="flex-1 bg-[#4a3d7a] rounded-sm opacity-40"></div></div>
+                <div class="flex flex-col gap-1"><div class="flex-1 bg-neon-purple rounded-sm opacity-40"></div><div class="flex-1 bg-neon-purple rounded-sm"></div><div class="flex-1 bg-neon-purple rounded-sm opacity-70"></div><div class="flex-1 bg-[#4a3d7a] rounded-sm opacity-50"></div><div class="flex-1 bg-neon-purple rounded-sm opacity-40"></div></div>
+                <div class="flex flex-col gap-1"><div class="flex-1 bg-[#4a3d7a] rounded-sm opacity-60"></div><div class="flex-1 bg-neon-purple rounded-sm opacity-70"></div><div class="flex-1 bg-neon-purple rounded-sm"></div><div class="flex-1 bg-[#4a3d7a] rounded-sm opacity-50"></div><div class="flex-1 bg-[#4a3d7a] rounded-sm opacity-40"></div></div>
+                <div class="flex flex-col gap-1"><div class="flex-1 bg-neon-purple rounded-sm opacity-40"></div><div class="flex-1 bg-[#4a3d7a] rounded-sm opacity-60"></div><div class="flex-1 bg-neon-purple rounded-sm opacity-80"></div><div class="flex-1 bg-neon-purple rounded-sm"></div><div class="flex-1 bg-[#4a3d7a] rounded-sm opacity-50"></div></div>
+                <div class="flex flex-col gap-1"><div class="flex-1 bg-[#4a3d7a] rounded-sm opacity-50"></div><div class="flex-1 bg-neon-purple rounded-sm opacity-70"></div><div class="flex-1 bg-[#4a3d7a] rounded-sm opacity-60"></div><div class="flex-1 bg-[#4a3d7a] rounded-sm opacity-40"></div><div class="flex-1 bg-neon-purple rounded-sm opacity-40"></div></div>
+                <div class="flex flex-col gap-1"><div class="flex-1 bg-neon-purple rounded-sm opacity-40"></div><div class="flex-1 bg-[#4a3d7a] rounded-sm opacity-50"></div><div class="flex-1 bg-[#4a3d7a] rounded-sm opacity-60"></div><div class="flex-1 bg-[#4a3d7a] rounded-sm opacity-40"></div><div class="flex-1 bg-neon-purple rounded-sm opacity-40"></div></div>
+                <div class="flex flex-col gap-1"><div class="flex-1 bg-[#4a3d7a] rounded-sm opacity-40"></div><div class="flex-1 bg-[#4a3d7a] rounded-sm opacity-50"></div><div class="flex-1 bg-[#4a3d7a] rounded-sm opacity-40"></div><div class="flex-1 bg-[#4a3d7a] rounded-sm opacity-30"></div><div class="flex-1 bg-[#4a3d7a] rounded-sm opacity-40"></div></div>
+                <div class="absolute bottom-0 left-0 w-full flex justify-between text-[10px] text-text-muted pt-1 px-1">
+                  <span>Sat</span><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Bar Chart -->
+          <div class="card">
+            <div class="flex justify-between items-center mb-4">
+              <div class="flex items-center gap-2">
+                <i class="fa-solid fa-chart-column text-text-muted text-sm"></i>
+                <h3 class="font-medium">Patient Leads By Day</h3>
+              </div>
+              <button class="w-6 h-6 rounded-full border border-[#333] flex items-center justify-center text-text-muted hover:bg-[#333]"><i class="fa-solid fa-ellipsis"></i></button>
+            </div>
+            <div class="relative h-56 w-full flex mt-2">
+              <div class="flex flex-col justify-between text-[10px] text-text-muted pr-2 h-full pb-6">
+                <span>25%</span><span>20%</span><span>15%</span><span>10%</span><span>5%</span><span>0%</span>
+              </div>
+              <div class="flex-1 flex justify-around items-end pb-6 relative border-b border-[#333]">
+                <div class="w-8 h-[30%] bg-[#3a4411] rounded-t-lg relative border border-[#556611]" style="background-image:repeating-linear-gradient(45deg,transparent,transparent 4px,rgba(0,0,0,0.3) 4px,rgba(0,0,0,0.3) 8px)"><div class="absolute -top-3 left-1/2 -translate-x-1/2 w-2 h-2 rounded-full bg-neon-green"></div></div>
+                <div class="w-8 h-[60%] bg-[#3a4411] rounded-t-lg relative border border-[#556611]" style="background-image:repeating-linear-gradient(45deg,transparent,transparent 4px,rgba(0,0,0,0.3) 4px,rgba(0,0,0,0.3) 8px)"><div class="absolute -top-3 left-1/2 -translate-x-1/2 w-2 h-2 rounded-full bg-neon-green"></div></div>
+                <div class="w-8 h-[45%] bg-[#3a4411] rounded-t-lg relative border border-[#556611]" style="background-image:repeating-linear-gradient(45deg,transparent,transparent 4px,rgba(0,0,0,0.3) 4px,rgba(0,0,0,0.3) 8px)"><div class="absolute -top-3 left-1/2 -translate-x-1/2 w-2 h-2 rounded-full bg-neon-green"></div></div>
+                <!-- Active Bar -->
+                <div class="w-10 h-[80%] bg-neon-green rounded-t-xl relative shadow-[0_0_20px_rgba(204,255,51,0.4)] z-10">
+                  <div class="absolute -top-12 left-1/2 -translate-x-1/2 bg-[#333] border border-[#333] rounded-lg px-2 py-1 text-center shadow-lg min-w-[70px]">
+                    <div class="text-[9px] text-text-muted">Oct, 2024</div>
+                    <div class="text-xs font-bold text-white">257,413</div>
+                  </div>
+                  <div class="absolute -top-14 left-1/2 -translate-x-1/2 text-[10px] text-neon-green bg-black/50 px-1 rounded-sm z-20">~60%</div>
+                  <div class="absolute top-0 left-0 w-full h-4 bg-white/40 rounded-t-xl blur-sm"></div>
+                </div>
+                <div class="w-8 h-[55%] bg-[#3a4411] rounded-t-lg relative border border-[#556611]" style="background-image:repeating-linear-gradient(45deg,transparent,transparent 4px,rgba(0,0,0,0.3) 4px,rgba(0,0,0,0.3) 8px)"><div class="absolute -top-3 left-1/2 -translate-x-1/2 w-2 h-2 rounded-full bg-neon-green"></div></div>
+                <div class="w-8 h-[70%] bg-[#3a4411] rounded-t-lg relative border border-[#556611]" style="background-image:repeating-linear-gradient(45deg,transparent,transparent 4px,rgba(0,0,0,0.3) 4px,rgba(0,0,0,0.3) 8px)"><div class="absolute -top-3 left-1/2 -translate-x-1/2 w-2 h-2 rounded-full bg-neon-green"></div></div>
+                <div class="absolute bottom-0 left-0 w-full flex justify-around text-[10px] text-text-muted translate-y-full pt-2">
+                  <span>Sat</span><span>Sun</span><span>Mon</span><span class="text-white font-medium">Tue</span><span>Wed</span><span>Thu</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Top Agents -->
+          <div class="card">
+            <div class="flex justify-between items-center mb-5">
+              <h3 class="font-medium">Top Performing Agents</h3>
+              <button class="w-6 h-6 rounded-full border border-[#333] flex items-center justify-center text-text-muted hover:bg-[#333]"><i class="fa-solid fa-ellipsis"></i></button>
+            </div>
+            <div class="flex flex-col gap-5">
+              <div class="flex justify-between items-center pb-4 border-b border-[#333]/50">
+                <div>
+                  <div class="text-sm font-medium text-white mb-1">New Leads Answered</div>
+                  <div class="text-xs text-text-muted">Kelsey 27%</div>
+                </div>
+                <div class="w-20 h-8">
+                  <svg class="w-full h-full stroke-neon-green fill-none drop-shadow-[0_0_2px_rgba(204,255,51,0.5)]" stroke-width="1.5" viewBox="0 0 100 30">
+                    <path d="M0,25 Q10,10 20,20 T40,15 T60,25 T80,5 T100,10"></path>
+                  </svg>
+                </div>
+              </div>
+              <div class="flex justify-between items-center pb-4 border-b border-[#333]/50">
+                <div>
+                  <div class="text-sm font-medium text-white mb-1">Most Appts Booked</div>
+                  <div class="text-xs text-text-muted">Marsha 22%</div>
+                </div>
+                <div class="w-20 h-8">
+                  <svg class="w-full h-full stroke-neon-purple fill-none drop-shadow-[0_0_2px_rgba(153,102,255,0.5)]" stroke-width="1.5" viewBox="0 0 100 30">
+                    <path d="M0,15 Q15,5 25,20 T45,10 T70,25 T100,5"></path>
+                  </svg>
+                </div>
+              </div>
+              <div class="flex justify-between items-center">
+                <div>
+                  <div class="text-sm font-medium text-white mb-1">Highest Conv. Rate</div>
+                  <div class="text-xs text-text-muted">Marsha 88%</div>
+                </div>
+                <div class="w-20 h-8">
+                  <svg class="w-full h-full stroke-[#ff9933] fill-none drop-shadow-[0_0_2px_rgba(255,153,51,0.5)]" stroke-width="1.5" viewBox="0 0 100 30">
+                    <path d="M0,20 Q10,30 30,10 T60,20 T80,5 T100,15"></path>
+                  </svg>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── BOTTOM ROW ── -->
+        <div class="grid grid-cols-2 gap-5">
+
+          <!-- Donut Chart -->
+          <div class="card flex flex-col">
+            <div class="flex justify-between items-center mb-5">
+              <div class="flex items-center gap-2">
+                <i class="fa-solid fa-chart-pie text-text-muted text-sm"></i>
+                <h3 class="font-medium">Top 5 Marketing Channels</h3>
+              </div>
+              <button class="w-6 h-6 rounded-full border border-[#333] flex items-center justify-center text-text-muted hover:bg-[#333]"><i class="fa-solid fa-ellipsis"></i></button>
+            </div>
+            <div class="flex items-center justify-around flex-1 px-4">
+              <div class="relative w-44 h-44 rounded-full flex items-center justify-center flex-shrink-0"
+                style="background:conic-gradient(#ff9933 0% 30%,#ccff33 30% 45%,#9966ff 45% 70%,#ccff33 70% 100%)">
+                <div class="absolute w-28 h-28 bg-[#2a2a2a] rounded-full flex items-center justify-center flex-col">
+                  <span class="text-sm text-text-muted">Leads</span>
+                </div>
+              </div>
+              <div class="flex flex-col gap-3 min-w-[150px]">
+                <h4 class="text-sm font-medium mb-1">Total Leads</h4>
+                <div class="flex justify-between items-center text-xs"><div class="flex items-center gap-2"><div class="w-2 h-2 rounded-full bg-neon-green"></div><span class="text-text-muted">Direct</span></div><span class="text-white">$74.9%</span></div>
+                <div class="flex justify-between items-center text-xs"><div class="flex items-center gap-2"><div class="w-2 h-2 rounded-full bg-[#ff9933]"></div><span class="text-text-muted">Facebook</span></div><span class="text-white">$58.8%</span></div>
+                <div class="flex justify-between items-center text-xs"><div class="flex items-center gap-2"><div class="w-2 h-2 rounded-full bg-neon-green"></div><span class="text-text-muted">Organic Search</span></div><span class="text-white">$73.7%</span></div>
+                <div class="flex justify-between items-center text-xs"><div class="flex items-center gap-2"><div class="w-2 h-2 rounded-full bg-[#ccff33]"></div><span class="text-text-muted">Instagram</span></div><span class="text-white">$50.6%</span></div>
+                <div class="flex justify-between items-center text-xs"><div class="flex items-center gap-2"><div class="w-2 h-2 rounded-full bg-neon-purple"></div><span class="text-text-muted">Paid Search</span></div><span class="text-white">$88.5%</span></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Waterfall Chart -->
+          <div class="card flex flex-col">
+            <div class="flex justify-between items-center mb-5">
+              <div class="flex items-center gap-2">
+                <i class="fa-regular fa-calendar-xmark text-text-muted text-sm"></i>
+                <h3 class="font-medium">Reasons Not Booked</h3>
+              </div>
+              <button class="w-6 h-6 rounded-full border border-[#333] flex items-center justify-center text-text-muted hover:bg-[#333]"><i class="fa-solid fa-ellipsis"></i></button>
+            </div>
+            <div class="relative flex-1 w-full flex mt-2 min-h-[180px]">
+              <div class="flex flex-col justify-between text-[10px] text-text-muted pr-4 h-full pb-6">
+                <span>34.6%</span><span>19.2%</span><span>15.4%</span><span>24.6%</span><span>12.5%</span>
+              </div>
+              <div class="flex-1 flex justify-between items-end pb-6 px-2 relative border-b border-[#333]/30">
+                <div class="w-12 h-[80%] bg-neon-purple rounded-xl relative shadow-[0_0_15px_rgba(153,102,255,0.3)]"></div>
+                <div class="w-12 h-full flex flex-col justify-start pt-6 relative">
+                  <div class="w-full h-[20%] rounded-lg bg-neon-purple/20 border border-neon-purple/40" style="background-image:repeating-linear-gradient(45deg,transparent,transparent 4px,rgba(153,102,255,0.3) 4px,rgba(153,102,255,0.3) 8px)"></div>
+                </div>
+                <div class="w-12 h-full flex flex-col justify-center relative">
+                  <div class="w-full h-[20%] rounded-lg bg-neon-purple/20 border border-neon-purple/40 mt-4" style="background-image:repeating-linear-gradient(45deg,transparent,transparent 4px,rgba(153,102,255,0.3) 4px,rgba(153,102,255,0.3) 8px)"></div>
+                </div>
+                <div class="w-12 h-full flex flex-col justify-end relative gap-2">
+                  <div class="w-full h-[15%] rounded-lg bg-neon-purple/20 border border-neon-purple/40 mb-2" style="background-image:repeating-linear-gradient(45deg,transparent,transparent 4px,rgba(153,102,255,0.3) 4px,rgba(153,102,255,0.3) 8px)"></div>
+                  <div class="w-full h-[60%] bg-neon-purple rounded-xl shadow-[0_0_15px_rgba(153,102,255,0.3)]"></div>
+                </div>
+                <div class="w-12 h-full flex flex-col justify-start pt-2 relative">
+                  <div class="w-full h-[20%] rounded-lg bg-neon-purple/20 border border-neon-purple/40" style="background-image:repeating-linear-gradient(45deg,transparent,transparent 4px,rgba(153,102,255,0.3) 4px,rgba(153,102,255,0.3) 8px)"></div>
+                </div>
+                <div class="w-12 h-full flex flex-col justify-end relative gap-2">
+                  <div class="w-full h-[55%] bg-neon-purple rounded-xl shadow-[0_0_15px_rgba(153,102,255,0.3)]"></div>
+                </div>
+                <div class="absolute bottom-0 left-0 w-full flex justify-between text-[10px] text-text-muted translate-y-full pt-2 px-4">
+                  <span>Sat</span><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div><!-- end bottom grid -->
+      </div><!-- end scroll area -->
+    </main>
+  </body>
+</html>

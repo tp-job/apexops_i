@@ -1,0 +1,498 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>Invoice Management Dashboard</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              heading: ['"DM Sans"', "sans-serif"],
+              body: ['"Inter"', "sans-serif"],
+              mono: ['"JetBrains Mono"', "monospace"],
+            },
+            colors: {
+              brand: {
+                accent: "#C5F43A",
+                dark: "#222222",
+                gray: "#F3F4F6",
+                glass: "rgba(255, 255, 255, 0.7)",
+                glassDark: "rgba(34, 34, 34, 0.85)",
+                glassBlue: "rgba(156, 179, 196, 0.9)",
+              },
+            },
+            backgroundImage: {
+              "gradient-bg": "linear-gradient(135deg, #E0E7FF 0%, #EFF6FF 100%)",
+            },
+          },
+        },
+      };
+    </script>
+    <style>
+      *, *::before, *::after { box-sizing: border-box; }
+
+      html, body {
+        margin: 0; padding: 0;
+        width: 100%; height: 100%;
+        font-family: "Inter", sans-serif;
+        overflow: hidden;
+      }
+
+      body {
+        background-image: linear-gradient(135deg, #E0E7FF 0%, #EFF6FF 100%);
+        display: flex;
+        flex-direction: column;
+      }
+
+      h1,h2,h3,h4,h5,h6 { font-family: "DM Sans", sans-serif; }
+      .font-numbers { font-family: "JetBrains Mono", monospace; }
+
+      .glass-panel {
+        background: rgba(255,255,255,0.60);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border: 1px solid rgba(255,255,255,0.80);
+        box-shadow: 0 8px 32px 0 rgba(31,38,135,0.05);
+      }
+
+      .glass-dark {
+        background: rgba(34,34,34,0.85);
+        backdrop-filter: blur(24px);
+        -webkit-backdrop-filter: blur(24px);
+        border: 1px solid rgba(255,255,255,0.10);
+      }
+
+      .glass-blue {
+        background: rgba(144,169,186,0.85);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border: 1px solid rgba(255,255,255,0.20);
+      }
+
+      /* scrollbars */
+      ::-webkit-scrollbar { width: 6px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+      ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+      .pattern-stripes {
+        background-image: repeating-linear-gradient(
+          45deg, transparent, transparent 5px,
+          rgba(255,255,255,0.1) 5px, rgba(255,255,255,0.1) 10px
+        );
+      }
+    </style>
+  </head>
+
+  <!-- Full-viewport flex column -->
+  <body class="flex flex-col min-h-screen">
+
+    <!-- ── TOP NAV ── -->
+    <header class="flex items-center justify-between px-6 py-4 border-b border-white/40 glass-panel flex-shrink-0 z-20">
+      <div class="flex items-center gap-8">
+        <div class="flex items-center gap-2 text-xl font-bold font-heading">
+          <svg class="w-6 h-6 text-brand-dark" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path d="M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-1a2 2 0 100 4h1a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-1a2 2 0 10-4 0v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-3a1 1 0 00-1-1H4a2 2 0 110-4h1a1 1 0 001-1V7a1 1 0 011-1h3a1 1 0 001-1V4z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+          </svg>
+          salesforce
+        </div>
+        <nav class="bg-brand-dark text-white rounded-full p-1.5 flex items-center gap-2 text-sm font-medium">
+          <a class="px-4 py-2 rounded-full hover:bg-white/10 transition" href="#">Estimates</a>
+          <a class="px-4 py-2 rounded-full bg-brand-accent text-brand-dark transition shadow-sm flex items-center gap-2" href="#">
+            <span class="w-1.5 h-1.5 rounded-full bg-brand-dark"></span>Invoices
+          </a>
+          <a class="px-4 py-2 rounded-full hover:bg-white/10 transition" href="#">Payments</a>
+          <a class="px-4 py-2 rounded-full hover:bg-white/10 transition" href="#">Recurring Invoices</a>
+          <a class="px-4 py-2 rounded-full hover:bg-white/10 transition" href="#">Checkouts</a>
+        </nav>
+      </div>
+      <div class="flex items-center gap-4 text-gray-500">
+        <div class="flex gap-3 pr-6 border-r border-gray-300">
+          <button class="p-2 hover:bg-white/50 rounded-lg transition">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+          </button>
+          <button class="p-2 hover:bg-white/50 rounded-lg transition">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+          </button>
+          <button class="p-2 hover:bg-white/50 rounded-lg transition">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+          </button>
+          <button class="p-2 hover:bg-white/50 rounded-lg transition">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+          </button>
+        </div>
+        <div class="flex gap-3 pl-2">
+          <button class="p-2 hover:bg-white/50 rounded-lg transition relative">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+            <span class="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
+          </button>
+          <button class="p-2 hover:bg-white/50 rounded-lg transition">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+          </button>
+          <div class="w-8 h-8 rounded-full ml-2 border border-gray-200 bg-gradient-to-br from-blue-400 to-indigo-500 overflow-hidden">
+            <img alt="User Avatar" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuARiUrsw_mEnzvJIWBTC4jTjCZwKsx_gbczxM3HultmZ74Mj8qLF0xa801TuI_YEtNyQoD4VMuPnvfj2fUQo8QtA9taU9sLkno5aUJhhvormZr20G7JXVCBoNc3pc6dJ29lS1n-kqSjD7InTYEYhDK-gg_CHQpWQxL89Axwq8fi5MGH0Pu66CQTv12X2n1gPzXiJBhf0_-PfwuJTupXMvCeUOAN0ip0jUT-sNFgvtEacTbdLG7rQWMkJXC5FwjgiN5idcVygWeSSafX" />
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- ── MAIN SCROLLABLE CONTENT ── -->
+    <main class="flex-1 overflow-y-auto p-6 flex flex-col gap-5 min-h-0">
+
+      <!-- Page Header -->
+      <div class="flex justify-between items-center flex-shrink-0">
+        <div class="flex items-center gap-4">
+          <button class="w-10 h-10 rounded-full border border-gray-300 flex items-center justify-center hover:bg-white/50 transition">
+            <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M10 19l-7-7m0 0l7-7m-7 7h18" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+          </button>
+          <h1 class="text-4xl font-bold font-heading">Invoices</h1>
+        </div>
+        <div class="flex items-center gap-4">
+          <button class="w-10 h-10 rounded-full border border-gray-300 flex items-center justify-center hover:bg-white/50 transition text-gray-600">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+          </button>
+          <button class="bg-white/60 hover:bg-white border border-gray-200 px-4 py-2 rounded-xl text-sm font-semibold flex items-center gap-2 transition shadow-sm">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+            Create an invoice
+          </button>
+        </div>
+      </div>
+
+      <!-- KPI Summary Cards -->
+      <section class="grid grid-cols-3 gap-4 flex-shrink-0">
+
+        <!-- Combined Overview -->
+        <div class="glass-panel rounded-3xl p-6 col-span-2 flex flex-col justify-between">
+          <div class="grid grid-cols-3 gap-6 mb-6">
+            <div>
+              <p class="text-gray-500 text-sm font-medium mb-1">Overdue</p>
+              <div class="flex items-baseline gap-1">
+                <span class="text-gray-400 text-lg">$</span>
+                <h2 class="text-3xl font-bold font-numbers text-brand-dark">31,211.00</h2>
+              </div>
+            </div>
+            <div>
+              <p class="text-gray-500 text-sm font-medium mb-1">Due within next month</p>
+              <div class="flex items-baseline gap-1">
+                <span class="text-gray-400 text-lg">$</span>
+                <h2 class="text-3xl font-bold font-numbers text-brand-dark">172,560.00</h2>
+              </div>
+            </div>
+            <div>
+              <p class="text-gray-500 text-sm font-medium mb-1">Average time to get paid</p>
+              <div class="flex items-baseline gap-1">
+                <h2 class="text-3xl font-bold font-numbers text-brand-dark">12</h2>
+                <span class="text-gray-400">days</span>
+              </div>
+            </div>
+          </div>
+          <!-- Timeline chart -->
+          <div class="relative w-full">
+            <div class="flex justify-between w-full text-xs text-gray-500 font-medium mb-2 pr-[20%]">
+              <span>Sep</span><span>Oct</span><span>Nov</span><span>Dec</span>
+            </div>
+            <div class="relative h-4 bg-gray-200/50 rounded-full w-full overflow-hidden flex mb-4">
+              <div class="bg-brand-accent h-full w-[25%] pattern-stripes"></div>
+              <div class="bg-brand-accent h-full w-[15%] pattern-stripes mx-1 opacity-80"></div>
+              <div class="bg-brand-accent h-full w-[20%] pattern-stripes opacity-60"></div>
+              <div class="bg-brand-accent h-full w-[5%] ml-auto opacity-40 rounded-r-full"></div>
+            </div>
+            <div class="flex w-full relative h-8">
+              <div class="absolute left-[5%] flex -space-x-2">
+                <img alt="User" class="w-8 h-8 rounded-full border-2 border-white" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBMYHV4AntKH4MzZqyA7NtKwVUceHdVrUNJRcaF5V2MwczpxdmXTDV2QUbOSdB9w5TiN2DiOHlBmvGI9_ccIyx0vpOe1Vu6OjwZ5GvBNxSj5es-G5dDMsEywDzEp4pfhSDlZQUlJBMVmsSw0Q3uiGSbmZU-MDUCwnlxSjwZVPbBS2q-jFUX7-idUo-oKNyXVG-jUzMpQGcqCivf5fdOk2jVc462FbDbfvOWh9LcmFIzuqmn5xOV1Ciwf-DQgRfrYR4vgqmv900IEUmg" />
+                <img alt="User" class="w-8 h-8 rounded-full border-2 border-white" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD7wthA0KI08OrZYfT14uliIOdeZpGRml3zlrE8Db9nZg5L58faz_f3PerVlNMFfagdaKjvJ0PgV7ovGQtTqSiemhkd5Odm9PGnQoouy6r9x7Q8JOwzkfKZ714XmatSPL7VaKxQyJqONUplHZ2O8PmEtyJ1tbuYNDOOba-nukvAAiCWHmENE28EMGU1ezPFM_7ya5yI8LmMmLr5LovlQxKStT6GUWqZkclVAIYcaewJ67HHs0BjVkBu3d4K_5NjCQ1xOEpEeiUazpTP" />
+                <img alt="User" class="w-8 h-8 rounded-full border-2 border-white" src="https://lh3.googleusercontent.com/aida-public/AB6AXuADqGSQRV4kKD8-BjLgbJVYz-1U5gBsiYixG4RXpNiHM5dkqz_1UJ1vMghfgeR0HDML45CpvmrQ9FV_as-01gHRBd0yycQedBQwMSAYRHn44AgwFVZ_cbOV09esHF2KkILWHFSKX7iuOfZurskHHw-9UhxhhsTq5qq3XmzKZUTo4fYcHSbQGBwmi_XFM9BCIXmgHOG0ZdlHRiKLErCN1L6SHk2_RRLkK-nKD0gvUzfYrjkp9rzv9o_1doIOWwewlDo2IT8ayAV4aygW" />
+                <img alt="User" class="w-8 h-8 rounded-full border-2 border-white" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCJ0GFTTGogpzk0_2WSwSqW6c5qa2R5ryEBVpoZl2ysDzTakT4wsDAjXkf15qlJqZbLDQTIcyzhUfLJzxeRKsNizyFkRsys0tt0wTky9FkVVdna95Ou0YMTx5q69SUOGcISfqp1ir4KPiZfRAUdgtJi-soPXSwWfZY4367gnE5JK3WWeoBoZNsuMV6-Mbm_XluWHTM0qjbmwa8p1RNfl-Ls9bWydZAR2znj3rCmbgTA_36MHgmkQ0ynxW36jNiSOAu2Evaza-RtPzv-" />
+              </div>
+              <div class="absolute left-[35%] flex -space-x-2">
+                <img alt="User" class="w-8 h-8 rounded-full border-2 border-white" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCcDrxVLHWxrWPESGpESM_4zj5JwVEycNMzA8mhZjS_-DC6ZDY6SIK-Ekun7B2aHAJS8-Pei3GMOtyFhXG-iEYz7UZoaUjbHTh7yz47EeBGcCgg6BS8luh58iUI0wxJq77-qGwLCGhYkwXgJ6gxX8YNwJKzdrJkalAlSW5uS4aaumFcJNvIGeMMzyRccbb0py6RQPILtI2byiIQ8lDCi_nhVymP2M172QWM0hT97LJkr0e6USq1glKxoxjmCKhJEfD0-hjS-pIYs7wf" />
+                <img alt="User" class="w-8 h-8 rounded-full border-2 border-white" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAsJKiSRkLAVOpVxzDDLRqguuZGYsfD2u2NG6-QXnvkyIfLioRpbPLoRfPQZJ_qOvLkort2PIi94qAgZl5906xBUiDGNmnF1mJzADvh_H39QlZIaUbEf2x_MX7sSRdcGFwlsXMpdW-CJeVW0n9HhzxLu5wMgsCsrIUQ3J6egVp3ZlCe4Te_ox216Ar0U8f3tWWSIW0X_qZgn7s1Jbe-CibI5MT8lYZCYIkCJcXzFatWRw_0wIKfBZAJMYMj39MkwW5rZ7yw5qOMqT62" />
+              </div>
+              <div class="absolute left-[65%] flex -space-x-2">
+                <img alt="User" class="w-8 h-8 rounded-full border-2 border-white" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA5tnf4jxJF3xTPM4MgCIuEZce72qP4weiEniF5weHKZK2bSgxWPj8N_rROpwCMCzNVHPQr28jjHtpJI4Nu3au--fqyATL_Oa7pWRKL6dU98J6qs4kf42ICUK9-bd2U28MW58woEkRwJ7-Bgt41PmraIjHBjwq7NbL-HwOe7cP7aza9-Mxj3hQIZqrWB05A2D-0eYtbjNTrDG2wf5drqenaD8_E_UixaK6tnLUuWCA4aPNtr-wT_lDo8Qx1zAEgrhVzTvj0ej2eBvGw" />
+                <img alt="User" class="w-8 h-8 rounded-full border-2 border-white" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB19HWbkSiaJgHuXCPx47x4s1VV7RQaKYuCEeJgR5v-dx2sRoITS-6GPvD3dXsow2VVlmq6mE-WlYWVKLhEUKt1Y3dFq4bQwGJDiYd93zIlJSg-8LcKaEBcOpP8bPTX1uNV75BVqxIDEFg6MKNbKiCAEfWE6uLluojVAIRYa_j3Y5OuCri8QQUeocn3rReowca7cDaXiOOuih7X4xywcSGqsJobxwZR0cQwHN8wC_qpRHLi0aBWDf_hAGhC0RaYjucH61BSaTujIxUB" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Instant Payout Card -->
+        <div class="glass-panel rounded-3xl p-6 relative flex flex-col justify-between">
+          <button class="absolute top-6 right-6 w-8 h-8 rounded-full border border-gray-200 flex items-center justify-center hover:bg-white/50">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M14 5l7 7m0 0l-7 7m7-7H3" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+          </button>
+          <div>
+            <p class="text-gray-500 text-sm font-medium mb-1">Available for Instant Payout</p>
+            <div class="flex items-center gap-3">
+              <div class="flex items-baseline gap-1">
+                <span class="text-gray-400 text-lg">$</span>
+                <h2 class="text-3xl font-bold font-numbers text-brand-dark">214,390.00</h2>
+              </div>
+              <span class="px-2.5 py-1 bg-white border border-gray-200 rounded-full text-xs font-semibold">Expects</span>
+            </div>
+          </div>
+          <div class="mt-6 flex justify-between items-end">
+            <div class="flex gap-2 w-full">
+              <div class="bg-gray-100/50 rounded-xl p-3 flex-1 flex flex-col justify-between min-h-[80px]">
+                <span class="text-xs font-numbers text-gray-500">*4443</span>
+                <span class="text-xs font-medium text-gray-400 mt-auto">Visa</span>
+              </div>
+              <div class="bg-brand-accent rounded-xl p-3 flex-1 flex flex-col justify-between min-h-[80px] shadow-sm">
+                <span class="text-xs font-numbers text-brand-dark font-bold">#177210</span>
+                <span class="text-xs font-medium text-brand-dark mt-auto">Stripe</span>
+              </div>
+              <div class="bg-gray-100/50 rounded-xl p-3 flex-1 flex flex-col justify-between min-h-[80px]">
+                <span class="text-xs font-numbers text-gray-500">#711221</span>
+                <span class="text-xs font-medium text-gray-400 mt-auto">PayPal</span>
+              </div>
+            </div>
+            <button class="bg-brand-dark text-white text-sm font-medium px-4 py-3 rounded-xl ml-4 whitespace-nowrap hover:bg-black transition">Pay out now</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Filters Bar -->
+      <section class="flex flex-wrap items-center justify-between gap-4 bg-white/40 p-2 rounded-2xl border border-white/60 flex-shrink-0">
+        <div class="flex items-center gap-4">
+          <div class="flex items-center gap-2 pl-2">
+            <span class="text-sm font-semibold">Active filters</span>
+            <span class="bg-brand-dark text-white text-xs w-5 h-5 flex items-center justify-center rounded-full">2</span>
+          </div>
+          <div class="h-6 w-px bg-gray-300 mx-2"></div>
+          <div class="flex gap-2">
+            <button class="flex items-center justify-between bg-white/50 border border-gray-200 px-4 py-2 rounded-xl text-xs text-gray-400 min-w-[140px]">
+              All customers
+              <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+            </button>
+            <button class="flex items-center justify-between bg-white/50 border border-gray-200 px-4 py-2 rounded-xl text-xs text-gray-400 min-w-[140px]">
+              All statuses
+              <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M19 9l-7 7-7-7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+            </button>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <div class="flex items-center gap-2">
+            <div class="flex items-center bg-white/50 border border-gray-200 px-3 py-2 rounded-xl text-xs font-medium">
+              November 2023
+              <svg class="w-4 h-4 ml-2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+            </div>
+            <div class="w-2 h-px bg-gray-400"></div>
+            <div class="flex items-center bg-white/50 border border-gray-200 px-3 py-2 rounded-xl text-xs font-medium">
+              December 2023
+              <svg class="w-4 h-4 ml-2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+            </div>
+          </div>
+          <div class="relative ml-2">
+            <input class="bg-white/50 border border-gray-200 text-xs rounded-xl pl-4 pr-10 py-2 w-48 focus:outline-none focus:ring-1 focus:ring-brand-dark" placeholder="Enter invoice #" type="text" />
+            <svg class="w-4 h-4 absolute right-3 top-2.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+          </div>
+        </div>
+      </section>
+
+      <!-- List + Details — flex-1 grows to fill remaining space -->
+      <section class="glass-dark rounded-3xl flex overflow-hidden relative" style="min-height: 420px; flex: 1 1 0;">
+
+        <!-- Tab Navigation -->
+        <div class="absolute top-0 left-1/2 -translate-x-1/2 flex items-center bg-white p-1 rounded-b-2xl z-10 shadow-sm border-x border-b border-gray-100">
+          <button class="px-4 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded-xl transition">All Invoices</button>
+          <button class="px-4 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded-xl transition flex items-center gap-2">
+            Draft <span class="bg-gray-100 px-1.5 rounded-md text-xs font-numbers">3</span>
+          </button>
+          <button class="px-4 py-1.5 text-sm font-bold bg-brand-accent text-brand-dark rounded-xl transition shadow-sm flex items-center gap-2">
+            Unpaid <span class="bg-white/50 px-1.5 rounded-md text-xs font-numbers">5</span>
+          </button>
+        </div>
+
+        <!-- Header Actions -->
+        <div class="absolute top-4 right-6 flex gap-2 z-10 text-gray-400">
+          <button class="p-1 hover:text-white transition">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16m-7 6h7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+          </button>
+          <button class="p-1 hover:text-white transition">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+          </button>
+        </div>
+
+        <!-- LEFT: Invoice List -->
+        <div class="w-1/3 border-r border-white/10 flex flex-col pt-4 min-h-0">
+          <div class="px-6 pb-4 flex-shrink-0">
+            <h3 class="text-white font-medium">Unpaid Invoices</h3>
+          </div>
+          <div class="flex-1 overflow-y-auto px-4 pb-4 flex flex-col gap-2">
+
+            <!-- Item 1 -->
+            <div class="group flex items-center justify-between p-3 rounded-2xl hover:bg-white/5 cursor-pointer transition border border-transparent hover:border-white/10">
+              <div class="flex items-center gap-3">
+                <img alt="User" class="w-10 h-10 rounded-full border border-gray-600" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDzIRcYp0QRAiEYGhGezDM-JxIPq2EHyrn22q61fGAjFaTUzjVyxAcqdECclKjctdbuL8gfIeRFQj9lKLKa8Sygqz1iyf3dm4aW_uzCmJUsrCtLTuHnmOhXM4GJA3J9OA0wIzMX2Gtu2Vk9gH5bU4tA3E8gV7WTudIWiVnnmdZ-WIZhgE_1oxpsDll81glK0628wwZPlBa1owZDfLkmoKvniK1uA3vUFgqVia0kBXu7rxl9YjFfDqttOJYbJ3V61F1j4ofVbYnyTwC_" />
+                <div>
+                  <div class="text-sm text-white font-numbers"># 404-002</div>
+                  <div class="text-xs text-gray-400">In 2 days</div>
+                </div>
+              </div>
+              <div class="flex items-center gap-4">
+                <span class="px-2 py-0.5 rounded border border-gray-600 text-[10px] text-gray-400 uppercase tracking-wider">Unsent</span>
+                <span class="text-sm text-white font-numbers">$80,770.00</span>
+              </div>
+            </div>
+
+            <!-- Item 2 -->
+            <div class="group flex items-center justify-between p-3 rounded-2xl hover:bg-white/5 cursor-pointer transition border border-transparent hover:border-white/10">
+              <div class="flex items-center gap-3">
+                <img alt="User" class="w-10 h-10 rounded-full border border-gray-600" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDt2lbzFN_m6KDzeDcDXZuBczCI-O6nfMDApnzkhdA_V8n5xnW8e8spvXTAKUigNPZEbXb8H-9mET9fPak6BP_oDagKmOi7oFRiYDJEVEY0RVrIJG-WgQox9tYSc3yZ-CDWMa8Qvt2u6ZSddvA_ybXfGSL7Sh8Zx0RGAhpgbRZuO24tSZD9nI0q6D7v2dYNoEfx0eiQM5TtraE054Ef4ZcOWg0roXFBgemx2kIVFSxaqpIxDSMiFLw0Eldnv_UxjZOt_AJa-dvUvTDH" />
+                <div>
+                  <div class="text-sm text-white font-numbers"># 426-001</div>
+                  <div class="text-xs text-gray-400">In 4 days</div>
+                </div>
+              </div>
+              <div class="flex items-center gap-4">
+                <span class="px-2 py-0.5 rounded border border-gray-600 text-[10px] text-gray-400 uppercase tracking-wider">Viewed</span>
+                <span class="text-sm text-white font-numbers">$27,114.00</span>
+              </div>
+            </div>
+
+            <!-- Item 3 (Active) -->
+            <div class="flex items-center justify-between p-3 rounded-2xl bg-white/10 border border-white/20 cursor-pointer shadow-lg relative">
+              <div class="absolute -left-4 w-1 h-8 bg-brand-accent rounded-r-md"></div>
+              <div class="flex items-center gap-3">
+                <img alt="User" class="w-10 h-10 rounded-full border border-brand-accent" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDL5iKZdDmitsOK6anKPFWOWuS4D2yHtH4o0AWWPjAQU-Yc1ueOz2An8MYvHUAkW-HgHVn2y6xCH--SoUpI3qi0GFD1KZaMsHFRa-YGGTMsBVgpexLYhN269rlSZr2CdOjQKulivGra464Y4naJ4AetB6lFwnyei68FjL8fpdxOOK28VYFyBQfDisgQVnKJUP9y4QLKUK4SKzccfrtC--2S0WtmGp6faexNdSPbvlJ2zP-hBG6BILlnY7ljTYS83dFe47njO9W2GTJx" />
+                <div>
+                  <div class="text-sm text-white font-numbers font-semibold"># 427-012</div>
+                  <div class="text-xs text-brand-accent">In 5 days</div>
+                </div>
+              </div>
+              <div class="flex items-center gap-4">
+                <span class="px-2 py-0.5 rounded bg-white text-brand-dark font-medium text-[10px] uppercase tracking-wider">Unsent</span>
+                <span class="text-sm text-white font-numbers font-semibold">$53,154.00</span>
+              </div>
+            </div>
+
+            <!-- Item 4 -->
+            <div class="group flex items-center justify-between p-3 rounded-2xl hover:bg-white/5 cursor-pointer transition border border-transparent hover:border-white/10">
+              <div class="flex items-center gap-3">
+                <img alt="User" class="w-10 h-10 rounded-full border border-gray-600" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD5C-y0Z35LS0JNs5zRM3g_OhkIIMUxD2bNFvRB5JKV6HOenfvkAsD2LP3wGKKY0fibsr3OGVAUSzXIzw_G_4PS8HOB2UHqfLbBll6xgcaN2JWG6w-RxhYhSdzxlGp_KZyr8kxcgFpWHit74LEUaj4_48GXu7m-3fALcBshg28whLIz8aKxZkpG2lA8dWZEe9zGiXRqA15Dz9LdL5G0b9pUSQIbp2lg0ipWUMOfgdumTdlp4XyJt1LSPw_TIfcUVIClenhUcnvkotfW" />
+                <div>
+                  <div class="text-sm text-white font-numbers"># 424-112</div>
+                  <div class="text-xs text-gray-400">In 16 days</div>
+                </div>
+              </div>
+              <div class="flex items-center gap-4">
+                <span class="px-2 py-0.5 rounded border border-gray-600 text-[10px] text-gray-400 uppercase tracking-wider">Viewed</span>
+                <span class="text-sm text-white font-numbers">$61,223.00</span>
+              </div>
+            </div>
+
+            <!-- Item 5 -->
+            <div class="group flex items-center justify-between p-3 rounded-2xl hover:bg-white/5 cursor-pointer transition border border-transparent hover:border-white/10">
+              <div class="flex items-center gap-3">
+                <img alt="User" class="w-10 h-10 rounded-full border border-gray-600" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDEr6cHskQP1zdmOwtscVfL8XZuoZsc0V_FH7zzoc3vvgOIKhlKd-gjDgXUPJGl7VGdvkQ1KAKgf5dsDFFniC3uXAU3dtzWB88-0uDnEun5_9J9KMzw_h0YT4Kh2R4IY_G5CjCr2DnRL6zxa4j9aw0IL1z6-bc3aIbAHUSpqj46yTI2cY8G_ARFPOUo4dfU7tM-5iGC0T9vWCJzMIHbnXt0NVKdYPONRHVWkPM7wejoATna-rcRgcLsvOsTWpJpmfO0pmyre89I-OVf" />
+                <div>
+                  <div class="text-sm text-white font-numbers"># 417-020</div>
+                  <div class="text-xs text-gray-400">In 19 days</div>
+                </div>
+              </div>
+              <div class="flex items-center gap-4">
+                <span class="px-2 py-0.5 rounded border border-gray-600 text-[10px] text-gray-400 uppercase tracking-wider">Viewed</span>
+                <span class="text-sm text-white font-numbers">$7,311.00</span>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- RIGHT: Detail Pane -->
+        <div class="flex-1 p-4 flex min-h-0">
+          <div class="glass-blue rounded-2xl w-full flex flex-col overflow-hidden text-white shadow-xl relative">
+
+            <!-- Detail Header -->
+            <div class="p-6 pb-4 flex justify-between items-start flex-shrink-0">
+              <div>
+                <p class="text-sm text-white/70 mb-1">Invoice details</p>
+                <div class="flex items-center gap-3">
+                  <h2 class="text-3xl font-bold font-numbers"># 427-012</h2>
+                  <span class="px-2 py-0.5 rounded border border-white/30 text-[10px] uppercase tracking-wider">Unsent</span>
+                </div>
+              </div>
+              <div class="flex gap-16">
+                <div>
+                  <p class="text-sm text-white/70 mb-1">Company</p>
+                  <div class="flex items-center gap-2">
+                    <span class="text-xl font-bold font-heading">BlueRock</span>
+                    <svg class="w-5 h-5 text-white/80" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L2 12l10 10 10-10L12 2zm0 4.5l5.5 5.5-5.5 5.5L6.5 12 12 6.5z"></path></svg>
+                  </div>
+                </div>
+                <div>
+                  <p class="text-sm text-white/70 mb-1">Customer</p>
+                  <div class="flex items-center gap-2">
+                    <img alt="Customer" class="w-8 h-8 rounded-full border border-white/40" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCJ9RJPxkjH8ciurkNIwbRnWFdS5i9BJHCF5RsgYQiBD3Uxo4uN4ZEzDjOY8zDtsFOnu0ciRWVCjoFTCN8U89G3vTOFRd8lyjjnBbVunMDIkBqIxqC-_SNE0ubITBVCVWS01jvlaxW9zgJt4dRDuHQluPamZZlgr_BAu4S7uoOvWvQ92SBY2jdKoZQhd_b-Rxt8To7sBgqckzbCNxbUd5b9OsH-bsln9YGywlboTLkzKypjwG9u29da5JEe0PDlJFa2mMVSHk57EVDJ" />
+                    <div>
+                      <p class="text-sm font-semibold leading-tight">Maria Jones</p>
+                      <p class="text-[10px] text-white/70 leading-tight">CEO BlueRock Pvt Ltd.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Line Items — flex-1 to fill -->
+            <div class="flex-1 p-6 flex gap-4 min-h-0">
+              <div class="flex-1 bg-white/10 rounded-2xl p-4 flex flex-col justify-between border border-white/10 hover:bg-white/20 transition cursor-pointer relative group">
+                <svg class="w-4 h-4 absolute top-4 right-4 text-white/40 group-hover:text-white transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M14 5l7 7m0 0l-7 7m7-7H3" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+                <div class="font-numbers text-xl">$10,630.80</div>
+                <div class="text-xs text-white/70">Concept Development</div>
+              </div>
+              <div class="flex-1 bg-white/10 rounded-2xl p-4 flex flex-col justify-between border border-white/10 hover:bg-white/20 transition cursor-pointer relative group">
+                <svg class="w-4 h-4 absolute top-4 right-4 text-white/40 group-hover:text-white transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M14 5l7 7m0 0l-7 7m7-7H3" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+                <div class="font-numbers text-xl">$31,892.40</div>
+                <div class="text-xs text-white/70">CRM Development</div>
+              </div>
+              <div class="flex-1 bg-white/10 rounded-2xl p-4 flex flex-col justify-between border border-white/10 hover:bg-white/20 transition cursor-pointer relative group">
+                <svg class="w-4 h-4 absolute top-4 right-4 text-white/40 group-hover:text-white transition" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M14 5l7 7m0 0l-7 7m7-7H3" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+                <div class="font-numbers text-xl">$10,630.80</div>
+                <div class="text-xs text-white/70">CRM Integration</div>
+              </div>
+              <div class="w-24 bg-white/5 rounded-2xl border border-white/10 border-dashed flex items-center justify-center cursor-pointer hover:bg-white/10 transition">
+                <svg class="w-6 h-6 text-white/50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+              </div>
+            </div>
+
+            <!-- Totals Footer -->
+            <div class="p-6 bg-white/5 border-t border-white/10 flex justify-between items-end flex-shrink-0">
+              <div class="flex gap-12">
+                <div>
+                  <p class="text-xs text-white/60 mb-1">Sub Total</p>
+                  <p class="font-numbers text-lg">$53,154.00</p>
+                </div>
+                <div>
+                  <p class="text-xs text-white/60 mb-1">Total</p>
+                  <p class="font-numbers text-lg">$53,154.00</p>
+                </div>
+                <div>
+                  <p class="text-xs text-white/60 mb-1">Balance Due</p>
+                  <p class="font-numbers text-xl font-bold">$53,154.00</p>
+                </div>
+              </div>
+              <div class="flex items-center gap-3">
+                <button class="p-2.5 rounded-xl border border-white/20 hover:bg-white/10 transition text-white/80">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+                </button>
+                <button class="p-2.5 rounded-xl border border-white/20 hover:bg-white/10 transition text-white/80">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
+                </button>
+                <button class="bg-brand-accent text-brand-dark font-bold px-6 py-2.5 rounded-xl hover:bg-[#b0dc34] transition shadow-md">Pay out now</button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </body>
+</html>

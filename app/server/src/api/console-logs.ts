@@ -79,22 +79,23 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
     }
 });
 
-// ── POST /realtime ───────────────────────────────────────────
-router.post('/realtime', async (req: Request, res: Response): Promise<void> => {
-    const { logs } = req.body;
-    if (!logs || !Array.isArray(logs)) { res.status(400).json({ error: 'logs array is required' }); return; }
-
-    try {
-        for (const log of logs) {
-            await prisma.log.create({
-                data: { level: log.level, message: log.message, source: log.source, stack: log.stack || null },
-            }).catch(() => {});
-        }
-        res.json({ success: true, count: logs.length });
-    } catch (err: any) {
-        console.error('Error processing realtime logs:', err);
-        res.status(500).json({ error: 'Failed to process logs' });
-    }
+// ── POST /realtime — RETIRED ─────────────────────────────────
+/**
+ * Replaced by `POST /api/ingest` (spec G2).
+ *
+ * This endpoint had no authentication, no rate limit and no project scope: anyone
+ * who viewed source on a monitored page could write unbounded rows into `logs`.
+ * It also issued one `create` per log inside a sequential `await` loop, so a
+ * 50-log batch was 50 round trips.
+ *
+ * It answers 410 rather than 404 so an old embedded snippet gets a clear,
+ * actionable signal instead of looking like a routing mistake.
+ */
+router.post('/realtime', (_req: Request, res: Response): void => {
+    res.status(410).json({
+        error: 'This endpoint has been replaced by POST /api/ingest',
+        detail: 'Update the embedded script to the current SDK; ingest now requires a per-project key.',
+    });
 });
 
 // ── GET /script ──────────────────────────────────────────────
