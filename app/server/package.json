@@ -13,6 +13,8 @@
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
     "seed:dev": "ts-node -T src/scripts/seed-dev-users.ts",
+    "backfill:projects": "ts-node -T src/scripts/backfill-default-project.ts",
+    "prune:events": "ts-node -T src/scripts/prune-events.ts",
     "postinstall": "prisma generate",
     "test": "echo \"Error: no test specified\" && exit 1"
   },

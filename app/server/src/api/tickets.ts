@@ -47,6 +47,7 @@ type TicketWithRelations = Prisma.TicketGetPayload<{ include: typeof ticketInclu
 
 const formatTicket = (t: TicketWithRelations) => ({
     id: displayId(t.id),
+    projectId: t.projectId,
     title: t.title,
     description: t.description ?? '',
     status: toWireStatus(t.status),
@@ -65,6 +66,40 @@ const formatTicket = (t: TicketWithRelations) => ({
     createdAt: t.createdAt.toISOString(),
     updatedAt: t.updatedAt.toISOString(),
 });
+
+/**
+ * Resolves which project a new ticket belongs to.
+ *
+ * An explicit `projectId` is checked against membership — otherwise anyone could
+ * file tickets into a stranger's workspace by guessing a small integer. When it
+ * is omitted (the pre-G5 board), we fall back to the caller's oldest project,
+ * which for a single-workspace user is unambiguous and for everyone else is the
+ * one the backfill put their existing tickets in.
+ *
+ * Returns a string on failure so the caller can answer 400 with something the
+ * user can act on, rather than a foreign-key error from Prisma.
+ */
+async function resolveProjectId(
+    requested: number | undefined,
+    userId: number
+): Promise<{ projectId: number } | { error: string }> {
+    if (requested !== undefined) {
+        const membership = await prisma.projectMember.findUnique({
+            where: { projectId_userId: { projectId: requested, userId } },
+            select: { projectId: true },
+        });
+        if (!membership) return { error: 'Project not found' };
+        return { projectId: membership.projectId };
+    }
+
+    const fallback = await prisma.projectMember.findFirst({
+        where: { userId, project: { archivedAt: null } },
+        orderBy: { projectId: 'asc' },
+        select: { projectId: true },
+    });
+    if (!fallback) return { error: 'Create a project before filing tickets' };
+    return { projectId: fallback.projectId };
+}
 
 const commentInclude = { author: { select: userSelect } } as const;
 type CommentWithAuthor = Prisma.TicketCommentGetPayload<{ include: typeof commentInclude }>;
@@ -176,15 +211,19 @@ router.get('/:id', async (req: Request, res: Response): Promise<void> => {
 // ── POST / ───────────────────────────────────────────────────
 router.post('/', validate(createTicketSchema), async (req: Request, res: Response): Promise<void> => {
     try {
-        const { title, description, status, priority, assigneeId, tags, relatedLogs } = req.body;
+        const { projectId, title, description, status, priority, assigneeId, tags, relatedLogs } = req.body;
 
         if (assigneeId) {
             const assignee = await prisma.user.count({ where: { id: assigneeId } });
             if (!assignee) { res.status(400).json({ error: 'Assignee is not a known user' }); return; }
         }
 
+        const resolved = await resolveProjectId(projectId, req.user!.id);
+        if ('error' in resolved) { res.status(400).json({ error: resolved.error }); return; }
+
         const ticket = await prisma.ticket.create({
             data: {
+                projectId: resolved.projectId,
                 title,
                 description,
                 status: toDbStatus(status),

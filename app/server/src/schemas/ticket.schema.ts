@@ -18,6 +18,14 @@ const priorityField = z.enum(TICKET_PRIORITIES);
 const userIdField = z.number().int().positive().nullable();
 
 export const createTicketSchema = z.object({
+    /**
+     * Optional *transitionally*. Tickets are project-scoped as of the D1
+     * migration, but the Bug Tracker board predates projects and does not send
+     * one yet — it starts sending this in G5, when the board becomes per-project.
+     * Until then the API resolves the caller's project (see `resolveProjectId`),
+     * so an omitted value is never ambiguous, just implicit.
+     */
+    projectId: z.number().int().positive().optional(),
     title: z.string().min(1, 'Title is required'),
     description: z.string().optional().default(''),
     status: statusField.optional().default('open'),

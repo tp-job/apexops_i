@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+  <title>Salesforce Task Management Dashboard</title>
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+
+    html, body {
+      margin: 0; padding: 0;
+      width: 100%; height: 100%;
+      overflow: hidden;
+      font-family: 'Inter', sans-serif;
+      background-color: #fdfdfd;
+    }
+
+    h1, h2, h3, .heading-font { font-family: 'DM Sans', sans-serif; }
+
+    .scrollbar-hide::-webkit-scrollbar { display: none; }
+    .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+  </style>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              black: '#111827',
+              gray: '#f9fafb',
+              border: '#e5e7eb',
+              text: '#4b5563',
+              darkText: '#1f2937'
+            },
+            card: {
+              pink: '#FCE7F3',
+              purple: '#EDE9FE',
+              blue: '#E0E7FF',
+              yellow: '#FEF08A',
+              grey: '#F3F4F6'
+            }
+          },
+          boxShadow: {
+            'soft': '0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03)',
+          }
+        }
+      }
+    }
+  </script>
+</head>
+
+<!-- Full-viewport flex row: sidebar + main, no padding, no card wrapper -->
+<body class="flex h-screen overflow-hidden text-brand-text bg-[#fdfdfd]">
+
+  <!-- ── SIDEBAR ── -->
+  <aside class="w-20 bg-[#fdfdfd] border-r border-gray-100 flex flex-col items-center py-8 justify-between z-10 flex-shrink-0">
+    <div class="flex flex-col gap-6 items-center w-full">
+      <button class="w-10 h-10 rounded-full border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-50 transition-colors">
+        <i class="fa-solid fa-arrow-left text-sm"></i>
+      </button>
+      <div class="h-px w-10 bg-gray-200 my-2"></div>
+      <nav class="flex flex-col gap-4 w-full px-4">
+        <a class="w-12 h-12 rounded-xl flex items-center justify-center text-gray-400 hover:text-brand-darkText hover:bg-gray-50 transition-colors" href="#"><i class="fa-solid fa-magnifying-glass"></i></a>
+        <a class="w-12 h-12 rounded-xl flex items-center justify-center text-gray-400 hover:text-brand-darkText hover:bg-gray-50 transition-colors" href="#"><i class="fa-solid fa-share-nodes"></i></a>
+        <a class="w-12 h-12 rounded-xl flex items-center justify-center text-gray-400 hover:text-brand-darkText hover:bg-gray-50 transition-colors" href="#"><i class="fa-solid fa-download"></i></a>
+        <a class="w-12 h-12 rounded-xl flex items-center justify-center text-gray-400 hover:text-brand-darkText hover:bg-gray-50 transition-colors" href="#"><i class="fa-regular fa-star"></i></a>
+        <a class="w-12 h-12 rounded-xl flex items-center justify-center text-gray-400 hover:text-brand-darkText hover:bg-gray-50 transition-colors" href="#"><i class="fa-regular fa-folder"></i></a>
+        <a class="w-12 h-12 rounded-xl flex items-center justify-center text-gray-400 hover:text-brand-darkText hover:bg-gray-50 transition-colors" href="#"><i class="fa-regular fa-calendar"></i></a>
+        <a class="w-12 h-12 rounded-xl flex items-center justify-center text-gray-400 hover:text-brand-darkText hover:bg-gray-50 transition-colors" href="#"><i class="fa-regular fa-paper-plane"></i></a>
+        <a class="w-12 h-12 rounded-xl flex items-center justify-center text-gray-400 hover:text-brand-darkText hover:bg-gray-50 transition-colors" href="#"><i class="fa-solid fa-bullhorn"></i></a>
+      </nav>
+    </div>
+    <div class="flex flex-col gap-4 items-center w-full mt-auto">
+      <a class="w-10 h-10 rounded-full flex items-center justify-center text-gray-400 hover:text-brand-darkText hover:bg-gray-50 transition-colors relative" href="#">
+        <i class="fa-regular fa-bell"></i>
+        <span class="absolute top-2 right-2 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
+      </a>
+      <a class="w-10 h-10 rounded-full flex items-center justify-center text-gray-400 hover:text-brand-darkText hover:bg-gray-50 transition-colors" href="#"><i class="fa-solid fa-gear"></i></a>
+      <div class="mt-2 relative">
+        <img alt="User Avatar" class="w-10 h-10 rounded-full object-cover border-2 border-white shadow-sm cursor-pointer"
+          src="https://lh3.googleusercontent.com/aida-public/AB6AXuC50jomtNO4J3KRV_lPEFl9zOGy3bhOEq9VFLhh_U3DJsf-hyilUoeRiLs43cMTxxAjrzexA52kWqOhTljeMoBrtekwP5FWNTUMrZkwOK__KWBJTAF349AtuT8k1E76_g19UBtzp6cCraAbXQy3douUSViZXpcHD8WcYOcf01nbgJms5WQ8G7_RVw7c8t2Y-Yt99p_7hOxLJD30FN03Dt1vw2jgFN39ooq7rfNCRSqu80HXZK_CImSkeiRclk2Av0yLzLaAP3oN8V4X" />
+        <div class="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white rounded-full"></div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ── MAIN ── -->
+  <main class="flex-1 flex flex-col min-w-0 min-h-0 relative">
+
+    <!-- HEADER -->
+    <header class="px-8 pt-7 pb-4 flex flex-col gap-5 flex-shrink-0 border-b border-gray-100">
+      <!-- Top nav bar -->
+      <div class="flex justify-between items-center w-full">
+        <div class="flex items-center gap-3">
+          <i class="fa-brands fa-salesforce text-blue-500 text-3xl"></i>
+          <span class="font-bold text-xl text-brand-darkText heading-font">salesforce</span>
+        </div>
+        <div class="flex items-center gap-6 bg-gray-50 rounded-full px-2 py-1.5 border border-gray-100">
+          <button class="w-8 h-8 rounded-full flex items-center justify-center text-gray-500 hover:bg-gray-200 transition">
+            <i class="fa-solid fa-house text-sm"></i>
+          </button>
+          <div class="flex gap-2">
+            <button class="px-4 py-1.5 rounded-full bg-brand-black text-white text-sm font-medium">Pipeline</button>
+            <button class="px-4 py-1.5 rounded-full text-gray-500 hover:text-brand-darkText hover:bg-gray-100 text-sm font-medium transition">Activity</button>
+            <button class="px-4 py-1.5 rounded-full text-gray-500 hover:text-brand-darkText hover:bg-gray-100 text-sm font-medium transition">Comments</button>
+            <button class="px-4 py-1.5 rounded-full text-gray-500 hover:text-brand-darkText hover:bg-gray-100 text-sm font-medium transition">Reports</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Title & stats -->
+      <div class="flex justify-between items-end">
+        <div>
+          <p class="text-gray-400 text-sm font-medium mb-1">Task Schedule</p>
+          <h1 class="text-4xl font-bold text-brand-darkText">Daily Operation</h1>
+        </div>
+        <div class="flex gap-12 items-end">
+          <div class="flex flex-col items-start">
+            <p class="text-xs text-gray-400 mb-1">Week's Tasks</p>
+            <p class="text-2xl font-bold text-brand-darkText heading-font leading-none">132</p>
+          </div>
+          <div class="flex flex-col items-start">
+            <p class="text-xs text-gray-400 mb-1">Pending Approval</p>
+            <p class="text-2xl font-bold text-brand-darkText heading-font leading-none">34</p>
+          </div>
+          <div class="flex flex-col items-start">
+            <p class="text-xs text-gray-400 mb-1">Employees Involved</p>
+            <p class="text-2xl font-bold text-brand-darkText heading-font leading-none">22</p>
+          </div>
+          <div class="flex gap-3 ml-4">
+            <button class="w-10 h-10 rounded-full border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-50 transition-colors"><i class="fa-solid fa-chart-simple text-sm"></i></button>
+            <button class="w-10 h-10 rounded-full border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-50 transition-colors"><i class="fa-solid fa-cloud text-sm"></i></button>
+            <button class="w-10 h-10 rounded-full border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-50 transition-colors"><i class="fa-solid fa-gear text-sm"></i></button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Filters -->
+      <div class="flex gap-4 items-center pb-2">
+        <button class="flex items-center gap-2 bg-brand-black text-white px-5 py-2.5 rounded-full text-sm font-medium">
+          Still Running
+          <span class="bg-yellow-400 text-brand-black text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">32</span>
+        </button>
+        <button class="flex items-center gap-2 bg-white border border-gray-200 text-gray-500 px-5 py-2.5 rounded-full text-sm font-medium hover:bg-gray-50 transition">
+          Disqualified
+          <span class="bg-gray-100 text-gray-500 text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center">4</span>
+        </button>
+        <div class="flex gap-2 ml-4">
+          <button class="w-10 h-10 rounded-full bg-brand-black flex items-center justify-center text-white hover:bg-gray-800 transition-colors"><i class="fa-solid fa-grip text-xs"></i></button>
+          <button class="w-10 h-10 rounded-full border border-gray-200 bg-white flex items-center justify-center text-gray-500 hover:bg-gray-50 transition-colors"><i class="fa-solid fa-link text-xs"></i></button>
+          <button class="w-10 h-10 rounded-full border border-gray-200 bg-white flex items-center justify-center text-gray-500 hover:bg-gray-50 transition-colors"><i class="fa-regular fa-heart text-xs"></i></button>
+          <button class="w-10 h-10 rounded-full border border-gray-200 bg-white flex items-center justify-center text-gray-500 hover:bg-gray-50 transition-colors"><i class="fa-regular fa-bookmark text-xs"></i></button>
+          <button class="w-10 h-10 rounded-full border border-gray-200 bg-white flex items-center justify-center text-gray-500 hover:bg-gray-50 transition-colors"><i class="fa-solid fa-arrow-up-right-from-square text-xs"></i></button>
+        </div>
+      </div>
+    </header>
+
+    <!-- ── KANBAN BOARD ── fills remaining height -->
+    <div class="flex-1 overflow-auto px-8 pb-24 pt-6 scrollbar-hide relative min-h-0">
+      <div class="flex gap-6 min-w-max h-full">
+
+        <!-- Column 1: Pink -->
+        <div class="flex flex-col gap-4 w-72">
+          <div class="bg-card-pink rounded-2xl p-5 shadow-soft relative flex flex-col justify-between h-40">
+            <div class="flex justify-between items-start">
+              <h3 class="font-bold text-brand-darkText leading-tight w-3/4">Develop Processing Plans</h3>
+              <button class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-ellipsis"></i></button>
+            </div>
+            <div class="absolute top-12 right-5 bg-white w-8 h-8 rounded-full flex items-center justify-center shadow-sm">
+              <i class="fa-solid fa-bookmark text-brand-black text-xs"></i>
+            </div>
+            <div class="mt-4 flex gap-1">
+              <div class="h-1 w-8 bg-brand-black rounded-full"></div>
+              <div class="h-1 w-12 bg-white/50 rounded-full"></div>
+            </div>
+            <div class="flex items-center gap-3 mt-4">
+              <img alt="Clair Burge" class="w-8 h-8 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC6K5myPipFJP06P5bYJXscnHQYWGQ7nvNb1QE5f0DXrG8LXlLj2D3qy41XPIPZKVmmG1cYyvtE6f2Om4n9Xl_Bmapp2VOPlUieTh82vBW7jbqHc_eyW1D-Vo3vyYGgZKnslPUVpFEPzUuwcxfj29U2jcrmEhKafY6rm5n6y7oupI0V2qZ1PWjgTROeLQ2LcE07drBGVFrmmPCObyBPZW6VKh4Cwd0KR91X-VAXHqTbQ-155Xiud07cHI3i_bnx-OG4Th-mn68EcDFb" />
+              <div>
+                <p class="text-sm font-semibold text-brand-darkText">Clair Burge</p>
+                <p class="text-xs text-gray-500">12.11.23</p>
+              </div>
+            </div>
+          </div>
+          <div class="bg-card-pink rounded-2xl p-5 shadow-soft relative flex flex-col justify-between h-40 opacity-80">
+            <div class="flex justify-between items-start">
+              <h3 class="font-bold text-brand-darkText leading-tight w-3/4">Develop Strategic Plans</h3>
+              <button class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-ellipsis"></i></button>
+            </div>
+            <div class="mt-4 flex gap-1">
+              <div class="h-1 w-10 bg-brand-black rounded-full"></div>
+              <div class="h-1 w-8 bg-white/50 rounded-full"></div>
+            </div>
+            <div class="flex items-center gap-3 mt-4">
+              <img alt="Christian Bass" class="w-8 h-8 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC7F3Pomw36xtVEQEAYu7VtAAwp_qAQtvI2EwSQ6MCJKoPMdtNQDjFqxSsyIdgD9RtIL7gIAkV9fJDoHMr2ZiYjea-GmRK8iO5KeDb4fWA0JU9x7sxY-XgLaBuyGRf2I2rSGywTlk88igTCybS2HVzA6Qew47QIZWbBsM0txcLBok6KMEPa4mIK1wDszEpzdK8I5UiTia2V0-FF9vBODutmTMadW6R8TXL2vmmf-cAoiffkay1wVnQ7Dn4FTKr8u8ALJ9P-69pWe4HT" />
+              <div>
+                <p class="text-sm font-semibold text-brand-darkText">Christian Bass</p>
+                <p class="text-xs text-gray-500">15.11.23</p>
+              </div>
+            </div>
+          </div>
+          <div class="bg-white rounded-2xl p-5 shadow-soft relative flex flex-col justify-between h-40 border border-gray-50">
+            <div class="flex justify-between items-start">
+              <h3 class="font-bold text-brand-darkText leading-tight w-3/4">Build Relationships</h3>
+              <button class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-ellipsis"></i></button>
+            </div>
+            <div class="mt-4 flex gap-1">
+              <div class="h-1 w-6 bg-brand-black rounded-full"></div>
+              <div class="h-1 w-14 bg-gray-200 rounded-full"></div>
+            </div>
+            <div class="flex items-center gap-3 mt-4">
+              <img alt="Craig Curry" class="w-8 h-8 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCkhACZNNxb5mjp8mHk6GAZ1rsIi71dkT5iUbMd5_znWAQK1ua55XGvsLt7SeIbxn0v2vNa7UHffLkn0pFpd7rH2nMu3ZNCrwTsFC11J0aKMEnWe73k5p_mhqZenXOWqMHEP4uyQcj5VfeGFZThTsjvRRL3t1eqOfJBzuxOIjNO0TBHDaCoKV6YabGHNqqXIzadvLlzIbtoyRGKm5VUeDOO9Z9JiBGvKkZuA4sYV1mTMsevNJt4nYV7CbqbObqOi-CXVCCXs6n_zSWt" />
+              <div>
+                <p class="text-sm font-semibold text-brand-darkText">Craig Curry</p>
+                <p class="text-xs text-gray-500">21.11.23</p>
+              </div>
+            </div>
+          </div>
+          <div class="bg-white rounded-2xl p-5 shadow-soft relative flex flex-col justify-between h-40 border border-gray-50">
+            <div class="flex justify-between items-start">
+              <h3 class="font-bold text-brand-darkText leading-tight w-3/4 text-gray-400">Create Training Programs</h3>
+              <button class="text-gray-300 hover:text-gray-500"><i class="fa-solid fa-ellipsis"></i></button>
+            </div>
+            <div class="mt-4 flex gap-1">
+              <div class="h-1 w-12 bg-gray-200 rounded-full"></div>
+              <div class="h-1 w-6 bg-gray-200 rounded-full"></div>
+            </div>
+            <div class="flex items-center gap-3 mt-4">
+              <img alt="Brandon Crawford" class="w-8 h-8 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCKTC3e6NBpJ6a0AcHT9RUWF2_13GFixwBVq1-48Y23486ev1CBsoW_ypuE-uFRl_wf_MEeQAK17cTUGcCi2yFx0gh2iDIBR3BQ_u-ojh9n0iBLI_lDqhgqRFkRes6OzOEMgPrCJr2hZpmzYzl1j8vncLq_j04AsEckK8C--fWxUXiVLxbKEcRDuYOFTi4_pIjostWc8P_-FsQp0dvcGIDvZ6IPZa5ypITS5sr89V0EbQIfqN18GW6wZvRXeWPD0mCYIAl6qMRk_k-u" />
+              <div>
+                <p class="text-sm font-semibold text-brand-darkText">Brandon Crawford</p>
+                <p class="text-xs text-gray-500">23.11.23</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Column 2: Purple -->
+        <div class="flex flex-col gap-4 w-72">
+          <div class="bg-card-purple rounded-2xl p-5 shadow-soft relative flex flex-col justify-between h-40">
+            <div class="flex justify-between items-start">
+              <h3 class="font-bold text-brand-darkText leading-tight w-3/4">Resolve Payment Disputes</h3>
+              <button class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-ellipsis"></i></button>
+            </div>
+            <div class="mt-4 flex gap-1">
+              <div class="h-1 w-12 bg-brand-black rounded-full"></div>
+              <div class="h-1 w-6 bg-white/50 rounded-full"></div>
+            </div>
+            <div class="flex items-center gap-3 mt-4">
+              <img alt="Clair Burge" class="w-8 h-8 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuANhjrONWj0ty7fKDuxjChXLfLBPNfWw4Vb_4VuQ8NzVX1vDvNzentTYS5z_qoqUa1OXQ4VqFQarCbTKXYj8x4Da_BK4OhDsJScgfX0zPj0mQJZ0RnCvAe-B_JyPaYBFoPnU7Orw-_3VRU52nz48gnLwlfzwKT_fUGoABZCsXft1Ejdt2b1Dwp8vVE5NRuZUBxLOChhzxSMbhRL16oI5PT2wLgnQfmtGhCtrCqBsSRoZkzW8y44izQlXoytuRPAGBPdwwEeHTmRGJwI" />
+              <div>
+                <p class="text-sm font-semibold text-brand-darkText">Clair Burge</p>
+                <p class="text-xs text-gray-500">8.11.23</p>
+              </div>
+            </div>
+          </div>
+          <div class="bg-card-purple rounded-2xl p-5 shadow-soft relative flex flex-col justify-between h-40 opacity-80">
+            <div class="flex justify-between items-start">
+              <h3 class="font-bold text-brand-darkText leading-tight w-3/4">Provide Customer Service</h3>
+              <button class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-ellipsis"></i></button>
+            </div>
+            <div class="absolute top-12 right-5 bg-white w-8 h-8 rounded-full flex items-center justify-center shadow-sm">
+              <i class="fa-solid fa-bookmark text-brand-black text-xs"></i>
+            </div>
+            <div class="mt-4 flex gap-1">
+              <div class="h-1 w-14 bg-brand-black rounded-full"></div>
+              <div class="h-1 w-4 bg-white/50 rounded-full"></div>
+            </div>
+            <div class="flex items-center gap-3 mt-4">
+              <img alt="Christian Bass" class="w-8 h-8 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCY4IhdIhGKzQLaJSh7ITvhgxnady9w_SrrlSitCHpCr7Y_EH_GtMEQOTVxL5DEzYzVocGi5z2aSpA5i8LvusmI5Ammp_Tfv8dIhZ9e2wUJqWyX_ZnIQtzmXU5pcmFQmt0QiNQ1YFVD7kRd-Xd4ssDDoFnqmyMo803sFNHml8MgSBpfVxsngvD1aGDjf8322ybMFjxuzz6HnJkWUGdDEUyZMVSofl_mUSJM9_bz9DOaeRjCvzp9MIcMSgWY8U9ZJhez8CdZZ_C-56v_" />
+              <div>
+                <p class="text-sm font-semibold text-brand-darkText">Christian Bass</p>
+                <p class="text-xs text-gray-500">9.11.23</p>
+              </div>
+            </div>
+          </div>
+          <div class="bg-white rounded-2xl p-5 shadow-soft relative flex flex-col justify-between h-40 border border-gray-50">
+            <div class="flex justify-between items-start">
+              <h3 class="font-bold text-brand-darkText leading-tight w-3/4">Resolve Disputes</h3>
+              <button class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-ellipsis"></i></button>
+            </div>
+            <div class="mt-4 flex gap-1">
+              <div class="h-1 w-10 bg-brand-black rounded-full"></div>
+              <div class="h-1 w-10 bg-gray-200 rounded-full"></div>
+            </div>
+            <div class="flex items-center gap-3 mt-4">
+              <img alt="Brandon Crawford" class="w-8 h-8 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDrT-q0j6yBGqHgEtOGNvWyXMAgGpQi4rKKyMj9tRub75hR8wLY2Jj54TiCeZ8vaOYx82Pu50EJrJcGSHgZqKKGxIPPtIQciWZ7KiNKIIH14Aa6eijLn9JnIP98WNMak-DjNdxdcMnbNexrHx-9ETZMi-ayqqbrsMvl7cHzcsftW1Z8vAHuxQM0_tmvkossQfRqk8Ko_aerwysWfygr0M6v5_eEvU9MzAfawVbEd4-B3D_WqXgLPmqBR8Z8GT74fy2s_nzeNTuuUv_V" />
+              <div>
+                <p class="text-sm font-semibold text-brand-darkText">Brandon Crawford</p>
+                <p class="text-xs text-gray-500">20.11.23</p>
+              </div>
+            </div>
+          </div>
+          <div class="bg-card-purple rounded-2xl p-5 shadow-soft relative flex flex-col justify-between h-40">
+            <div class="flex justify-between items-start">
+              <h3 class="font-bold text-brand-darkText leading-tight w-3/4">Develop Processing Plans</h3>
+              <button class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-ellipsis"></i></button>
+            </div>
+            <div class="absolute top-12 right-5 bg-white w-8 h-8 rounded-full flex items-center justify-center shadow-sm">
+              <i class="fa-solid fa-bookmark text-brand-black text-xs"></i>
+            </div>
+            <div class="mt-4 flex gap-1">
+              <div class="h-1 w-8 bg-brand-black rounded-full"></div>
+              <div class="h-1 w-12 bg-white/50 rounded-full"></div>
+            </div>
+            <div class="flex items-center gap-3 mt-4">
+              <img alt="Helna Julie" class="w-8 h-8 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBw_y5tAyvGgfV-nCzui6hUxQWd5TqPOPNB3-q4iLgP_ieYY61s53DaotTvfq0_WPoj5i6lZDAzsb5-qZPn0cToGhRRvsSmH47XaHTav7IkdA6TPzFkFWLHEZ-zY0SHTSpj3EpToT6u7TO31YP7YndDBEpXUB3TNSDPx0Aifn0ljH24DLQxffd8y_90B9AhPf1RC45tTTmXp9vCMWmX75ZzVKOr_G8gep1ly-kxRgscwl3VLefLaQyURKJq1-Q-smZDNwwrD5S8v0mC" />
+              <div>
+                <p class="text-sm font-semibold text-brand-darkText">Helna Julie</p>
+                <p class="text-xs text-gray-500">22.11.23</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Column 3: Purple/Blue -->
+        <div class="flex flex-col gap-4 w-72">
+          <div class="bg-card-purple rounded-2xl p-5 shadow-soft relative flex flex-col justify-between h-40">
+            <div class="flex justify-between items-start">
+              <h3 class="font-bold text-brand-darkText leading-tight w-3/4">Train Employees</h3>
+              <button class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-ellipsis"></i></button>
+            </div>
+            <div class="mt-4 flex gap-1">
+              <div class="h-1 w-6 bg-brand-black rounded-full"></div>
+              <div class="h-1 w-14 bg-white/50 rounded-full"></div>
+            </div>
+            <div class="flex items-center gap-3 mt-4">
+              <img alt="Craig Curry" class="w-8 h-8 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDdiONZy9FK4QP1FXkxZmye8-IdByOxi9eVpGsGCvTgEH5dEl7G-DvzS231WeVPdYvrMqTrzCPquImVnkAvOkRCZmEUDPalq0s1rUqbZKXZeVTykWrMzyeUv_0rhm3y23Kp1ahaxDOGEQTQ48_DgXUS8Xk3_OKHqYR3emjNEQ17lfv8c1Om2ltTeynTfjhvT4gSY-3HNTw7cHTnPLDuTsKDysdrd9_OKL76h_uwyUQ1OaU8xRpR727uEV5leQPTaWdqddYhWZvzw_1d" />
+              <div>
+                <p class="text-sm font-semibold text-brand-darkText">Craig Curry</p>
+                <p class="text-xs text-gray-500">8.11.23</p>
+              </div>
+            </div>
+          </div>
+          <div class="bg-white rounded-2xl p-5 shadow-soft relative flex flex-col justify-between h-40 border border-gray-50">
+            <div class="flex justify-between items-start">
+              <h3 class="font-bold text-brand-darkText leading-tight w-3/4">Improve Efficiency</h3>
+              <button class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-ellipsis"></i></button>
+            </div>
+            <div class="mt-4 flex gap-1">
+              <div class="h-1 w-8 bg-brand-black rounded-full"></div>
+              <div class="h-1 w-10 bg-gray-200 rounded-full"></div>
+            </div>
+            <div class="flex items-center gap-3 mt-4">
+              <img alt="Christian Bass" class="w-8 h-8 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC505XxVFKf_NgPXNm2yZiIC-Qsrx3iIQmh619uNv7kAghfz4a5VdSJ_EvoStgnQRYWJx8JercQQ4WvEEAKu8VNwsM9RhryphoXhNRIC7xujKu8nXjLeBcogLKCWf0P-6WLe_beLTszBnxA2yV-4l4cNxNW9JG2RGiLzsS3K2NVEN92oU4Vu2B2vYEGoJ8-CTn0XKYkOPJZaOuBhwutesk4Zb9FLq4Jnqo3Mqu4XgJfaP18CwOiUGwGaFUUubT8t1sysy1JP2hURDS9" />
+              <div>
+                <p class="text-sm font-semibold text-brand-darkText">Christian Bass</p>
+                <p class="text-xs text-gray-500">10.11.23</p>
+              </div>
+            </div>
+          </div>
+          <div class="bg-card-purple rounded-2xl p-5 shadow-soft relative flex flex-col justify-between h-40 opacity-80">
+            <div class="flex justify-between items-start">
+              <h3 class="font-bold text-brand-darkText leading-tight w-3/4">Report To Management</h3>
+              <button class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-ellipsis"></i></button>
+            </div>
+            <div class="mt-4 flex gap-1">
+              <div class="h-1 w-12 bg-brand-black rounded-full"></div>
+              <div class="h-1 w-6 bg-white/50 rounded-full"></div>
+            </div>
+            <div class="flex items-center gap-3 mt-4">
+              <img alt="Clair Burge" class="w-8 h-8 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAQOFXA-U9Dw6HpA9uFDeuudBz5eHvZ7Q4DSfJKlg180UZJysvn1wrCncRo6dfoYBlGzILdEn1YcqzKLpq5BNFBo6--r4kjqOi7RXyAUT3yNQ-4a245yvFioLhHqdYaTdKf-Zh-MjtyBtj_AYyPjpU12-H2nBcM8Nnr82s7hi_b8g3GEX3Gm5x-uJWooA94vqU0JAZS5oQLTqWdek4LS1Dz2YIQ4NuOheO7NKsqybOz_RH7gmkrA595uvG-nPPXjs_xjO7uQ7MYghn2" />
+              <div>
+                <p class="text-sm font-semibold text-brand-darkText">Clair Burge</p>
+                <p class="text-xs text-gray-500">14.11.23</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Column 4: Yellow -->
+        <div class="flex flex-col gap-4 w-72">
+          <div class="bg-card-yellow rounded-2xl p-5 shadow-soft relative flex flex-col justify-between h-40">
+            <div class="flex justify-between items-start">
+              <h3 class="font-bold text-brand-darkText leading-tight w-3/4">Recruit New Talent</h3>
+              <button class="text-yellow-600 hover:text-yellow-800"><i class="fa-solid fa-ellipsis"></i></button>
+            </div>
+            <div class="mt-4 flex gap-1">
+              <div class="h-1 w-16 bg-brand-black rounded-full"></div>
+              <div class="h-1 w-4 bg-yellow-200 rounded-full"></div>
+            </div>
+            <div class="flex items-center gap-3 mt-4">
+              <img alt="Helna Julie" class="w-8 h-8 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCzRS7n2dddT0hMIqA_6aHaLo6Dxa2i-kkqeLNLl00K4DlTWdwBPmxq3uUAgbYQobdgF5pMEYi0O4UInFIxoET0aOV-Sd9IPV7acQHMNrDlkYn3cIt2C__feiqRCAat2Kl5TsDA44OtsUqqe_Qva1p73vuHsxUl2U-LoNxSYpfr9t3PDJavkiGbuBvMVYNpY2Y0-jMZT1K91XPThw-08h5sS80s5zIMpjNBR5g4_lEURFM2ExNZsFc9FUCuSZgTbIQiLhV5WFmTplC9" />
+              <div>
+                <p class="text-sm font-semibold text-brand-darkText">Helna Julie</p>
+                <p class="text-xs text-yellow-700">4.11.23</p>
+              </div>
+            </div>
+          </div>
+          <div class="bg-card-yellow rounded-2xl p-5 shadow-soft relative flex flex-col justify-between h-40">
+            <div class="flex justify-between items-start">
+              <h3 class="font-bold text-brand-darkText leading-tight w-3/4">Market Services</h3>
+              <button class="text-yellow-600 hover:text-yellow-800"><i class="fa-solid fa-ellipsis"></i></button>
+            </div>
+            <div class="mt-4 flex gap-1">
+              <div class="h-1 w-10 bg-brand-black rounded-full"></div>
+              <div class="h-1 w-10 bg-yellow-200 rounded-full"></div>
+            </div>
+            <div class="flex items-center gap-3 mt-4">
+              <img alt="Clair Burge" class="w-8 h-8 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC2MtDPXi8Fs2Hr37KoBxrdFzwWOEpGoQ6RXf51Q0aIQVSQRV2fSCKvR2MeanUsUk1I_O-oD8iie8rshm5xZ82odUPl83l0L3y7F1oZneu1fl9hSd0VyqeVVgeBD42gUAvFk48zr3dl1nFfOjOMYcx5qLXbY7xgBruKi9qYXRnbMDL_qUX2Upu4dFq7w2wER_jvOU5lV_AZdRvrORWNc5NbHZjcey4rEQYG2fQ5K4kyNTHgpLR0lXJgvbJFUOoZznCSufaCmHqeifaW" />
+              <div>
+                <p class="text-sm font-semibold text-brand-darkText">Clair Burge</p>
+                <p class="text-xs text-yellow-700">5.11.23</p>
+              </div>
+            </div>
+          </div>
+          <div class="rounded-2xl p-5 h-40 flex items-center justify-center gap-4"
+            style="background: repeating-linear-gradient(45deg,transparent,transparent 10px,#f3f4f6 10px,#f3f4f6 20px)">
+            <button class="w-10 h-10 rounded-full bg-white shadow-sm flex items-center justify-center text-gray-500 hover:bg-gray-50 transition-colors"><i class="fa-solid fa-arrow-down-up-across-line text-sm"></i></button>
+            <button class="w-10 h-10 rounded-full bg-white shadow-sm flex items-center justify-center text-gray-500 hover:bg-gray-50 transition-colors"><i class="fa-solid fa-cloud-arrow-up text-sm"></i></button>
+            <button class="w-10 h-10 rounded-full bg-white shadow-sm flex items-center justify-center text-gray-500 hover:bg-gray-50 transition-colors"><i class="fa-solid fa-user-group text-sm"></i></button>
+            <button class="w-10 h-10 rounded-full bg-white shadow-sm flex items-center justify-center text-gray-500 hover:bg-gray-50 transition-colors"><i class="fa-regular fa-calendar text-sm"></i></button>
+          </div>
+        </div>
+
+        <!-- Column 5: Grey -->
+        <div class="flex flex-col gap-4 w-72">
+          <div class="bg-card-grey rounded-2xl p-5 shadow-soft relative flex flex-col justify-between h-40 opacity-60">
+            <div class="flex justify-between items-start">
+              <h3 class="font-bold text-gray-600 leading-tight w-3/4">Oversee Operations</h3>
+              <button class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-ellipsis"></i></button>
+            </div>
+            <div class="mt-4 flex gap-1">
+              <div class="h-1 w-14 bg-gray-300 rounded-full"></div>
+              <div class="h-1 w-6 bg-gray-200 rounded-full"></div>
+            </div>
+            <div class="flex items-center gap-3 mt-4">
+              <img alt="Christian Bass" class="w-8 h-8 rounded-full object-cover grayscale" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAQlBXUe5mYrLDDfQHcRJwkZ3pvj8hk3q2dHy1K9vZdALBWqcc0GShdmfr6VWVDXgUm5fYLl2TAmNv6jJIaKuryDs0LsvffFhtGpIVXP7VCSACRJ23juPrmx6QgOeNfs6DkLGP0_NqKrE7r5wZblOzpPDX0R85bi1syP4W7qq4fCB5x0S-t_-2TkgS2CgUPc3dDZTgW5yHwCCiL4b85EkGl5UwcWCHm0wCrwK46ZHiwNx000e4jhf6c6mtXVFvwQZfFVepYtVIOFwVt" />
+              <div>
+                <p class="text-sm font-semibold text-gray-600">Christian Bass</p>
+                <p class="text-xs text-gray-400">1.12.23</p>
+              </div>
+            </div>
+          </div>
+          <div class="bg-card-grey rounded-2xl p-5 shadow-soft relative flex flex-col justify-between h-40 opacity-60">
+            <div class="flex justify-between items-start">
+              <h3 class="font-bold text-gray-600 leading-tight w-3/4">Implement New Technologies</h3>
+              <button class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-ellipsis"></i></button>
+            </div>
+            <div class="mt-4 flex gap-1">
+              <div class="h-1 w-10 bg-gray-300 rounded-full"></div>
+              <div class="h-1 w-10 bg-gray-200 rounded-full"></div>
+            </div>
+            <div class="flex items-center gap-3 mt-4">
+              <img alt="Clair Burge" class="w-8 h-8 rounded-full object-cover grayscale" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDppOVN9hkdtmjELoEmxbZHhyQxL3Ddu7fkPrw34ORgbywf2T2tiuZJUSSuN4GrQ5f1AnINjx2FwFgPwaNzELPmPGxNdJ-bdOjDxMRClKQgKqaA7iFV1VtU6k4pNtJJzNkWmTu2F6DEGHhgVrIYGGHQ9jk8_t9U9VFXKzkTv_9AOc0vLtgTOQffqKmjj8wsStSAiBWZw26W1jP7sLp5p673_DwYrj9SHPqGS15FY9uuXXuy6L6Padz8xxhsYezL0Avbq7hN6v2rRJAJ" />
+              <div>
+                <p class="text-sm font-semibold text-gray-600">Clair Burge</p>
+                <p class="text-xs text-gray-400">4.12.23</p>
+              </div>
+            </div>
+          </div>
+          <div class="bg-card-grey rounded-2xl p-5 shadow-soft relative flex flex-col justify-between h-40 opacity-60">
+            <div class="flex justify-between items-start">
+              <h3 class="font-bold text-gray-600 leading-tight w-3/4">Launch Marketing Campaigns</h3>
+              <button class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-ellipsis"></i></button>
+            </div>
+            <div class="absolute top-12 right-5 bg-white w-8 h-8 rounded-full flex items-center justify-center shadow-sm">
+              <div class="w-2 h-2 bg-gray-400 rounded-sm"></div>
+            </div>
+            <div class="mt-4 flex gap-1">
+              <div class="h-1 w-8 bg-gray-300 rounded-full"></div>
+              <div class="h-1 w-12 bg-gray-200 rounded-full"></div>
+            </div>
+            <div class="flex items-center gap-3 mt-4">
+              <img alt="Brandon Crawford" class="w-8 h-8 rounded-full object-cover grayscale" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBCWE3z0gLtK1KWpKVgLJ13l0DawbBTzjKHrYQzqHyZv5VNQZT4MgvKzdneQ_RfJ8-yL82iQkmTxqKK06fhKceuKN_dh30455DuRLXuVIxB3jkv8hLbOc0vU79G37QH-YuS4rcfbYcyD8UQIn-XstjvhaOcfhs36ZvoMqcd0-k--q9-gzNzza-xwfeOMUhsgmzONb7wqpXOKKCbhrNVaKNno8PKjyx4IPQET289DNYmpipIFeaWJsM0svtI0kYz6W2IqFAJ3Aj1ReNi" />
+              <div>
+                <p class="text-sm font-semibold text-gray-600">Brandon Crawford</p>
+                <p class="text-xs text-gray-400">5.02.24</p>
+              </div>
+            </div>
+          </div>
+          <div class="bg-white rounded-2xl p-5 shadow-soft relative flex flex-col justify-between h-40 border border-gray-50">
+            <div class="flex justify-between items-start">
+              <h3 class="font-bold text-brand-darkText leading-tight w-3/4">Oversee Operations</h3>
+              <button class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-ellipsis"></i></button>
+            </div>
+            <div class="mt-4 flex gap-1">
+              <div class="h-1 w-10 bg-brand-black rounded-full"></div>
+              <div class="h-1 w-10 bg-gray-200 rounded-full"></div>
+            </div>
+            <div class="flex items-center gap-3 mt-4">
+              <img alt="Helna Julie" class="w-8 h-8 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAFxPDzZBP2koy6DPCqOoGqTqrfzm5zCCzAE2UDEn7KtjmLRyCQpk9FEqv_V2pC3IC9nKdDHq6b3scHk4SMFHPgz4EVxMOgl2q6S8uZG_HTpUo_eKeUJu4fL6-vdyb8ar4dne4G9zDLgzsgSoQ5ie4FjabNuJZe7Os6UtieaBo4sYDw_53HLQ_CZSQU3oC9nX1y4Y_EoBEtgzWRiSB64Aw1XRfybXAY2zT5qGguL3sxoim-oipCfZHW0rlP6w4qa9b7JdYDRfNUCdZy" />
+              <div>
+                <p class="text-sm font-semibold text-brand-darkText">Helna Julie</p>
+                <p class="text-xs text-gray-500">6.12.23</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+    <!-- END KANBAN -->
+
+    <!-- FLOATING ACTION BAR — anchored inside main -->
+    <div class="absolute bottom-6 left-1/2 -translate-x-1/2 bg-white rounded-full shadow-lg border border-gray-100 p-2 flex items-center gap-2 z-20">
+      <button class="w-10 h-10 rounded-full flex items-center justify-center text-gray-500 hover:bg-gray-50 transition-colors"><i class="fa-regular fa-folder text-sm"></i></button>
+      <button class="w-10 h-10 rounded-full flex items-center justify-center text-gray-500 hover:bg-gray-50 transition-colors"><i class="fa-solid fa-link text-sm"></i></button>
+      <button class="w-12 h-12 rounded-full bg-brand-black text-white flex items-center justify-center shadow-md hover:bg-gray-800 transition-colors mx-1"><i class="fa-solid fa-plus text-lg"></i></button>
+      <button class="w-10 h-10 rounded-full flex items-center justify-center text-gray-500 hover:bg-gray-50 transition-colors"><i class="fa-solid fa-stopwatch text-sm"></i></button>
+      <button class="w-10 h-10 rounded-full flex items-center justify-center text-gray-500 hover:bg-gray-50 transition-colors"><i class="fa-solid fa-font text-sm"></i></button>
+    </div>
+
+  </main>
+</body>
+</html>

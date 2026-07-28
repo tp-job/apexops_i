@@ -15,7 +15,6 @@ import cors from 'cors';
 import helmet from 'helmet';
 import http from 'http';
 import path from 'path';
-import WebSocket from 'ws';
 import { Server as SocketIOServer } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import type { ChatMessage } from './utils/chat';
@@ -26,6 +25,7 @@ import {
     RateLimiter,
 } from './utils/chatRoom';
 import prisma from './lib/prisma';
+import { scheduleRetentionPrune } from './lib/retention';
 
 // ── Express App ──────────────────────────────────────────────
 const app = express();
@@ -47,70 +47,14 @@ const io = new SocketIOServer(server, {
     cors: { origin: '*', methods: ['GET', 'POST'] },
 });
 
-// ── Native WebSocket Server ──────────────────────────────────
-const NATIVE_WS_PORT = parseInt(process.env.NATIVE_WS_PORT || '8082');
-const wss = new WebSocket.Server({ port: NATIVE_WS_PORT });
-
-interface ClientInfo {
-    appName: string;
-    url: string;
-    connectedAt: string;
-}
-
-const nativeWsClients = {
-    monitors: new Set<WebSocket>(),
-    targetApps: new Map<WebSocket, ClientInfo>(),
-};
+// The native WebSocket relay that used to listen on :8082 was REMOVED (spec D6,
+// .agents/docs/features/project-workspaces-and-sdk.md). It accepted unauthenticated
+// connections and re-broadcast every target app's console logs to every listener in
+// the `monitors` room — a cross-project leak in the one feature whose purpose is
+// per-project isolation. Ingest is now HTTP-only via `POST /api/ingest`, which is
+// keyed, rate limited and scoped to a single project.
 
 let dbConnected = false;
-
-wss.on('listening', () => console.log(`🔌 Native WebSocket server listening on port ${NATIVE_WS_PORT}`));
-wss.on('error', (err: NodeJS.ErrnoException) => {
-    if (err.code === 'EADDRINUSE') console.warn(`⚠️ Native WebSocket port ${NATIVE_WS_PORT} is in use`);
-    else console.error('Native WebSocket error:', err);
-});
-
-wss.on('connection', (ws: WebSocket) => {
-    console.log('🎯 Target app connected via Native WebSocket');
-    let clientInfo: ClientInfo | null = null;
-
-    ws.on('message', (data: WebSocket.RawData) => {
-        try {
-            const message = JSON.parse(data.toString());
-
-            if (message.type === 'register') {
-                clientInfo = { appName: message.appName || 'Unknown', url: message.url || 'Unknown', connectedAt: new Date().toISOString() };
-                nativeWsClients.targetApps.set(ws, clientInfo);
-                io.to('monitors').emit('target-app-connected', { ...clientInfo, socketId: 'native-' + Date.now() });
-            } else if (message.type === 'console-logs') {
-                const logs = message.logs || [];
-                if (logs.length > 0) {
-                    const enrichedLogs = logs.map((log: any) => ({
-                        ...log, appName: clientInfo?.appName || log.appName, receivedAt: new Date().toISOString(),
-                    }));
-                    io.to('monitors').emit('console-logs', enrichedLogs);
-
-                    if (dbConnected) {
-                        enrichedLogs.forEach((log: any) => {
-                            prisma.log.create({ data: { level: log.level, message: log.message, source: log.source, stack: log.stack || null } }).catch(() => {});
-                        });
-                    }
-                }
-            }
-        } catch (err) {
-            console.error('Error processing native WS message:', err);
-        }
-    });
-
-    ws.on('close', () => {
-        if (clientInfo) {
-            nativeWsClients.targetApps.delete(ws);
-            io.to('monitors').emit('target-app-disconnected', clientInfo);
-        }
-    });
-
-    ws.on('error', (err: Error) => console.error('Native WS client error:', err.message));
-});
 
 // ── Socket.IO Events ─────────────────────────────────────────
 interface AppInfo {
@@ -332,9 +276,11 @@ app.get('/', (_req: Request, res: Response) => {
         endpoints: {
             auth: ['/api/auth/register', '/api/auth/login', '/api/auth/profile'],
             logs: ['/api/logs', '/api/logs/stats', '/api/logs/:id'],
+            projects: ['/api/projects', '/api/projects/:slug', '/api/projects/:slug/rotate-key'],
             tickets: ['/api/tickets', '/api/tickets/stats', '/api/tickets/:id'],
             notes: ['/api/notes', '/api/notes/:id'],
-            consoleLogs: ['/api/console-logs', '/api/console-logs/realtime', '/api/console-logs/script'],
+            ingest: ['/api/ingest'],
+            consoleLogs: ['/api/console-logs', '/api/console-logs/script'],
             ai: ['/api/ai/chat', '/api/ai/status'],
         },
     });
@@ -353,9 +299,17 @@ import consoleLogsRoutes from './api/console-logs';
 import aiRoutes from './api/ai';
 import consoleMonitorRoutes from './api/console-monitor';
 import chatRoutes from './api/chat';
+import projectsRoutes from './api/projects';
+import ingestRoutes from './api/ingest';
+
+// Mounted before the JSON-body and CORS defaults matter to it: `api/ingest` sets
+// its own permissive CORS and 1MB body cap, because it is the only route that
+// legitimately accepts cross-origin posts from sites we do not control.
+app.use('/api/ingest', ingestRoutes);
 
 app.use('/api/auth', authRoutes);
 app.use('/api/logs', logsRoutes);
+app.use('/api/projects', projectsRoutes);
 app.use('/api/tickets', ticketsRoutes);
 app.use('/api/notes', notesRoutes);
 app.use('/api/console-logs', consoleLogsRoutes);
@@ -399,16 +353,22 @@ const startServer = async (): Promise<void> => {
         console.log('⚠️ Server will start without database (real-time features still work)');
     }
 
+    // Only schedule pruning when the database is actually reachable; otherwise the
+    // first tick just logs a connection failure every day.
+    if (dbConnected) scheduleRetentionPrune();
+
     app.listen(PORT, () => {
         console.log(`🚀 Server running on http://localhost:${PORT}`);
         console.log(`📡 Environment: ${process.env.NODE_ENV || 'development'}`);
-        console.log(`🔌 WebSocket ports: ${WS_PORT} (socket.io), ${NATIVE_WS_PORT} (native)`);
+        console.log(`🔌 WebSocket port: ${WS_PORT} (socket.io)`);
         console.log(`💾 Database: ${dbConnected ? '✅ Connected' : '⚠️ Not connected'}`);
         console.log(`🛡️  Security: Helmet.js enabled`);
         console.log(`🤖 AI Status: ${process.env.GEMINI_API_KEY ? '✅ Configured' : '⚠️ GEMINI_API_KEY not set'}`);
         console.log('\n📋 API Endpoints:');
         console.log('  Auth:         /api/auth/*');
         console.log('  Logs:         /api/logs/*');
+        console.log('  Projects:     /api/projects/*');
+        console.log('  Ingest (SDK): /api/ingest');
         console.log('  Tickets:      /api/tickets/*');
         console.log('  Notes:        /api/notes/*');
         console.log('  Console Logs: /api/console-logs/*');

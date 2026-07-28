@@ -37,6 +37,8 @@ model User {
   assignedTickets Ticket[]        @relation("assignee")
   reportedTickets Ticket[]        @relation("reporter")
   ticketComments  TicketComment[] @relation("commentAuthor")
+  ownedProjects   Project[]       @relation("projectOwner")
+  projectMemberships ProjectMember[]
 
   @@map("users")
 }
@@ -113,6 +115,139 @@ model Note {
   @@map("notes")
 }
 
+// ── Projects / workspaces ────────────────────────────────────
+// Scoping root for everything the embeddable SDK produces (spec D1).
+// Spec: .agents/docs/features/project-workspaces-and-sdk.md
+
+enum ProjectRole {
+  owner
+  admin
+  member
+
+  @@map("project_role")
+}
+
+model Project {
+  id   Int    @id @default(autoincrement())
+  name String
+  /// URL segment: /p/:slug. Project lives in the URL, not a client store, so
+  /// deep links, the back button and two tabs on two projects all work.
+  slug String @unique
+  /// PUBLIC by design (spec D4) — it ships inside a <script> tag on pages we do
+  /// not control, so it can never be a secret. It is write-only (ingest and
+  /// nothing else), rate limited per key, and rotatable. Reads use the JWT session.
+  ingestKey String @unique @map("ingest_key")
+  /// Optional origin allowlist for ingest. Empty array means any origin.
+  allowedOrigins Json @default("[]") @map("allowed_origins")
+  /// Which console levels the SDK ships (spec D5). `log`/`info`/`debug` are
+  /// opt-in — capturing them by default floods the store from a chatty dev app.
+  captureLevels Json @default("[\"error\",\"warn\"]") @map("capture_levels")
+  /// Days of raw `Event` rows to keep. `Issue` aggregates are never pruned.
+  retentionDays Int       @default(30) @map("retention_days")
+  ownerId       Int       @map("owner_id")
+  archivedAt    DateTime? @map("archived_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  owner   User            @relation("projectOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  members ProjectMember[]
+  issues  Issue[]
+  events  Event[]
+  tickets Ticket[]
+
+  @@index([ownerId])
+  @@index([archivedAt])
+  @@map("projects")
+}
+
+/// Modelled from day one even though v1 ships owner-only, with no invite UI.
+/// Retrofitting membership later means rewriting every authorization check.
+model ProjectMember {
+  projectId Int         @map("project_id")
+  userId    Int         @map("user_id")
+  role      ProjectRole @default(member)
+  createdAt DateTime    @default(now()) @map("created_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([projectId, userId])
+  @@index([userId])
+  @@map("project_members")
+}
+
+// ── Issues / events (SDK ingest) ─────────────────────────────
+
+enum IssueStatus {
+  unresolved
+  resolved
+  ignored
+
+  @@map("issue_status")
+}
+
+/// The grouped, deduplicated unit the UI lists (spec D3). A render loop that
+/// throws 100k times is ONE issue with count 100000 — without this the first
+/// real integration makes the UI useless and the database large on the same day.
+model Issue {
+  id        Int    @id @default(autoincrement())
+  projectId Int    @map("project_id")
+  /// hash(projectId, level, normalizedMessage, topStackFrame). Normalization
+  /// strips numbers, UUIDs and quoted strings so `User 4821 not found` and
+  /// `User 9134 not found` collapse into one issue.
+  fingerprint String
+  level       String
+  /// First line of the message.
+  title   String
+  /// Top stack frame, e.g. `app.js:42`.
+  culprit  String?
+  status   IssueStatus @default(unresolved)
+  count    Int         @default(1)
+  firstSeen DateTime   @default(now()) @map("first_seen")
+  lastSeen  DateTime   @default(now()) @map("last_seen")
+  /// Set when the issue is promoted to tracked work on the Bug Tracker board.
+  ticketId Int? @unique @map("ticket_id")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  ticket  Ticket? @relation(fields: [ticketId], references: [id], onDelete: SetNull)
+  events  Event[]
+
+  /// The ingest upsert target — makes repeated ingest of the same error idempotent.
+  @@unique([projectId, fingerprint])
+  @@index([projectId, status, lastSeen])
+  @@map("issues")
+}
+
+/// One raw occurrence, pruned on the project's retention window. Deliberately
+/// separate from `Log`: that table is ApexOps' own trusted server log, this one
+/// is untrusted, attacker-controllable, high-volume third-party input (spec D2).
+model Event {
+  /// BigInt is deliberate — this is the one table with a credible path to 10^8
+  /// rows, and Int overflow at 2.1B is an outage with no fast fix. Note it does
+  /// not JSON.stringify: the API must serialize it as a string.
+  id        BigInt   @id @default(autoincrement())
+  projectId Int      @map("project_id")
+  issueId   Int      @map("issue_id")
+  level     String
+  message   String
+  stack     String?
+  url       String?
+  userAgent String?  @map("user_agent")
+  /// Version string from the SDK's `data-release`, for future source-map support.
+  release   String?
+  /// SDK-supplied tags/breadcrumbs.
+  context   Json     @default("{}")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  issue   Issue   @relation(fields: [issueId], references: [id], onDelete: Cascade)
+
+  @@index([issueId, createdAt])
+  /// Drives the retention prune job.
+  @@index([projectId, createdAt])
+  @@map("events")
+}
+
 // ── Tickets ──────────────────────────────────────────────────
 
 /// Wire values stay hyphenated (`in-progress`) — the API maps enum <-> wire so the
@@ -137,6 +272,11 @@ enum TicketPriority {
 
 model Ticket {
   id          Int            @id @default(autoincrement())
+  /// Required as of the D1 migration. Reaching this state took three steps —
+  /// push nullable, run `scripts/backfill-default-project.ts`, push required —
+  /// because a one-shot NOT NULL column fails on any existing row and this repo
+  /// uses `db push` with no migrations directory.
+  projectId   Int            @map("project_id")
   title       String
   description String?
   status      TicketStatus   @default(open)
@@ -154,10 +294,14 @@ model Ticket {
   createdAt   DateTime       @default(now()) @map("created_at")
   updatedAt   DateTime       @default(now()) @updatedAt @map("updated_at")
 
+  project      Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
   assigneeUser User?           @relation("assignee", fields: [assigneeId], references: [id], onDelete: SetNull)
   reporterUser User?           @relation("reporter", fields: [reporterId], references: [id], onDelete: SetNull)
   comments     TicketComment[]
+  /// Set when this ticket was promoted from an ingested issue.
+  issue        Issue?
 
+  @@index([projectId, status])
   @@index([assigneeId])
   @@index([reporterId])
   @@index([status])
