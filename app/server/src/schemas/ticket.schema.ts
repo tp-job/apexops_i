@@ -58,6 +58,12 @@ export const createTicketCommentSchema = z.object({
 });
 
 export const listTicketsQuerySchema = z.object({
+    /**
+     * Narrows the board to one project. Absent means "every project I belong
+     * to" — never "every project", which is what this endpoint did before G5.
+     * Membership is checked either way; this only chooses the scope.
+     */
+    projectId: z.coerce.number().int().positive().optional(),
     status: statusField.optional(),
     priority: priorityField.optional(),
     assigneeId: z.coerce.number().int().positive().optional(),

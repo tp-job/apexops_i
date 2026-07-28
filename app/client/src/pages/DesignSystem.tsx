@@ -19,6 +19,8 @@ import {
     FiEdit3,
     FiMail,
     FiLock,
+    FiList,
+    FiAlertTriangle,
 } from 'react-icons/fi';
 import {
     Surface,
@@ -35,6 +37,15 @@ import {
     GanttTrack,
     Field,
     Input,
+    Checkbox,
+    Switch,
+    DataTable,
+    Pagination,
+    SkeletonText,
+    Modal,
+    ConfirmDialog,
+    type Column,
+    type SortDirection,
     type GanttBar,
 } from '@/components/design-system';
 import { PageHeader } from '@/components/common/layout';
@@ -92,6 +103,57 @@ const GANTT_BARS: GanttBar[] = [
     { id: 'g4', label: 'Bug tracker port', start: '2025-02-10', end: '2025-04-20', progress: 10, tone: 'neutral' },
 ];
 
+interface DsIssueRow {
+    id: number;
+    level: string;
+    title: string;
+    culprit: string;
+    count: number;
+    lastSeen: string;
+}
+
+const DS_ISSUE_ROWS: DsIssueRow[] = [
+    { id: 1, level: 'error', title: "Cannot read properties of undefined (reading 'map')", culprit: 'Cart.tsx:88', count: 1284, lastSeen: '2m ago' },
+    { id: 2, level: 'error', title: 'User <n> not found', culprit: 'api/users.ts:42', count: 310, lastSeen: '14m ago' },
+    { id: 3, level: 'warn', title: 'Deprecated prop `onToggle` used', culprit: 'Switch.tsx:12', count: 96, lastSeen: '1h ago' },
+    { id: 4, level: 'error', title: 'NetworkError when attempting to fetch resource', culprit: 'lib/http.ts:7', count: 22, lastSeen: '3h ago' },
+];
+
+const dsColumns: Column<DsIssueRow>[] = [
+    {
+        key: 'level',
+        header: 'Level',
+        className: 'w-20',
+        render: (r) => <Badge tone={r.level === 'error' ? 'accent' : 'neutral'}>{r.level}</Badge>,
+    },
+    {
+        key: 'title',
+        header: 'Issue',
+        render: (r) => (
+            <div className="flex flex-col">
+                <span className="font-medium truncate max-w-md">{r.title}</span>
+                <span className="font-mono text-[11px] text-gray-400">{r.culprit}</span>
+            </div>
+        ),
+    },
+    {
+        key: 'count',
+        header: 'Events',
+        sortable: true,
+        className: 'w-24 text-right',
+        hideOnMobile: true,
+        render: (r) => <span className="font-numbers tabular-nums">{r.count.toLocaleString()}</span>,
+    },
+    {
+        key: 'lastSeen',
+        header: 'Last seen',
+        sortable: true,
+        className: 'w-28',
+        hideOnMobile: true,
+        render: (r) => <span className="text-xs text-gray-500 dark:text-gray-400">{r.lastSeen}</span>,
+    },
+];
+
 const DesignSystem: FC = () => {
     const [meter, setMeter] = useState(72);
     const [step, setStep] = useState(2);
@@ -100,6 +162,20 @@ const DesignSystem: FC = () => {
     const [showDone, setShowDone] = useState('show');
     const [dsEmail, setDsEmail] = useState('');
     const [dsPassword, setDsPassword] = useState('');
+    const [dsLevels, setDsLevels] = useState<string[]>(['error', 'warn']);
+    const [dsAllowlist, setDsAllowlist] = useState(true);
+    const [dsSort, setDsSort] = useState<{ key: string; direction: SortDirection }>({
+        key: 'lastSeen',
+        direction: 'desc',
+    });
+    const [dsPage, setDsPage] = useState(1);
+    const [dsModal, setDsModal] = useState(false);
+    const [dsConfirm, setDsConfirm] = useState(false);
+
+    const toggleDsLevel = (level: string) =>
+        setDsLevels((prev) =>
+            prev.includes(level) ? prev.filter((l) => l !== level) : [...prev, level]
+        );
 
     return (
         <div className="flex flex-col gap-10 pb-16 max-w-[1400px] mx-auto w-full">
@@ -246,9 +322,9 @@ const DesignSystem: FC = () => {
                         <code className="font-mono text-xs">aria-invalid</code> and{' '}
                         <code className="font-mono text-xs">aria-required</code> onto the control it wraps.
                         Controls read that out of context — never from props — so the accessibility is
-                        solved once here rather than re-remembered per form. Select, Checkbox, Switch,
-                        RadioGroup and <code className="font-mono text-xs">useFormState</code> land with the
-                        full kit in Sprint 2.
+                        solved once here rather than re-remembered per form. Select, Textarea,
+                        RadioGroup and <code className="font-mono text-xs">useFormState</code> are still
+                        unbuilt — price them in before estimating a form-heavy screen.
                     </p>
 
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-6 gap-y-5">
@@ -287,11 +363,141 @@ const DesignSystem: FC = () => {
                         </Field>
                     </div>
 
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-6 gap-y-5 border-t border-gray-200 dark:border-white/10 pt-6">
+                        <div className="flex flex-col gap-3">
+                            <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                                Checkbox
+                            </p>
+                            <Checkbox
+                                label="error"
+                                hint="Uncaught exceptions and console.error"
+                                checked={dsLevels.includes('error')}
+                                onChange={() => toggleDsLevel('error')}
+                            />
+                            <Checkbox
+                                label="warn"
+                                hint="console.warn"
+                                checked={dsLevels.includes('warn')}
+                                onChange={() => toggleDsLevel('warn')}
+                            />
+                            <Checkbox label="debug" hint="Not available on this plan" disabled />
+                        </div>
+
+                        <div className="flex flex-col gap-3">
+                            <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                                Switch
+                            </p>
+                            <Switch
+                                justified
+                                label="Origin allowlist"
+                                hint="Reject ingest from unlisted origins"
+                                checked={dsAllowlist}
+                                onChange={(e) => setDsAllowlist(e.target.checked)}
+                            />
+                            <p className="text-xs text-gray-400">
+                                <code className="font-mono">role=&quot;switch&quot;</code> — use only when the
+                                change applies on toggle. If it needs a Save button, it is a Checkbox.
+                            </p>
+                        </div>
+                    </div>
+
                     <p className="text-xs text-gray-400">
                         The third field shows the error state: the message is{' '}
                         <code className="font-mono">role=&quot;alert&quot;</code> and replaces the hint rather
                         than stacking under it, so there is only ever one line of guidance to read.
                     </p>
+                </Surface>
+            </Section>
+
+            {/* ── Data surfaces ─────────────────────────────────────────── */}
+            <Section id="data" icon={<FiList className="w-4 h-4" />} title="Data surfaces">
+                <Surface variant="panel" padding="md" className="flex flex-col gap-5">
+                    <p className="text-sm text-gray-500 dark:text-gray-400 max-w-2xl">
+                        One <strong className="text-brand-dark dark:text-white">DataTable</strong> for every
+                        list surface — issues, logs, users, documents. Sorting and paging are{' '}
+                        <strong className="text-brand-dark dark:text-white">server-side</strong>: the table
+                        reflects that state and requests changes, it never reorders rows itself. Client-side
+                        sorting would only order the current page, which lies as soon as the list is longer
+                        than one.
+                    </p>
+
+                    <DataTable
+                        caption="Design system example table"
+                        columns={dsColumns}
+                        rows={DS_ISSUE_ROWS}
+                        rowKey={(r) => r.id}
+                        sort={dsSort}
+                        onSortChange={(key, direction) => setDsSort({ key, direction })}
+                    />
+
+                    <Pagination
+                        page={dsPage}
+                        pageSize={5}
+                        total={23}
+                        onPageChange={setDsPage}
+                        itemLabel="issues"
+                    />
+
+                    <div className="border-t border-gray-200 dark:border-white/10 pt-5">
+                        <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-3">
+                            Loading state
+                        </p>
+                        <SkeletonText lines={3} />
+                    </div>
+                </Surface>
+            </Section>
+
+            {/* ── Overlays ──────────────────────────────────────────────── */}
+            <Section id="overlays" icon={<FiAlertTriangle className="w-4 h-4" />} title="Overlays">
+                <Surface variant="panel" padding="md" className="flex flex-col gap-5">
+                    <p className="text-sm text-gray-500 dark:text-gray-400 max-w-2xl">
+                        Radix owns focus trapping, focus restore,{' '}
+                        <code className="font-mono text-xs">aria-modal</code>, ESC and scroll lock — a
+                        hand-rolled focus trap is a steady source of keyboard bugs.{' '}
+                        <strong className="text-brand-dark dark:text-white">ConfirmDialog</strong> is required
+                        before any destructive action ships, and stays open if the action rejects so the
+                        error can be shown next to what failed.
+                    </p>
+
+                    <div className="flex flex-wrap gap-3">
+                        <AccentButton variant="ghost" size="sm" onClick={() => setDsModal(true)}>
+                            Open modal
+                        </AccentButton>
+                        <AccentButton variant="ghost" size="sm" onClick={() => setDsConfirm(true)}>
+                            Destructive action
+                        </AccentButton>
+                    </div>
+
+                    <Modal
+                        open={dsModal}
+                        onOpenChange={setDsModal}
+                        title="Create project"
+                        description="Projects scope every issue, event and ticket."
+                        footer={
+                            <>
+                                <AccentButton variant="ghost" size="sm" onClick={() => setDsModal(false)}>
+                                    Cancel
+                                </AccentButton>
+                                <AccentButton size="sm" onClick={() => setDsModal(false)}>
+                                    Create
+                                </AccentButton>
+                            </>
+                        }
+                    >
+                        <Field label="Project name" required id="ds-modal-name">
+                            <Input placeholder="Acme Storefront" />
+                        </Field>
+                    </Modal>
+
+                    <ConfirmDialog
+                        open={dsConfirm}
+                        onOpenChange={setDsConfirm}
+                        title="Rotate ingest key?"
+                        description="Every page embedding the current snippet stops reporting until it is updated. There is no grace period."
+                        confirmLabel="Rotate key"
+                        destructive
+                        onConfirm={() => {}}
+                    />
                 </Surface>
             </Section>
 

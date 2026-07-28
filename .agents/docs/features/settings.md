@@ -1,13 +1,15 @@
 # Settings — function settings + account settings (G0 scope proposal)
 
 > Status: **proposed 2026-07-27**, awaiting decision lock on S-D1…S-D5.
-> Owner: product + full-stack. Replaces [`sprint-plan.md`](../planning/sprint-plan.md)'s Sprint 5, which
-> planned "Account Settings tabs" as a 2d form-kit exercise. That estimate assumed the toggles were
-> real. They are not — see below.
+> Owner: product + full-stack. Supersedes the "Account Settings tabs, 2d" line item that earlier
+> sprint plans carried: that estimate assumed the toggles were real. They are not — see below.
 >
-> **This is the sprint *after* the current one.** The workspaces sprint still has G2–G5 open
-> ([`project-workspaces-and-sdk.md`](project-workspaces-and-sdk.md)); nothing here should start
-> before G2 closes.
+> **Scheduling correction, 2026-07-28.** This spec previously claimed "the sprint *after* the
+> current one." It no longer holds. Workspaces G1–G2 shipped 2026-07-27 and **G3–G5 are Sprint 2**;
+> Sprint 3 is real-time + the API layer, and Sprint 4 is source maps — a named objective feature,
+> where this is a screen for 11 switches that currently do nothing.
+> **Settings is now Sprint 5** ([`sprint-plan.md`](../planning/sprint-plan.md)), and S-D1…S-D5 must
+> be locked before it starts.
 
 ## The load-bearing finding
 
@@ -108,15 +110,23 @@ Rule for anything ambiguous later: *if changing it on a second workspace should 
 answer, it is a project setting.* Notification preferences, when they become real, are **per-project**
 by that test — "alert me about this project" is the useful control, "alert me about everything" is not.
 
-### S-D5 — Admin/role management is blocked on something the sprint plan doesn't name
+### S-D5 — Admin/role management is blocked on something the sprint plans keep skipping
 
-`sprint-plan.md` makes "an admin can promote a user, and that user's access actually changes" the
-Sprint 5 goal, and correctly flags token-invalidation-on-role-change as its highest risk.
+Earlier sprint plans made "an admin can promote a user, and that user's access actually changes" a
+sprint goal, and correctly flagged **token-invalidation-on-role-change** as the single highest risk
+in the plan: role is signed into the JWT, so without invalidation a demotion silently does not take
+effect for up to an hour while the UI reports success. That risk is still live and is carried
+forward in [`sprint-plan.md`](../planning/sprint-plan.md)'s Sprint 5+ backlog.
 
-But there is a prior problem: **`authorize()` is exported from `middleware/auth.ts` and called
-nowhere** — verified 2026-07-27, unchanged since it was first noted in Sprint 1. No endpoint is
-role-gated. So promoting a user to admin currently grants *nothing*, and demoting them removes
-*nothing*. Token invalidation protects a boundary that does not yet exist.
+But there is a prior problem. **`authorize()` has exactly one caller in the entire codebase** —
+`DELETE /api/logs` ([`api/logs.ts:141`](../../../app/server/src/api/logs.ts)), added by the
+workspaces G2 security work on 2026-07-27. *(Corrected 2026-07-28: this section previously said
+"called nowhere," which was true when written and stopped being true the same day.)*
+
+No *user-facing* endpoint is role-gated. So promoting a user to admin currently grants nothing
+beyond the ability to bulk-delete logs, and demoting them removes nothing else. **Token
+invalidation protects a boundary that has barely been drawn** — the roles have to mean something
+before making them revoke promptly is worth a day.
 
 **Recommendation: gate the endpoints first, in the same gate as the role UI.** The minimum set:
 

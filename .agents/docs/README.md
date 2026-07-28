@@ -20,6 +20,7 @@ were all "backend", which is how three overlapping API documents survived side b
 | Run it locally | [`guides/installation.md`](guides/installation.md) |
 | Find an endpoint | [`architecture/api-reference.md`](architecture/api-reference.md) |
 | Know what is being built next | [`planning/sprint-plan.md`](planning/sprint-plan.md) |
+| Know why a feature is scoped that way | the matching spec in [`features/`](features/) |
 
 ## Folders
 
@@ -48,10 +49,10 @@ Scope locks and decision records. Each carries its decisions (`D1`, `D2`, …), 
 exit notes. **This is the folder to read before touching a feature**, and to update after.
 
 - [`bug-tracker.md`](features/bug-tracker.md) — board, detail, comments *(shipped)*
-- [`notes-calendar.md`](features/notes-calendar.md)
-- [`chat.md`](features/chat.md)
-- [`project-workspaces-and-sdk.md`](features/project-workspaces-and-sdk.md) — embeddable console SDK + per-project workspaces *(G1 shipped, G2 active)*
-- [`settings.md`](features/settings.md) — account + function settings *(proposed)*
+- [`notes-calendar.md`](features/notes-calendar.md) — one page, calendar toggle *(shipped)*
+- [`chat.md`](features/chat.md) — 1:1 DM, authenticated socket *(shipped; ephemeral by decision)*
+- [`project-workspaces-and-sdk.md`](features/project-workspaces-and-sdk.md) — embeddable console SDK + per-project workspaces *(G1–G2 shipped 2026-07-27; **G3–G5 are Sprint 2**)*
+- [`settings.md`](features/settings.md) — account + function settings *(proposed; scheduled Sprint 5)*
 
 ### [`planning/`](planning/) — what happens next
 Sequencing and capacity. Closed sprints move to `archive/`.
@@ -83,6 +84,8 @@ Documents that were true once. Kept for the *why*, never cited as the *what*. Se
 2. **One canonical document per subject.** If two files cover the same ground, one of them is
    retired. Overlap is what produced the three API documents this reorganization collapsed.
 3. **Feature decisions live in `features/`, not in sprint plans.** Sprint plans go stale by design;
-   decision records should not.
+   decision records should not. Where the two disagree: **the spec owns scope and decisions, the
+   sprint plan owns dates and ordering.** A sprint plan that re-states a decision will contradict
+   the spec within two weeks — this is exactly what forced the 2026-07-28 rewrite of Sprints 2–4.
 4. **English for new documents.** The existing Thai-language docs are fine and stay; the retired
    Thai and Chinese duplicates were retired for being *duplicates*, not for their language.

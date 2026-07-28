@@ -9,7 +9,7 @@ import type { CalendarNoteApi } from '@/utils/calendarApi';
  * Formerly `optimizationCalendar.ts`, split out under a page-specific name back
  * when Calendar and OptimizationCalendar were two pages reading the same
  * `GET /api/notes/calendar/:year/:month` endpoint at different densities. They
- * were merged into one Calendar screen (see `.agents/docs/frontend/user-flow.md`
+ * were merged into one Calendar screen (see `.agents/docs/product/user-flow.md`
  * Finding 2) — this module lost the page-specific name along with the page.
  */
 

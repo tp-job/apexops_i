@@ -264,6 +264,24 @@ app.get('/bug-tracker-client.js', (_req: Request, res: Response) => {
     res.sendFile(path.join(__dirname, '../public/bug-tracker-client.js'));
 });
 
+/**
+ * The SDK (spec G3). Served explicitly rather than left to `express.static` so
+ * the headers are guaranteed: it is embedded by third-party pages, so it needs
+ * `*` and a real cache policy. The version is in the *path*, so the file at a
+ * given URL never changes meaning — a breaking SDK change ships as `/sdk/v2.js`.
+ */
+app.get('/sdk/v1.js', (_req: Request, res: Response) => {
+    res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.sendFile(path.join(__dirname, '../public/sdk/v1.js'));
+});
+
+/** End-to-end fixture for the G3 acceptance test. */
+app.get('/sdk/demo', (_req: Request, res: Response) => {
+    res.sendFile(path.join(__dirname, '../public/sdk/demo.html'));
+});
+
 app.get('/console-monitor', (_req: Request, res: Response) => {
     res.sendFile(path.join(__dirname, '../public/console-monitor.html'));
 });

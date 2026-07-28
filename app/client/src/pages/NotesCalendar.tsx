@@ -35,7 +35,7 @@ import { fadeUp, stagger } from '@/lib/motion';
  * Notes + Calendar — one page, two modes.
  *
  * Merged deliberately rather than shipped as two routes: both read the same
- * Notes-backed data (see `.agents/docs/frontend/user-flow.md` Finding 2), and the
+ * Notes-backed data (see `.agents/docs/product/user-flow.md` Finding 2), and the
  * calendar is a *view* of notes, not a separate dataset.
  *
  * The scheduling affordance is the point of the Calendar mode. Before

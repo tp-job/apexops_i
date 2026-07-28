@@ -2,12 +2,34 @@
 
 > Written 2026-07-25 from the actual codebase: `app/server/src/api/*`, `database/prisma/schema.prisma`,
 > `app/client/src/*`, workspace manifests. Supersedes the sequencing in
-> [`frontend/user-flow.md`](../product/user-flow.md) — see "Correction to the existing plan" below.
+> [`user-flow.md`](../product/user-flow.md) — see "Correction to the existing plan" below.
 > The feature/endpoint inventory in [`features.md`](../product/features.md) is still accurate and is not repeated here.
+
+> ## ⚠️ Currency notice — 2026-07-28
+>
+> **§1's status table below is out of date and is kept for its reasoning, not its numbers.**
+> Re-audited against the tree on 2026-07-28:
+>
+> | §1 says | Actually |
+> |---|---|
+> | 6 models | **10** — plus `Project`, `ProjectMember`, `Issue`, `Event` |
+> | 8 route modules | **10** — plus `projects`, `ingest` |
+> | Client UI ~0%, 2 routes | **8 pages, ~3,250 lines, 8 routes.** Dashboard, Bug Tracker, Notes+Calendar, Chat, Login, Register, Home, Design System all shipped |
+> | 12 design-system primitives | **16**, though the form/data/overlay kits are still thin |
+> | Tests: none | server has fingerprint + API check suites (18/18, 21/21); client still has no runner |
+>
+> **§1's headline conclusion still holds** — this remains a frontend reconstruction on a working
+> backend, and the remaining effort is overwhelmingly in `app/client/src`. What changed is which
+> screens are missing: not "all of them," but the **project workspace, issue list and SDK surfaces**.
+>
+> For current status and sequencing, read [`sprint-plan.md`](sprint-plan.md); for scope and
+> decisions, read the relevant spec in [`../features/`](../features/).
 
 ---
 
 ## 1. Where the project actually stands
+
+> Status table below reflects **2026-07-25**. See the currency notice above before quoting it.
 
 | Layer | Status | Evidence |
 |---|---|---|

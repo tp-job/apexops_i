@@ -19,7 +19,7 @@ export interface UseCalendarEventsResult {
 /**
  * Calendar data for a given month, backed by `GET /api/notes/calendar/:year/:month`
  * — the only calendar/events endpoint that exists (see
- * `.agents/docs/frontend/user-flow.md` Finding 2). Merged from what used to be two
+ * `.agents/docs/product/user-flow.md` Finding 2). Merged from what used to be two
  * hooks (`useCalendarEvents` + `useOptimizationCalendarEvents`) reading the same
  * data at two densities for two separate pages; now one hook for one page.
  */

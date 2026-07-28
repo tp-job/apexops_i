@@ -32,7 +32,7 @@ const TYPING_TIMEOUT_MS = 3000;
  *
  * Rebuilt from scratch: the previous chat logic (`components/ui/chat/logic/
  * useChatController.ts`) lived inside a UI folder rather than `hooks/`, so it did
- * not survive the 2026-07-24 UI reset. See `.agents/docs/frontend/user-flow.md`
+ * not survive the 2026-07-24 UI reset. See `.agents/docs/product/user-flow.md`
  * Finding 3.
  *
  * **Authorisation lives on the server.** The handshake carries the access token;

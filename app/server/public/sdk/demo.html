@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ApexOps SDK — demo fixture</title>
+<style>
+    :root { color-scheme: light dark; }
+    body {
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+        max-width: 44rem; margin: 0 auto; padding: 2.5rem 1.25rem; line-height: 1.55;
+    }
+    h1 { font-size: 1.35rem; margin-bottom: .25rem; }
+    p.sub { color: #6b7280; margin-top: 0; font-size: .9rem; }
+    fieldset { border: 1px solid #d1d5db; border-radius: .75rem; padding: 1rem 1.25rem; margin: 1.25rem 0; }
+    legend { font-weight: 600; font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; color: #6b7280; }
+    button {
+        font: inherit; font-weight: 600; cursor: pointer; margin: .25rem .35rem .25rem 0;
+        padding: .5rem .9rem; border-radius: .6rem; border: 1px solid #d1d5db; background: #f9fafb;
+    }
+    button:hover { background: #f3f4f6; }
+    input { font: inherit; padding: .45rem .6rem; border-radius: .5rem; border: 1px solid #d1d5db; width: 22rem; max-width: 100%; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .85em; }
+    .expect { background: #f3f4f6; border-radius: .6rem; padding: .75rem 1rem; font-size: .875rem; }
+    @media (prefers-color-scheme: dark) {
+        fieldset, input, button { border-color: #374151; }
+        button { background: #1f2937; color: #f9fafb; }
+        button:hover { background: #374151; }
+        .expect { background: #1f2937; }
+        p.sub, legend { color: #9ca3af; }
+    }
+</style>
+</head>
+<body>
+
+<h1>ApexOps SDK — demo fixture</h1>
+<p class="sub">The G3 acceptance test. Loads the real SDK against a real project key and posts to <code>/api/ingest</code>.</p>
+
+<fieldset>
+    <legend>1 · Load the SDK</legend>
+    <p style="font-size:.9rem">
+        Paste the ingest key from <code>/p/&lt;slug&gt;/settings</code> and load. The SDK reads its
+        config from the script tag's own <code>data-*</code> attributes.
+    </p>
+    <input id="key" placeholder="pk_..." autocomplete="off" spellcheck="false" />
+    <button id="load">Load SDK</button>
+    <p id="status" style="font-size:.85rem;color:#6b7280">Not loaded.</p>
+</fieldset>
+
+<fieldset>
+    <legend>2 · Break something</legend>
+    <button id="throw200">Throw 200× (same error)</button>
+    <button id="throwVaried">Throw 50× (varying ids)</button>
+    <button id="consoleError">console.error once</button>
+    <button id="consoleWarn">console.warn once</button>
+    <button id="reject">Unhandled promise rejection</button>
+    <button id="uncaught">Uncaught TypeError</button>
+</fieldset>
+
+<fieldset>
+    <legend>3 · What should happen</legend>
+    <div class="expect">
+        <p style="margin-top:0"><strong>Throw 200×</strong> → <strong>one</strong> issue row, count <strong>200</strong>.
+        The SDK collapses identical repeats inside a 5s window into a single event carrying
+        <code>count</code>, so this costs one request, not 200.</p>
+        <p><strong>Throw 50× with varying ids</strong> → still <strong>one</strong> issue. Server-side
+        fingerprint normalization strips numbers, so <code>User 4821 not found</code> and
+        <code>User 9134 not found</code> collapse.</p>
+        <p style="margin-bottom:0"><strong>console.warn</strong> → captured only if <code>warn</code> is in the
+        project's capture levels. The server enforces that regardless of what the SDK sends.</p>
+    </div>
+</fieldset>
+
+<script>
+    // This fixture's own logging must never go through the patched console, or
+    // it becomes telemetry about the test harness instead of the test.
+    var log = console.log.bind(console);
+    var statusEl = document.getElementById('status');
+
+    document.getElementById('load').addEventListener('click', function () {
+        var key = document.getElementById('key').value.trim();
+        if (!key) { statusEl.textContent = 'Enter an ingest key first.'; return; }
+        if (document.getElementById('apexops-sdk')) {
+            statusEl.textContent = 'Already loaded — reload the page to change the key.';
+            return;
+        }
+        var s = document.createElement('script');
+        s.id = 'apexops-sdk';
+        s.src = '/sdk/v1.js';
+        s.setAttribute('data-project', key);
+        s.setAttribute('data-levels', 'error,warn');
+        s.setAttribute('data-release', 'demo-fixture@1.0.0');
+        s.onload = function () { statusEl.textContent = 'SDK loaded. Batches flush every 5s and on page hide.'; };
+        s.onerror = function () { statusEl.textContent = 'Failed to load /sdk/v1.js.'; };
+        document.head.appendChild(s);
+    });
+
+    document.getElementById('throw200').addEventListener('click', function () {
+        for (var i = 0; i < 200; i++) {
+            try { throw new Error("Cannot read properties of undefined (reading 'map')"); }
+            catch (e) { console.error(e); }
+        }
+        log('threw 200x — expect ONE issue with count 200');
+    });
+
+    document.getElementById('throwVaried').addEventListener('click', function () {
+        for (var i = 0; i < 50; i++) {
+            try { throw new Error('User ' + Math.floor(Math.random() * 10000) + ' not found'); }
+            catch (e) { console.error(e); }
+        }
+        log('threw 50x varied — expect ONE issue (numbers normalized away)');
+    });
+
+    document.getElementById('consoleError').addEventListener('click', function () {
+        console.error('Checkout total failed to compute', { cartId: 'c_881', items: 3 });
+    });
+
+    document.getElementById('consoleWarn').addEventListener('click', function () {
+        console.warn('Deprecated prop `onToggle` used in <Switch>');
+    });
+
+    document.getElementById('reject').addEventListener('click', function () {
+        Promise.reject(new Error('Payment provider timed out after 30s'));
+    });
+
+    document.getElementById('uncaught').addEventListener('click', function () {
+        setTimeout(function () { window.__nope.boom(); }, 0);
+    });
+</script>
+
+</body>
+</html>

@@ -7,7 +7,7 @@
  * action.
  *
  * The durable fix is sharing the server's zod schemas with the client; that lands
- * with the full form kit (see `.agents/docs/sprint-1-thin-slice.md`). Until then,
+ * with the full form kit (see `.agents/docs/archive/sprint-1-thin-slice.md`). Until then,
  * these functions exist so the two auth forms don't each invent their own rules.
  */
 

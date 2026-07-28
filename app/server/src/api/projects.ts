@@ -9,29 +9,18 @@ import {
     listProjectsQuerySchema,
     DEFAULT_CAPTURE_LEVELS,
 } from '../schemas/project.schema';
-import { Prisma, ProjectRole } from '@prisma/client';
+import { ProjectRole } from '@prisma/client';
+import {
+    asStringArray,
+    canAdminister,
+    projectSelect,
+    resolveMembership,
+    type ProjectRow,
+} from '../lib/projectAccess';
+import issuesRouter from './issues';
 
 const router = express.Router();
 router.use(authenticate);
-
-const asStringArray = (value: Prisma.JsonValue): string[] =>
-    Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : [];
-
-const projectSelect = {
-    id: true,
-    name: true,
-    slug: true,
-    ingestKey: true,
-    allowedOrigins: true,
-    captureLevels: true,
-    retentionDays: true,
-    ownerId: true,
-    archivedAt: true,
-    createdAt: true,
-    updatedAt: true,
-} as const;
-
-type ProjectRow = Prisma.ProjectGetPayload<{ select: typeof projectSelect }>;
 
 /**
  * `role` is the *caller's* role in this project, not a property of the project.
@@ -63,34 +52,10 @@ interface ProjectStats {
     lastEventAt: string | null;
 }
 
-/**
- * Resolves `:slug` to a project the caller is actually a member of.
- *
- * Returns 404 — not 403 — for a project that exists but is not theirs. A 403
- * confirms the slug is real, which turns this endpoint into a way to enumerate
- * other people's project names one guess at a time.
- */
-async function resolveMembership(
-    // Express 5 types `req.params[k]` as `string | string[]`; the narrowing below
-    // is what makes a repeated `?slug=` produce a 404 rather than a Prisma crash.
-    slug: string | string[] | undefined,
-    userId: number
-): Promise<{ project: ProjectRow; role: ProjectRole } | null> {
-    if (typeof slug !== 'string' || !slug) return null;
-
-    const project = await prisma.project.findUnique({ where: { slug }, select: projectSelect });
-    if (!project) return null;
-
-    const membership = await prisma.projectMember.findUnique({
-        where: { projectId_userId: { projectId: project.id, userId } },
-        select: { role: true },
-    });
-    if (!membership) return null;
-
-    return { project, role: membership.role };
-}
-
-const canAdminister = (role: ProjectRole) => role === 'owner' || role === 'admin';
+// Issue routes live under the project that scopes them, so `:slug` membership is
+// resolved by the same helper for both. Mounted before `/:slug` so the more
+// specific path wins.
+router.use('/:slug/issues', issuesRouter);
 
 // ── GET / ────────────────────────────────────────────────────
 router.get('/', async (req: Request, res: Response): Promise<void> => {

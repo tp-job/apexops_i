@@ -101,6 +101,41 @@ async function resolveProjectId(
     return { projectId: fallback.projectId };
 }
 
+/**
+ * Every read in this file is scoped through here.
+ *
+ * Before G5 these handlers had **no project constraint at all**: `GET /` returned
+ * every ticket in the database to any authenticated user, and `GET /:id` served
+ * any row by integer. That predates projects existing — it was correct when the
+ * board was single-tenant — but it is a cross-project leak now, in the one
+ * feature whose entire purpose is per-project isolation.
+ *
+ * An explicit `projectId` is still membership-checked (a non-member gets an empty
+ * result, not someone else's board). With none supplied, the caller sees exactly
+ * the union of the projects they belong to.
+ */
+async function memberProjectFilter(
+    userId: number,
+    requested?: number
+): Promise<Prisma.TicketWhereInput> {
+    if (requested !== undefined) {
+        const membership = await prisma.projectMember.findUnique({
+            where: { projectId_userId: { projectId: requested, userId } },
+            select: { projectId: true },
+        });
+        // `-1` matches nothing. Returning an empty filter here would silently
+        // widen the query to every project — failing open is the one outcome
+        // this function must never have.
+        return { projectId: membership ? membership.projectId : -1 };
+    }
+
+    const memberships = await prisma.projectMember.findMany({
+        where: { userId },
+        select: { projectId: true },
+    });
+    return { projectId: { in: memberships.map((m) => m.projectId) } };
+}
+
 const commentInclude = { author: { select: userSelect } } as const;
 type CommentWithAuthor = Prisma.TicketCommentGetPayload<{ include: typeof commentInclude }>;
 
@@ -128,10 +163,10 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
         return;
     }
 
-    const { status, priority, assigneeId, assignee, includeArchived, limit, offset } = parsed.data;
+    const { projectId, status, priority, assigneeId, assignee, includeArchived, limit, offset } = parsed.data;
 
     try {
-        const where: Prisma.TicketWhereInput = {};
+        const where: Prisma.TicketWhereInput = await memberProjectFilter(req.user!.id, projectId);
         if (status) where.status = toDbStatus(status);
         if (priority) where.priority = priority as TicketPriority;
         if (assigneeId !== undefined) where.assigneeId = assigneeId;
@@ -159,9 +194,16 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
 
 // ── GET /stats ───────────────────────────────────────────────
 // Declared before `/:id` so `stats` is never parsed as a ticket id.
-router.get('/stats', async (_req: Request, res: Response): Promise<void> => {
+router.get('/stats', async (req: Request, res: Response): Promise<void> => {
     try {
-        const live: Prisma.TicketWhereInput = { archivedAt: null };
+        const projectId = Number.parseInt(String(req.query.projectId ?? ''), 10);
+        const scope = await memberProjectFilter(
+            req.user!.id,
+            Number.isSafeInteger(projectId) && projectId > 0 ? projectId : undefined
+        );
+        // Scoped for the same reason as the list: an unscoped count leaks how
+        // much work other people's projects have, which is not nothing.
+        const live: Prisma.TicketWhereInput = { ...scope, archivedAt: null };
 
         const [byStatus, byPriority, total] = await Promise.all([
             prisma.ticket.groupBy({ by: ['status'], where: live, _count: { _all: true } }),
@@ -199,7 +241,13 @@ router.get('/:id', async (req: Request, res: Response): Promise<void> => {
     if (ticketId === null) { res.status(404).json({ error: 'Ticket not found' }); return; }
 
     try {
-        const ticket = await prisma.ticket.findUnique({ where: { id: ticketId }, include: ticketInclude });
+        const scope = await memberProjectFilter(req.user!.id);
+        // `findFirst` with the membership filter, not `findUnique` by id: a
+        // ticket in someone else's project must 404, not render.
+        const ticket = await prisma.ticket.findFirst({
+            where: { id: ticketId, ...scope },
+            include: ticketInclude,
+        });
         if (!ticket) { res.status(404).json({ error: 'Ticket not found' }); return; }
         res.json(formatTicket(ticket));
     } catch (err: any) {

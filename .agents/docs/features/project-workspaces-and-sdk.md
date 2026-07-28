@@ -1,8 +1,13 @@
-# Project Workspaces + Embeddable Console SDK — sprint plan (G0 scope lock)
+# Project Workspaces + Embeddable Console SDK — feature spec (G0 scope lock)
 
-> Status: **scope locked 2026-07-27**. D1–D6 decided; sprint committed at all 5 gates / 7.5d.
+> Status: **scope locked 2026-07-27**. D1–D6 decided. **G1–G2 shipped 2026-07-27; G3–G5 open.**
 > Owner: product + full-stack. Follows [`bug-tracker.md`](bug-tracker.md), which shipped the
 > single-tenant board. This is the multi-project layer under it.
+>
+> **Scheduling lives in [`sprint-plan.md`](../planning/sprint-plan.md), not here.** G3–G5 are
+> **Sprint 2 (2026-07-28 → 2026-08-08)**, alongside the `DataTable` and `ConfirmDialog` primitives
+> they consume. This document owns the decisions (D1–D6) and the gate definitions; the sprint plan
+> owns the dates. Sprint 3 then adds real-time, the three empty states, and issue detail (G5b).
 
 ## The load-bearing finding
 
@@ -312,10 +317,17 @@ Two-week sprint, 10 working days, planned to **7.5d** per the existing conventio
 |---|---|---|---|
 | G1 | ~~`Project`/`ProjectMember`/`Issue`/`Event` models; `projectId` on `Ticket`; two-step push + Default-project backfill; project CRUD API; key generation + rotation~~ **DONE 2026-07-27** | 1.5d | P0 |
 | G2 | ~~Secure ingest: `POST /api/ingest` keyed by `data-project`; fingerprint + `Issue` upsert; `createMany` for events; per-key rate limit; 1 MB route body cap; route-scoped permissive CORS; retention prune job. **Close `DELETE /api/logs`. Delete the :8082 relay (D6).**~~ **DONE 2026-07-27** | 2.0d | P0 |
-| G3 | SDK v2 at `/sdk/v1.js` — `data-*` config, dedupe window, `sendBeacon`, circuit breaker, payload caps, **WS path removed**. Ship a `demo.html` fixture that proves it end-to-end. | 1.5d | P0 |
-| G4 | Workspace UI: `/projects` list + create, project switcher, `/p/:slug/settings` with live "waiting for first event" state | 1.5d | P0 |
-| G5 | `/p/:slug/issues` list + detail; **Create ticket from issue**; board filtered by project | 1.0d | P0 |
-| — | **Total** | **7.5d** | |
+| G3 | ~~SDK v2 at `/sdk/v1.js` — `data-*` config, dedupe window, `sendBeacon`, circuit breaker, payload caps, **WS path removed**. Ship a `demo.html` fixture that proves it end-to-end.~~ **DONE 2026-07-28** | 1.5d | P0 |
+| G4 | ~~Workspace UI: `/projects` list + create, project switcher, `/p/:slug/settings` with live "waiting for first event" state~~ **DONE 2026-07-28** | 1.5d | P0 |
+| G5a | ~~`/p/:slug/issues` list; **Create ticket from issue**; board filtered by project~~ **DONE 2026-07-28** | 1.5d | P0 |
+| G5b | Issue detail: latest event, full stack, occurrence timeline, browser/OS breakdown | 1.5d | P1 |
+| — | **Total** | **9.0d** | |
+
+**G5 was split on 2026-07-28.** The original 1.0d estimate covered list *and* detail; re-checked
+against the `DataTable` work it depends on, that was optimistic. The split is not a scope increase —
+it is the honest size, and it puts the cut line in the right place: **G5a's Create-ticket action is
+the seam between the SDK pipeline and the existing ticket board, and is never the thing to cut.**
+G5b moves to Sprint 3, where it also becomes the render target for Sprint 4's source-map frames.
 
 **Sprint goal:** *paste one line into another project's `index.html`, break something on that page,
 and watch a grouped issue appear in its ApexOps workspace and become a tracked ticket.*
@@ -407,6 +419,59 @@ Landmines:
   period can span millions of rows, and a single statement there blocks writes on the table the SDK
   is actively posting into.
 
+### G3–G5a exit notes (2026-07-28)
+
+Shipped: [`public/sdk/v1.js`](../../../app/server/public/sdk/v1.js) +
+[`demo.html`](../../../app/server/public/sdk/demo.html) (served at `/sdk/v1.js` and `/sdk/demo`);
+[`api/issues.ts`](../../../app/server/src/api/issues.ts),
+[`lib/projectAccess.ts`](../../../app/server/src/lib/projectAccess.ts),
+[`schemas/issue.schema.ts`](../../../app/server/src/schemas/issue.schema.ts); client
+`Projects` / `ProjectIssues` / `ProjectSettings` pages, `ProjectSwitcher`, `useProjects` /
+`useProject` / `useIssues`, and seven new design-system primitives (`DataTable`, `Pagination`,
+`Skeleton`, `Modal`, `ConfirmDialog`, `Checkbox`, `Switch`) plus `utils/format.ts`.
+
+Clean typecheck, lint and build on both workspaces. **The demo script was run end-to-end against
+the real database**, not asserted: one batch carrying the SDK's dedupe `count: 200` produced **one
+issue with count=200**, and 50 distinct `User <n> not found` strings produced **one issue with
+count=50** — while `eventsLast24h` read 51. That gap is the D3 design working: *how often it
+happened* and *how many samples we stored* are different numbers, and only the first grows without
+bound. Promote produced `TICK-007`, a second promote answered **409 carrying the existing
+ticketId**, and the "waiting for first event" screen flipped to "Receiving events" on its own,
+with no refresh, ~4s after an event was posted from outside the browser.
+
+**Three things the plan did not anticipate:**
+
+1. **There was no issues API at all.** G5a was written as a UI gate, but `api/projects.ts` had no
+   issue endpoints — the list, detail, status change and promote all had to be built first. The
+   membership helper was extracted to `lib/projectAccess.ts` at the same time so the issues router
+   cannot drift from the projects router; two copies of an authorization check is how one of them
+   quietly stops matching the other.
+
+2. **`GET /api/tickets` returned every ticket in the database to any authenticated user.** No
+   project constraint of any kind, and `GET /:id` served any row by integer. Correct when the board
+   was single-tenant, a cross-project leak the moment projects existed. Every read in `tickets.ts`
+   now goes through `memberProjectFilter`, which falls **closed** (`projectId: -1`) for a
+   non-member rather than returning an unfiltered query. Verified: a second account that is not a
+   member of `sprint2-demo` cannot see its ticket in the list, gets 404 fetching it by id, and 404s
+   on the project's issues.
+
+3. **The client builds with `erasableSyntaxOnly`**, which rejects constructor parameter properties.
+   `tsc --noEmit` against the default config does **not** catch this — only `npm run build` does.
+   Verify with the build, not the typecheck.
+
+Landmines:
+
+- **A headless or backgrounded tab suspends CSS animations and rAF**, so `animationend` never fires
+  and Radix's `Presence` keeps a closing dialog mounted at `data-state="closed"` forever. This looks
+  exactly like a stuck-modal bug and is not one — re-run the close cycle with `animation: none` to
+  tell them apart. Cost an hour of misdiagnosis; the note is in `Modal.tsx` so the next person does
+  not repeat it.
+- `extractCulprit` only matches frames with a URL, absolute path or drive letter. A bare relative
+  frame (`at Cart (app.js:42:9)`) yields `culprit: null` — real browser stacks carry full URLs, so
+  this is not currently a defect, but hand-written test fixtures will mislead you.
+- The dev Vite server and the API must agree on origin: CORS is pinned to `http://localhost:5173`,
+  so a preview on any other port fails every call at the CORS layer with nothing in the server log.
+
 ### Deferred to v1.1 — named so they don't leak into the sprint
 
 Source maps / minified stack symbolication · release + regression tracking · alerting (email/Slack) ·
@@ -431,4 +496,4 @@ feature. If ApexOps is ever hosted for third parties, that is a separate securit
 | SDK error recurses through patched console | **Takes down the host project's page** — reputational worst case | Bound all SDK-internal logging to captured `originalConsole`; add a global re-entrancy flag; test with the demo fixture. |
 | CORS opened globally to make ingest work | Whole API becomes cross-origin readable | Route-scoped CORS on `/api/ingest` only; assert the app CORS is still pinned in G2 exit. |
 | Removing :8082 breaks an unnoticed consumer | Silent loss of a log stream someone relied on | **Checked 2026-07-27: the only dialer is `bug-tracker-client.js` itself**, which G3 rewrites anyway. `console-monitor.html` and the dashboard both use socket.io and are unaffected. D6 is a clean deletion, not a migration. |
-| Sprint runs long on UI | G5 slips | G5 is the only gate whose absence still leaves a working product (ingest + settings + existing board). Cut order: G5 detail view → G4 switcher polish. **Committed at all 5 gates with no slack** — if G1 or G2 overruns, cut from G5 immediately rather than compressing G2's security work. |
+| Sprint runs long on UI | G5 slips | **Cut order: G5b detail view → issue-list pagination → G4 switcher polish → `demo.html` fixture.** G5b is the only gate whose absence still leaves a coherent product (ingest + settings + issue list + promote-to-ticket). G1/G2 are shipped, so the security work can no longer be compressed by an overrun — but **G5a's Create-ticket action stays P0**: a list plus promote is a product, a detail view with no promote is a dead end. |

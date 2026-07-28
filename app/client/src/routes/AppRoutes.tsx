@@ -7,6 +7,9 @@ import Dashboard from '@/pages/Dashboard';
 import BugTracker from '@/pages/BugTracker';
 import NotesCalendar from '@/pages/NotesCalendar';
 import Chat from '@/pages/Chat';
+import Projects from '@/pages/Projects';
+import ProjectIssues from '@/pages/ProjectIssues';
+import ProjectSettings from '@/pages/ProjectSettings';
 import DesignSystem from '@/pages/DesignSystem';
 import AppLayout from '@/layouts/AppLayout';
 import ProtectedRoute from '@/routes/ProtectedRoute';
@@ -43,6 +46,14 @@ const AppRoutes: FC = () => (
                     <Route path="/bug-tracker" element={<BugTracker />} />
                     <Route path="/notes" element={<NotesCalendar />} />
                     <Route path="/chat" element={<Chat />} />
+
+                    {/* Project workspaces. The project lives in the URL, not a
+                        store, so deep links, the back button and two tabs on two
+                        projects all work without extra machinery. */}
+                    <Route path="/projects" element={<Projects />} />
+                    <Route path="/p/:slug" element={<Navigate to="issues" replace />} />
+                    <Route path="/p/:slug/issues" element={<ProjectIssues />} />
+                    <Route path="/p/:slug/settings" element={<ProjectSettings />} />
                 </Route>
             </Route>
 

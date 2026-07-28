@@ -3,6 +3,7 @@ import { FiLogOut, FiMenu, FiMoon, FiSun } from 'react-icons/fi';
 import { useAuth } from '@/context/auth-context';
 import { useTheme } from '@/context/theme-context';
 import { Badge } from '@/components/design-system';
+import ProjectSwitcher from './ProjectSwitcher';
 
 /**
  * Workspace top bar: mobile nav trigger, theme toggle, identity, sign-out.
@@ -27,6 +28,8 @@ const Topbar: FC<{ onOpenNav: () => void }> = ({ onOpenNav }) => {
             >
                 <FiMenu size={18} />
             </button>
+
+            <ProjectSwitcher />
 
             <div className="ml-auto flex items-center gap-2">
                 <button

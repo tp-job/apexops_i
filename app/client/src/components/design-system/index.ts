@@ -9,16 +9,31 @@ export { default as Meter } from './Meter';
 export { default as AccentButton } from './AccentButton';
 export { default as Badge } from './Badge';
 
-// Form kit — the minimum two primitives the auth pages need. The rest of the kit
-// (Select, Checkbox, Switch, RadioGroup, FormActions, useFormState) is Sprint 2;
-// see .agents/docs/sprint-1-thin-slice.md for why it was deferred, not forgotten.
+// Form kit — grown in Sprint 2 with the project settings screen (Checkbox, Switch).
+// Select, Textarea, RadioGroup, FormActions and useFormState are STILL UNBUILT —
+// price them in before estimating any form-heavy screen.
+// Status table: .agents/docs/planning/sprint-plan.md
 export { default as Field } from './Field';
 export { default as Input } from './Input';
+export { default as Checkbox } from './Checkbox';
+export { default as Switch } from './Switch';
 export { useFieldWiring } from './field-context';
 export type { FieldWiring } from './field-context';
 
+// Data-surface kit — one table for every list surface. Sorting and paging are
+// server-side; these components reflect state, they do not own it.
+export { default as DataTable } from './DataTable';
+export { default as Pagination } from './Pagination';
+export { default as Skeleton, SkeletonText } from './Skeleton';
+export type { Column, DataTableProps, SortDirection } from './DataTable';
+
+// Overlay kit — Radix owns focus management (see Modal.tsx for why).
+// ConfirmDialog is required before any destructive action ships.
+export { default as Modal } from './Modal';
+export { default as ConfirmDialog } from './ConfirmDialog';
+
 // Composition primitives harvested from the `.agents/template` references.
-// See .agents/docs/frontend/template-adoption.md for the mapping.
+// See .agents/docs/guides/template-adoption.md for the mapping.
 export { default as Timeline } from './Timeline';
 export { default as Stepper } from './Stepper';
 export { default as AvatarStack } from './AvatarStack';
