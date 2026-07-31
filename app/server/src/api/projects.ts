@@ -17,7 +17,9 @@ import {
     resolveMembership,
     type ProjectRow,
 } from '../lib/projectAccess';
+import { isSafeWebhookTarget } from '../lib/webhook';
 import issuesRouter from './issues';
+import overviewRouter from './overview';
 
 const router = express.Router();
 router.use(authenticate);
@@ -39,6 +41,8 @@ const formatProject = (p: ProjectRow, role: ProjectRole, stats?: ProjectStats) =
     allowedOrigins: asStringArray(p.allowedOrigins),
     captureLevels: asStringArray(p.captureLevels),
     retentionDays: p.retentionDays,
+    alertOnRegression: p.alertOnRegression,
+    webhookUrl: p.webhookUrl,
     ownerId: p.ownerId,
     role,
     archivedAt: p.archivedAt?.toISOString() ?? null,
@@ -56,6 +60,12 @@ interface ProjectStats {
 // resolved by the same helper for both. Mounted before `/:slug` so the more
 // specific path wins.
 router.use('/:slug/issues', issuesRouter);
+
+// Overview surfaces: `/rollup` (cross-project) and `/:slug/overview`. Mounted at
+// the router root because `/rollup` is a sibling of `/:slug`, not a child — and
+// **before** the `/:slug` handlers, or `rollup` is swallowed as a project slug.
+// `project.schema.ts` already reserves the word so no project can shadow it.
+router.use('/', overviewRouter);
 
 // ── GET / ────────────────────────────────────────────────────
 router.get('/', async (req: Request, res: Response): Promise<void> => {
@@ -190,7 +200,7 @@ router.get('/:slug', async (req: Request, res: Response): Promise<void> => {
 
 // ── PATCH /:slug ─────────────────────────────────────────────
 router.patch('/:slug', validate(updateProjectSchema), async (req: Request, res: Response): Promise<void> => {
-    const { name, captureLevels, allowedOrigins, retentionDays } = req.body;
+    const { name, captureLevels, allowedOrigins, retentionDays, alertOnRegression, webhookUrl } = req.body;
 
     try {
         const found = await resolveMembership(req.params.slug, req.user!.id);
@@ -200,6 +210,17 @@ router.patch('/:slug', validate(updateProjectSchema), async (req: Request, res: 
             return;
         }
 
+        // Resolve the webhook target before storing it, so an unreachable-or-private
+        // URL is rejected at save time with a message, rather than silently failing
+        // on every future alert where nobody is watching for it.
+        if (webhookUrl) {
+            const safe = await isSafeWebhookTarget(webhookUrl);
+            if (!safe.ok) {
+                res.status(400).json({ error: safe.reason ?? 'Webhook URL is not allowed' });
+                return;
+            }
+        }
+
         const project = await prisma.project.update({
             where: { id: found.project.id },
             data: {
@@ -207,6 +228,9 @@ router.patch('/:slug', validate(updateProjectSchema), async (req: Request, res: 
                 ...(captureLevels !== undefined && { captureLevels }),
                 ...(allowedOrigins !== undefined && { allowedOrigins }),
                 ...(retentionDays !== undefined && { retentionDays }),
+                ...(alertOnRegression !== undefined && { alertOnRegression }),
+                // Empty string is the documented "clear it" signal — see the schema.
+                ...(webhookUrl !== undefined && { webhookUrl: webhookUrl === '' ? null : webhookUrl }),
             },
             select: projectSelect,
         });

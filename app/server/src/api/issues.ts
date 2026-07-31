@@ -6,7 +6,10 @@ import {
     listIssuesQuerySchema,
     updateIssueSchema,
     promoteIssueSchema,
+    issueDetailQuerySchema,
 } from '../schemas/issue.schema';
+import { eventVolumeByIssue } from '../lib/eventAnalytics';
+import { browserFromUserAgent, osFromUserAgent, tally } from '../lib/userAgent';
 import { Prisma, TicketPriority } from '@prisma/client';
 
 /**
@@ -30,6 +33,8 @@ const issueSelect = {
     firstSeen: true,
     lastSeen: true,
     ticketId: true,
+    reopenCount: true,
+    lastReopenedAt: true,
 } as const;
 
 type IssueRow = Prisma.IssueGetPayload<{ select: typeof issueSelect }>;
@@ -48,6 +53,9 @@ const formatIssue = (i: IssueRow) => ({
     // Present means the issue has already been promoted; the UI shows a link to
     // the ticket instead of offering to create a second one.
     ticketId: i.ticketId,
+    /** > 0 means this was fixed and came back — the list badges it as a regression. */
+    reopenCount: i.reopenCount,
+    lastReopenedAt: i.lastReopenedAt?.toISOString() ?? null,
 });
 
 const parseId = (raw: string | string[] | undefined): number | null => {
@@ -85,6 +93,17 @@ const formatEvent = (e: {
 /** An `error` deserves a higher default than a `warn` that happens to be noisy. */
 const priorityForLevel = (level: string): TicketPriority =>
     level === 'error' ? 'high' : level === 'warn' ? 'medium' : 'low';
+
+/**
+ * The occurrence histogram lives in `lib/eventAnalytics.ts` so the project
+ * overview reuses the identical bucketing — including the `::timestamp` binding,
+ * which is the part a reimplementation would silently get wrong.
+ *
+ * **It counts stored events, not occurrences.** The SDK collapses repeats inside
+ * its dedupe window into one row carrying a `count`, added to the issue total but
+ * not stored per event — so the bars will not sum to `issue.count`. The UI says so
+ * in words, or the chart looks like it contradicts the headline number.
+ */
 
 // ── GET / ────────────────────────────────────────────────────
 router.get('/', async (req: Request, res: Response): Promise<void> => {
@@ -186,6 +205,13 @@ router.get('/:id', async (req: Request, res: Response): Promise<void> => {
     const issueId = parseId(req.params.id);
     if (issueId === null) { res.status(404).json({ error: 'Issue not found' }); return; }
 
+    const parsed = issueDetailQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+        res.status(400).json({ error: 'Invalid range' });
+        return;
+    }
+    const { range } = parsed.data;
+
     try {
         const found = await resolveMembership(req.params.slug, req.user!.id);
         if (!found) { res.status(404).json({ error: 'Project not found' }); return; }
@@ -198,20 +224,47 @@ router.get('/:id', async (req: Request, res: Response): Promise<void> => {
         });
         if (!issue) { res.status(404).json({ error: 'Issue not found' }); return; }
 
-        const events = await prisma.event.findMany({
-            where: { issueId: issue.id },
-            orderBy: { createdAt: 'desc' },
-            take: 10,
-            select: {
-                id: true, level: true, message: true, stack: true, url: true,
-                userAgent: true, release: true, context: true, createdAt: true,
-            },
-        });
+        const [events, timeline, breakdownRows] = await Promise.all([
+            prisma.event.findMany({
+                where: { issueId: issue.id },
+                orderBy: { createdAt: 'desc' },
+                take: 10,
+                select: {
+                    id: true, level: true, message: true, stack: true, url: true,
+                    userAgent: true, release: true, context: true, createdAt: true,
+                },
+            }),
+            eventVolumeByIssue(issue.id, range),
+            // Capped: the breakdown is a proportion, and 500 samples answers
+            // "is this everyone or just Safari?" as well as 500,000 would.
+            prisma.event.findMany({
+                where: { issueId: issue.id },
+                orderBy: { createdAt: 'desc' },
+                take: 500,
+                select: { userAgent: true, release: true },
+            }),
+        ]);
+
+        const storedInRange = timeline.reduce((sum, b) => sum + b.count, 0);
 
         res.json({
             ...formatIssue(issue),
             latestEvent: events.length ? formatEvent(events[0]) : null,
             recentEvents: events.map(formatEvent),
+            range,
+            timeline,
+            /** Events actually stored in the window — never equals `count`; see eventAnalytics. */
+            storedInRange,
+            /** Total event rows retained for this issue, which retention prunes. */
+            storedTotal: await prisma.event.count({ where: { issueId: issue.id } }),
+            breakdown: {
+                browsers: tally(breakdownRows.map((e) => browserFromUserAgent(e.userAgent))),
+                os: tally(breakdownRows.map((e) => osFromUserAgent(e.userAgent))),
+                releases: tally(
+                    breakdownRows.map((e) => e.release ?? 'unknown')
+                ),
+                sampledFrom: breakdownRows.length,
+            },
         });
     } catch (err: any) {
         console.error('Error fetching issue:', err);
@@ -230,15 +283,40 @@ router.patch('/:id', validate(updateIssueSchema), async (req: Request, res: Resp
 
         const existing = await prisma.issue.findFirst({
             where: { id: issueId, projectId: found.project.id },
-            select: { id: true },
+            select: { id: true, status: true },
         });
         if (!existing) { res.status(404).json({ error: 'Issue not found' }); return; }
 
-        const issue = await prisma.issue.update({
-            where: { id: existing.id },
-            data: { status: req.body.status },
-            select: issueSelect,
-        });
+        const next = req.body.status as typeof existing.status;
+
+        // A no-op PATCH must not write an audit row, or "resolved 4 times" becomes
+        // a count of how often someone clicked a button that was already pressed.
+        if (next === existing.status) {
+            const unchanged = await prisma.issue.findUniqueOrThrow({
+                where: { id: existing.id },
+                select: issueSelect,
+            });
+            res.json(formatIssue(unchanged));
+            return;
+        }
+
+        const [issue] = await prisma.$transaction([
+            prisma.issue.update({
+                where: { id: existing.id },
+                data: { status: next },
+                select: issueSelect,
+            }),
+            prisma.issueStatusChange.create({
+                data: {
+                    issueId: existing.id,
+                    projectId: found.project.id,
+                    fromStatus: existing.status,
+                    toStatus: next,
+                    reason: 'manual',
+                    actorId: req.user!.id,
+                },
+            }),
+        ]);
 
         res.json(formatIssue(issue));
     } catch (err: any) {

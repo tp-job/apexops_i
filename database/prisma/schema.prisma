@@ -39,6 +39,8 @@ model User {
   ticketComments  TicketComment[] @relation("commentAuthor")
   ownedProjects   Project[]       @relation("projectOwner")
   projectMemberships ProjectMember[]
+  issueStatusChanges IssueStatusChange[]
+  notifications      Notification[]
 
   @@map("users")
 }
@@ -144,6 +146,17 @@ model Project {
   captureLevels Json @default("[\"error\",\"warn\"]") @map("capture_levels")
   /// Days of raw `Event` rows to keep. `Issue` aggregates are never pruned.
   retentionDays Int       @default(30) @map("retention_days")
+
+  /// Alerting is configured **per project**, not per user (spec S-D4): "alert me
+  /// about this project" is the useful control; "alert me about everything" is
+  /// not. On by default — a regression you already fixed coming back is the one
+  /// event worth interrupting someone for.
+  alertOnRegression Boolean @default(true) @map("alert_on_regression")
+  /// Optional Slack/Discord/generic incoming webhook. USER-SUPPLIED, so the
+  /// server making outbound requests to it is an SSRF surface — every send goes
+  /// through `lib/webhook.ts`, which rejects private and link-local targets.
+  webhookUrl String? @map("webhook_url")
+
   ownerId       Int       @map("owner_id")
   archivedAt    DateTime? @map("archived_at")
   createdAt     DateTime  @default(now()) @map("created_at")
@@ -208,14 +221,103 @@ model Issue {
   /// Set when the issue is promoted to tracked work on the Bug Tracker board.
   ticketId Int? @unique @map("ticket_id")
 
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  ticket  Ticket? @relation(fields: [ticketId], references: [id], onDelete: SetNull)
-  events  Event[]
+  /// Denormalized regression counters.
+  ///
+  /// `IssueStatusChange` is the source of truth and answers "how many regressions
+  /// this week"; these two answer "has this ever come back" on the issue list,
+  /// where a join per row would be paid on the hottest read in the product.
+  /// Both are maintained in the same transaction as the audit row.
+  reopenCount    Int       @default(0) @map("reopen_count")
+  lastReopenedAt DateTime? @map("last_reopened_at")
+
+  project       Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  ticket        Ticket?             @relation(fields: [ticketId], references: [id], onDelete: SetNull)
+  events        Event[]
+  statusChanges IssueStatusChange[]
 
   /// The ingest upsert target — makes repeated ingest of the same error idempotent.
   @@unique([projectId, fingerprint])
   @@index([projectId, status, lastSeen])
   @@map("issues")
+}
+
+/// What an alert is about. Only `regression` fires today; the enum exists so
+/// adding a kind later does not require a migration on a table with rows.
+enum NotificationKind {
+  regression
+
+  @@map("notification_kind")
+}
+
+/// The in-app alert feed — and the **system of record** for alerting.
+///
+/// Webhooks are fire-and-forget: if one silently stops delivering, that is
+/// indistinguishable from "no regressions happened", which is the worst failure
+/// mode a monitoring tool has. A row here is written first and unconditionally,
+/// so there is always a durable record of what we *tried* to tell you, whatever
+/// the outbound channel did.
+///
+/// Fan-out is one row per member per event. That is deliberate: read state is
+/// per person, so a shared row would mean one member marking it read hides it
+/// from everyone else.
+model Notification {
+  id     Int              @id @default(autoincrement())
+  userId Int              @map("user_id")
+  kind   NotificationKind
+  /// Denormalized so the feed can filter/link by project without a join.
+  projectId Int  @map("project_id")
+  issueId   Int? @map("issue_id")
+  title     String
+  body      String?
+  /// Null until read. Nullable-timestamp rather than a boolean so "when did they
+  /// see it" stays answerable.
+  readAt    DateTime? @map("read_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Drives the unread badge and the feed, both of which are per-user newest-first.
+  @@index([userId, readAt, createdAt])
+  @@map("notifications")
+}
+
+/// Why an issue's status changed. `regression` is written by ingest with no
+/// actor; `manual` is a person.
+enum IssueStatusChangeReason {
+  regression
+  manual
+
+  @@map("issue_status_change_reason")
+}
+
+/// Every status transition, so "3 regressions this week" is answerable.
+///
+/// `Issue.status` holds only the *current* value, so before this table a
+/// resolved issue that recurred flipped back to `unresolved` and no trace of the
+/// flip survived — the single most actionable number on a project overview was
+/// uncomputable. Volume is bounded by human actions plus genuine regressions,
+/// not by ingest, so this stays small even under a flood.
+model IssueStatusChange {
+  id      Int @id @default(autoincrement())
+  issueId Int @map("issue_id")
+  /// Denormalized from the issue for the same reason `Event.projectId` is:
+  /// the cross-project roll-up counts regressions per project over a window,
+  /// and without it every row of that query needs a join through `issues`.
+  projectId  Int                     @map("project_id")
+  fromStatus IssueStatus             @map("from_status")
+  toStatus   IssueStatus             @map("to_status")
+  reason     IssueStatusChangeReason
+  /// Null for automatic regressions — ingest has no signed-in user.
+  actorId   Int?     @map("actor_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  issue Issue @relation(fields: [issueId], references: [id], onDelete: Cascade)
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([issueId, createdAt])
+  /// Drives "regressions in the last N days", per project and across projects.
+  @@index([projectId, reason, createdAt])
+  @@map("issue_status_changes")
 }
 
 /// One raw occurrence, pruned on the project's retention window. Deliberately
@@ -347,6 +449,13 @@ model RefreshToken {
   token     String   @unique
   expiresAt DateTime @map("expires_at")
   createdAt DateTime @default(now()) @map("created_at")
+
+  /// Context for the active-sessions list (spec S-D3). A session list that says
+  /// "session #4" is unusable; one that says "Chrome on Windows, 2 hours ago" is
+  /// the difference between a security control and a table of row ids.
+  /// Nullable: sessions created before this landed have no context to show.
+  userAgent String? @map("user_agent")
+  ipAddress String? @map("ip_address")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

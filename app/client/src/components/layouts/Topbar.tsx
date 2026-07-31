@@ -4,12 +4,16 @@ import { useAuth } from '@/context/auth-context';
 import { useTheme } from '@/context/theme-context';
 import { Badge } from '@/components/design-system';
 import ProjectSwitcher from './ProjectSwitcher';
+import NotificationBell from './NotificationBell';
 
 /**
- * Workspace top bar: mobile nav trigger, theme toggle, identity, sign-out.
+ * Workspace top bar: mobile nav trigger, project switcher, alert bell, theme
+ * toggle, identity, sign-out.
  *
- * Kept intentionally thin — search and notifications are not wired to anything
- * real yet, and a control that does nothing is worse than an absent one.
+ * Kept intentionally thin — **search is still absent** because it is not wired
+ * to anything real, and a control that does nothing is worse than no control.
+ * The bell is here precisely because it now is real: it reads the notification
+ * feed, which regressions actually write to.
  */
 const Topbar: FC<{ onOpenNav: () => void }> = ({ onOpenNav }) => {
     const { user, logout } = useAuth();
@@ -32,6 +36,8 @@ const Topbar: FC<{ onOpenNav: () => void }> = ({ onOpenNav }) => {
             <ProjectSwitcher />
 
             <div className="ml-auto flex items-center gap-2">
+                <NotificationBell />
+
                 <button
                     type="button"
                     onClick={toggleTheme}

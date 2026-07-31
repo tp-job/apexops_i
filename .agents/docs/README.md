@@ -52,6 +52,9 @@ exit notes. **This is the folder to read before touching a feature**, and to upd
 - [`notes-calendar.md`](features/notes-calendar.md) — one page, calendar toggle *(shipped)*
 - [`chat.md`](features/chat.md) — 1:1 DM, authenticated socket *(shipped; ephemeral by decision)*
 - [`project-workspaces-and-sdk.md`](features/project-workspaces-and-sdk.md) — embeddable console SDK + per-project workspaces *(G1–G2 shipped 2026-07-27; **G3–G5 are Sprint 2**)*
+- [`overview-and-regressions.md`](features/overview-and-regressions.md) — cross-project roll-up, project overview, release markers, regression tracking *(shipped)*
+- [`alerting-and-account-settings.md`](features/alerting-and-account-settings.md) — regression alerts (in-app + webhook), account settings, active sessions *(shipped)*
+- [`security-hardening-2026-07-31.md`](features/security-hardening-2026-07-31.md) — JWT secret fail-closed, socket monitors leak, shared fetch/dismiss helpers *(shipped)*
 - [`settings.md`](features/settings.md) — account + function settings *(proposed; scheduled Sprint 5)*
 
 ### [`planning/`](planning/) — what happens next

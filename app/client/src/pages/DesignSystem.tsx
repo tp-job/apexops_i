@@ -44,6 +44,8 @@ import {
     SkeletonText,
     Modal,
     ConfirmDialog,
+    ContextMenu,
+    useContextMenu,
     type Column,
     type SortDirection,
     type GanttBar,
@@ -171,6 +173,7 @@ const DesignSystem: FC = () => {
     const [dsPage, setDsPage] = useState(1);
     const [dsModal, setDsModal] = useState(false);
     const [dsConfirm, setDsConfirm] = useState(false);
+    const dsMenu = useContextMenu<string>();
 
     const toggleDsLevel = (level: string) =>
         setDsLevels((prev) =>
@@ -498,6 +501,70 @@ const DesignSystem: FC = () => {
                         destructive
                         onConfirm={() => {}}
                     />
+
+                    <div className="border-t border-gray-200 dark:border-white/10 pt-5">
+                        <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-3">
+                            Context menu
+                        </p>
+                        <p className="text-sm text-gray-500 dark:text-gray-400 max-w-2xl mb-4">
+                            <strong className="text-brand-dark dark:text-white">
+                                Never make right-click the only route to an action.
+                            </strong>{' '}
+                            It is invisible to keyboard users, impossible on touch and undiscoverable to
+                            anyone who does not think to try it. Pair the gesture with a visible trigger
+                            that opens the <em>same</em> menu — <code className="font-mono text-xs">useContextMenu</code>{' '}
+                            exposes <code className="font-mono text-xs">openAtCursor</code> and{' '}
+                            <code className="font-mono text-xs">openAtElement</code> for exactly that.
+                        </p>
+
+                        <div
+                            onContextMenu={(e) => dsMenu.openAtCursor(e, 'demo')}
+                            className="flex items-center justify-between gap-3 rounded-2xl border border-dashed border-gray-300 px-4 py-6 text-sm text-gray-500 dark:border-white/15 dark:text-gray-400"
+                        >
+                            <span>Right-click anywhere in this box…</span>
+                            <AccentButton
+                                variant="ghost"
+                                size="sm"
+                                aria-haspopup="menu"
+                                onClick={(e) => dsMenu.openAtElement(e, 'demo')}
+                            >
+                                … or use this button
+                            </AccentButton>
+                        </div>
+
+                        <ContextMenu
+                            open={dsMenu.open}
+                            position={dsMenu.position}
+                            onClose={dsMenu.close}
+                            label="Example actions"
+                            items={[
+                                { id: 'open', label: 'Open', icon: <FiEye size={15} />, onSelect: () => {} },
+                                { id: 'edit', label: 'Rename…', icon: <FiEdit3 size={15} />, onSelect: () => {} },
+                                {
+                                    id: 'copy',
+                                    label: 'Copy link',
+                                    icon: <FiPaperclip size={15} />,
+                                    separatorBefore: true,
+                                    onSelect: () => {},
+                                },
+                                {
+                                    id: 'disabled',
+                                    label: 'Requires owner',
+                                    icon: <FiLock size={15} />,
+                                    disabled: true,
+                                    onSelect: () => {},
+                                },
+                                {
+                                    id: 'archive',
+                                    label: 'Archive',
+                                    icon: <FiDownload size={15} />,
+                                    destructive: true,
+                                    separatorBefore: true,
+                                    onSelect: () => {},
+                                },
+                            ]}
+                        />
+                    </div>
                 </Surface>
             </Section>
 

@@ -42,6 +42,12 @@ import { fadeUp, scaleIn, stagger } from '@/lib/motion';
  *  - Edits send `expectedUpdatedAt`, so a 409 surfaces as "someone else changed
  *    this" instead of silently clobbering their work.
  *  - Delete archives. There is no destroy path in the UI at all.
+ *
+ * **Reused, not duplicated, for the per-project board (`/p/:slug/board`)** —
+ * pass `projectId` and this scopes its fetch and every ticket it creates to
+ * that project, and drops its own `PageHeader` since the wrapping page
+ * (`ProjectBoard.tsx`) already renders one plus `ProjectTabs`. The unscoped
+ * `/bug-tracker` route renders this with no props, unchanged.
  */
 
 // ── Presentation maps ─────────────────────────────────────────
@@ -379,9 +385,14 @@ const CreateTicket: FC<{
     );
 };
 
+interface BugTrackerProps {
+    /** Scopes the fetch and every created ticket. Omit for the global, unscoped board. */
+    projectId?: number;
+}
+
 // ── Page ──────────────────────────────────────────────────────
-const BugTracker: FC = () => {
-    const { tickets, setTickets, loading, error, isOfflineMock, refetch } = useBugTrackerData();
+const BugTracker: FC<BugTrackerProps> = ({ projectId }) => {
+    const { tickets, setTickets, loading, error, isOfflineMock, refetch } = useBugTrackerData(projectId);
 
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [statusFilter, setStatusFilter] = useState<'all' | TicketStatus>('all');
@@ -516,7 +527,7 @@ const BugTracker: FC = () => {
         setBusy(true);
         setNotice(null);
         try {
-            const created = await ticketsAPI.create(input);
+            const created = await ticketsAPI.create(projectId ? { ...input, projectId } : input);
             setTickets((prev) => [created, ...prev]);
             setSelectedId(created.id);
             setCreating(false);
@@ -527,33 +538,43 @@ const BugTracker: FC = () => {
         }
     };
 
+    const headerActions = (
+        <>
+            <AccentButton
+                variant="ghost"
+                size="sm"
+                icon={<FiRefreshCw size={14} />}
+                onClick={refetch}
+                disabled={loading}
+            >
+                {loading ? 'Refreshing…' : 'Refresh'}
+            </AccentButton>
+            <AccentButton
+                size="sm"
+                icon={<FiPlus size={14} />}
+                onClick={() => setCreating((c) => !c)}
+                disabled={readOnly}
+            >
+                New ticket
+            </AccentButton>
+        </>
+    );
+
     return (
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-7">
-            <PageHeader
-                title="Bug Tracker"
-                subtitle="Triage what's broken, assign it, and keep the conversation on the ticket."
-                actions={
-                    <>
-                        <AccentButton
-                            variant="ghost"
-                            size="sm"
-                            icon={<FiRefreshCw size={14} />}
-                            onClick={refetch}
-                            disabled={loading}
-                        >
-                            {loading ? 'Refreshing…' : 'Refresh'}
-                        </AccentButton>
-                        <AccentButton
-                            size="sm"
-                            icon={<FiPlus size={14} />}
-                            onClick={() => setCreating((c) => !c)}
-                            disabled={readOnly}
-                        >
-                            New ticket
-                        </AccentButton>
-                    </>
-                }
-            />
+            {/* Embedded in a project page: that page's own PageHeader + ProjectTabs
+                already carry the title, so a second heading here would be a
+                redundant "Bug Tracker" sitting under "Sprint2 Demo". The actions
+                (Refresh, New ticket) still need a home — this is it. */}
+            {projectId ? (
+                <div className="flex items-center justify-end gap-2">{headerActions}</div>
+            ) : (
+                <PageHeader
+                    title="Bug Tracker"
+                    subtitle="Triage what's broken, assign it, and keep the conversation on the ticket."
+                    actions={headerActions}
+                />
+            )}
 
             {isOfflineMock && (
                 <Surface variant="panel" radius="2xl" padding="sm">

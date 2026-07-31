@@ -19,6 +19,9 @@ export interface UseProjectResult {
         captureLevels?: CaptureLevel[];
         allowedOrigins?: string[];
         retentionDays?: number;
+        alertOnRegression?: boolean;
+        /** Empty string clears it — see project.schema.ts. */
+        webhookUrl?: string;
     }) => Promise<Project>;
     rotateKey: () => Promise<Project>;
 }

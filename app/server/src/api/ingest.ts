@@ -4,6 +4,7 @@ import prisma from '../lib/prisma';
 import { fingerprintEvent } from '../lib/fingerprint';
 import { ingestSchema, MAX_BATCH_EVENTS } from '../schemas/ingest.schema';
 import { isIngestKeyShaped } from '../lib/projectKeys';
+import { dispatchRegressionAlert, type RegressionAlertInput } from '../lib/alerts';
 import { Prisma } from '@prisma/client';
 
 /**
@@ -192,6 +193,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         const now = new Date();
         let accepted = 0;
         const issueIds: number[] = [];
+        const regressionAlerts: RegressionAlertInput[] = [];
 
         for (const g of groups.values()) {
             // Upsert on @@unique([projectId, fingerprint]) — concurrent batches for
@@ -219,8 +221,47 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
             // back to the top of the list, or the tracker quietly hides recurring
             // bugs. `ignored` deliberately stays ignored — that is the user asking
             // not to be told, which a regression should not override.
+            //
+            // The flip and its audit row are written together: `Issue.status` holds
+            // only the current value, so without the audit row the regression is
+            // invisible the moment it happens, and "regressions this week" — the
+            // most actionable number on a project overview — is uncomputable.
             if (issue.status === 'resolved') {
-                await prisma.issue.update({ where: { id: issue.id }, data: { status: 'unresolved' } });
+                const [reopened] = await prisma.$transaction([
+                    prisma.issue.update({
+                        where: { id: issue.id },
+                        data: {
+                            status: 'unresolved',
+                            reopenCount: { increment: 1 },
+                            lastReopenedAt: now,
+                        },
+                        select: { id: true, title: true, culprit: true, reopenCount: true },
+                    }),
+                    prisma.issueStatusChange.create({
+                        data: {
+                            issueId: issue.id,
+                            projectId: project.id,
+                            fromStatus: 'resolved',
+                            toStatus: 'unresolved',
+                            reason: 'regression',
+                            // No actor: ingest is a key, not a signed-in user.
+                            createdAt: now,
+                        },
+                    }),
+                ]);
+
+                // Alert AFTER the transaction commits, and deliberately not awaited
+                // into the response path beyond its own bounded work: the reporting
+                // client is a third-party page waiting on a 202, and it should not
+                // wait on our webhook to someone's Slack. `dispatchRegressionAlert`
+                // never throws (see lib/alerts.ts).
+                regressionAlerts.push({
+                    projectId: project.id,
+                    issueId: reopened.id,
+                    issueTitle: reopened.title,
+                    culprit: reopened.culprit,
+                    reopenCount: reopened.reopenCount,
+                });
             }
 
             issueIds.push(issue.id);
@@ -248,7 +289,15 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
             accepted,
             issues: issueIds.length,
             dropped: parsed.data.events.length - events.length,
+            regressions: regressionAlerts.length,
         });
+
+        // Dispatched after the response is sent. The SDK on a third-party page is
+        // waiting on this request; it must not also wait on our outbound webhook.
+        // Errors are contained inside dispatchRegressionAlert.
+        for (const alert of regressionAlerts) {
+            void dispatchRegressionAlert(alert);
+        }
     } catch (err: any) {
         console.error('Ingest error:', err);
         res.status(500).json({ error: 'Failed to ingest events' });

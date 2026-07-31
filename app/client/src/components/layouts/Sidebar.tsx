@@ -50,7 +50,10 @@ const ADMIN: NavItem[] = [
     { to: '/admin/console', label: 'Console Monitor', icon: <FiMonitor size={18} /> },
 ];
 
-const ACCOUNT: NavItem[] = [{ to: '/settings', label: 'Settings', icon: <FiSettings size={18} /> }];
+const ACCOUNT: NavItem[] = [
+    { to: '/docs/overview', label: 'Documentation', icon: <FiBookOpen size={18} />, ready: true },
+    { to: '/settings', label: 'Settings', icon: <FiSettings size={18} />, ready: true },
+];
 
 const NavRow: FC<{ item: NavItem; onNavigate?: () => void }> = ({ item, onNavigate }) => {
     if (!item.ready) {

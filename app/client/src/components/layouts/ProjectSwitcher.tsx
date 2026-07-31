@@ -1,8 +1,9 @@
 import type { FC } from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { FiCheck, FiChevronDown, FiFolder, FiPlus } from 'react-icons/fi';
 import { useProjects } from '@/hooks/useProjects';
+import { useDismissable } from '@/hooks/useDismissable';
 
 /**
  * Project switcher for the Topbar.
@@ -24,21 +25,7 @@ const ProjectSwitcher: FC = () => {
     const [open, setOpen] = useState(false);
     const ref = useRef<HTMLDivElement>(null);
 
-    useEffect(() => {
-        if (!open) return;
-        const onPointerDown = (e: MouseEvent) => {
-            if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-        };
-        const onKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') setOpen(false);
-        };
-        document.addEventListener('mousedown', onPointerDown);
-        document.addEventListener('keydown', onKeyDown);
-        return () => {
-            document.removeEventListener('mousedown', onPointerDown);
-            document.removeEventListener('keydown', onKeyDown);
-        };
-    }, [open]);
+    useDismissable(open, ref, useCallback(() => setOpen(false), []));
 
     // Rendering an empty switcher would imply the feature is broken rather than
     // unused; `/projects` in the nav is the entry point until one exists.

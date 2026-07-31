@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ApexOps — alerting test harness</title>
+<style>
+    :root { color-scheme: light dark; }
+    body {
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+        max-width: 52rem; margin: 0 auto; padding: 2rem 1.25rem 4rem; line-height: 1.55;
+    }
+    h1 { font-size: 1.35rem; margin-bottom: .2rem; }
+    p.sub { color: #6b7280; margin-top: 0; font-size: .9rem; }
+    fieldset { border: 1px solid #d1d5db; border-radius: .75rem; padding: 1rem 1.25rem; margin: 1.1rem 0; }
+    legend { font-weight: 600; font-size: .78rem; text-transform: uppercase; letter-spacing: .05em; color: #6b7280; }
+    button {
+        font: inherit; font-weight: 600; cursor: pointer; margin: .25rem .35rem .25rem 0;
+        padding: .45rem .85rem; border-radius: .6rem; border: 1px solid #d1d5db; background: #f9fafb;
+    }
+    button:hover:not(:disabled) { background: #f3f4f6; }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    button.primary { background: #111827; color: #fff; border-color: #111827; }
+    input {
+        font: inherit; padding: .4rem .55rem; border-radius: .5rem;
+        border: 1px solid #d1d5db; width: 24rem; max-width: 100%;
+    }
+    label { display: block; font-size: .8rem; font-weight: 600; margin: .5rem 0 .2rem; }
+    code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .82em; }
+    pre {
+        background: #f3f4f6; border-radius: .6rem; padding: .75rem .9rem;
+        overflow-x: auto; max-height: 22rem; overflow-y: auto; font-size: .78rem; line-height: 1.5;
+    }
+    .row { display: flex; gap: .5rem; align-items: flex-end; flex-wrap: wrap; }
+    .ok { color: #059669; font-weight: 600; }
+    .bad { color: #dc2626; font-weight: 600; }
+    .muted { color: #6b7280; font-size: .82rem; }
+    .step { border-left: 3px solid #d1d5db; padding-left: .75rem; margin: .6rem 0; }
+    .step.done { border-color: #059669; }
+    .step.fail { border-color: #dc2626; }
+    @media (prefers-color-scheme: dark) {
+        fieldset, input, button { border-color: #374151; }
+        button { background: #1f2937; color: #f9fafb; }
+        button:hover:not(:disabled) { background: #374151; }
+        button.primary { background: #f9fafb; color: #111827; border-color: #f9fafb; }
+        pre { background: #1f2937; }
+        p.sub, legend, .muted { color: #9ca3af; }
+        input { background: #111827; color: #f9fafb; }
+    }
+</style>
+</head>
+<body>
+
+<h1>ApexOps — alerting test harness</h1>
+<p class="sub">
+    Drives the full regression → alert loop end to end: throw a real console error, resolve the
+    issue, make it recur, then read the notification that fired.
+</p>
+
+<fieldset>
+    <legend>1 · Connect</legend>
+    <label for="api">API base URL</label>
+    <input id="api" value="http://localhost:3000" />
+
+    <label for="email">Email</label>
+    <input id="email" value="dev.user@apexops.local" autocomplete="username" />
+
+    <label for="password">Password</label>
+    <input id="password" type="password" value="DevPass123" autocomplete="current-password" />
+
+    <label for="slug">Project slug</label>
+    <input id="slug" value="sprint2-demo" />
+
+    <div class="row" style="margin-top:.75rem">
+        <button id="connect" class="primary">Sign in &amp; load project</button>
+        <span id="connectState" class="muted">Not connected.</span>
+    </div>
+</fieldset>
+
+<fieldset>
+    <legend>2 · Generate a console error</legend>
+    <p class="muted" style="margin-top:0">
+        Loads the real SDK with this project's ingest key, then throws. The SDK batches and flushes
+        every 5s — the run-all button below waits for that.
+    </p>
+    <button id="loadSdk" disabled>Load SDK</button>
+    <button id="throwOnce" disabled>console.error once</button>
+    <button id="throwUncaught" disabled>Uncaught TypeError</button>
+    <button id="throwReject" disabled>Unhandled rejection</button>
+</fieldset>
+
+<fieldset>
+    <legend>3 · Run the whole loop</legend>
+    <p class="muted" style="margin-top:0">
+        Ingest → find the issue → resolve it → make it recur → read the notification.
+        This is the assertion that alerting actually works, not just that it compiles.
+    </p>
+    <button id="runAll" class="primary" disabled>Run full regression → alert test</button>
+    <button id="checkNotifs" disabled>Just read notifications</button>
+    <div id="steps"></div>
+</fieldset>
+
+<fieldset>
+    <legend>Output</legend>
+    <pre id="out">Waiting…</pre>
+</fieldset>
+
+<script>
+// The harness must never report on itself: everything here uses the ORIGINAL
+// console, captured before the SDK patches it. Otherwise the log lines below
+// become telemetry about the test rather than about the app under test.
+var nativeLog = console.log.bind(console);
+var nativeError = console.error.bind(console);
+
+var state = { api: '', token: '', slug: '', project: null, sdkLoaded: false };
+
+var out = document.getElementById('out');
+var stepsEl = document.getElementById('steps');
+
+function log(msg, obj) {
+    var line = '[' + new Date().toLocaleTimeString() + '] ' + msg;
+    if (obj !== undefined) line += '\n' + JSON.stringify(obj, null, 2);
+    out.textContent = line + '\n\n' + out.textContent;
+    nativeLog(msg, obj !== undefined ? obj : '');
+}
+
+function step(text, status) {
+    var d = document.createElement('div');
+    d.className = 'step' + (status ? ' ' + status : '');
+    d.innerHTML = (status === 'done' ? '✅ ' : status === 'fail' ? '❌ ' : '⏳ ') + text;
+    stepsEl.appendChild(d);
+    return d;
+}
+
+function setStep(el, text, status) {
+    el.className = 'step ' + status;
+    el.innerHTML = (status === 'done' ? '✅ ' : '❌ ') + text;
+}
+
+async function api(path, opts) {
+    opts = opts || {};
+    var headers = { 'Content-Type': 'application/json' };
+    if (state.token) headers['Authorization'] = 'Bearer ' + state.token;
+    var res = await fetch(state.api + path, {
+        method: opts.method || 'GET',
+        headers: headers,
+        body: opts.body ? JSON.stringify(opts.body) : undefined,
+    });
+    var text = await res.text();
+    var data;
+    try { data = text ? JSON.parse(text) : null; } catch (e) { data = { raw: text }; }
+    if (!res.ok) {
+        var err = new Error((data && data.error) || ('HTTP ' + res.status));
+        err.status = res.status;
+        err.data = data;
+        throw err;
+    }
+    return data;
+}
+
+function enable(ids, on) {
+    ids.forEach(function (id) { document.getElementById(id).disabled = !on; });
+}
+
+// ── 1 · Connect ──────────────────────────────────────────
+document.getElementById('connect').addEventListener('click', async function () {
+    state.api = document.getElementById('api').value.replace(/\/$/, '');
+    state.slug = document.getElementById('slug').value.trim();
+    var cs = document.getElementById('connectState');
+    cs.textContent = 'Connecting…';
+    try {
+        var auth = await api('/api/auth/login', {
+            method: 'POST',
+            body: {
+                email: document.getElementById('email').value.trim(),
+                password: document.getElementById('password').value,
+            },
+        });
+        state.token = auth.accessToken;
+        state.project = await api('/api/projects/' + state.slug);
+        cs.innerHTML = '<span class="ok">Connected</span> — ' + state.project.name +
+            ' (alerts ' + (state.project.alertOnRegression ? 'ON' : 'OFF') +
+            (state.project.webhookUrl ? ', webhook set' : ', no webhook') + ')';
+        enable(['loadSdk', 'throwOnce', 'throwUncaught', 'throwReject', 'runAll', 'checkNotifs'], true);
+        log('Connected to ' + state.project.name, {
+            projectId: state.project.id,
+            alertOnRegression: state.project.alertOnRegression,
+            webhookUrl: state.project.webhookUrl,
+        });
+    } catch (e) {
+        cs.innerHTML = '<span class="bad">Failed:</span> ' + e.message;
+        nativeError('connect failed', e);
+        log('Connect failed: ' + e.message);
+    }
+});
+
+// ── 2 · Console errors ───────────────────────────────────
+document.getElementById('loadSdk').addEventListener('click', function () {
+    if (state.sdkLoaded) { log('SDK already loaded — reload the page to re-load it.'); return; }
+    var s = document.createElement('script');
+    s.src = state.api + '/sdk/v1.js';
+    s.setAttribute('data-project', state.project.ingestKey);
+    s.setAttribute('data-levels', 'error,warn');
+    s.setAttribute('data-release', 'test-harness@1.0.0');
+    s.onload = function () { state.sdkLoaded = true; log('SDK loaded. Batches flush every 5s.'); };
+    s.onerror = function () { log('Failed to load the SDK script.'); };
+    document.head.appendChild(s);
+});
+
+document.getElementById('throwOnce').addEventListener('click', function () {
+    console.error(new Error('Harness: cart total failed to compute'));
+    log('console.error fired (captured by SDK if loaded).');
+});
+
+document.getElementById('throwUncaught').addEventListener('click', function () {
+    setTimeout(function () { window.__definitelyNotDefined.explode(); }, 0);
+    log('Uncaught TypeError scheduled.');
+});
+
+document.getElementById('throwReject').addEventListener('click', function () {
+    Promise.reject(new Error('Harness: payment provider timed out'));
+    log('Unhandled rejection fired.');
+});
+
+// ── 3 · The full loop ────────────────────────────────────
+var MESSAGE = 'Harness regression probe';
+var STACK = 'Error: Harness regression probe\n    at probe (https://harness.local/assets/app.js:7:11)';
+
+function ingest(extra) {
+    // Posted directly rather than through the SDK so the test is deterministic —
+    // no 5s batching window, no client-side dedupe collapsing the second event.
+    return api('/api/ingest', {
+        method: 'POST',
+        body: {
+            key: state.project.ingestKey,
+            events: [Object.assign({
+                level: 'error',
+                message: MESSAGE,
+                stack: STACK,
+                release: 'test-harness@1.0.0',
+            }, extra || {})],
+        },
+    });
+}
+
+document.getElementById('runAll').addEventListener('click', async function () {
+    stepsEl.innerHTML = '';
+    var btn = this;
+    btn.disabled = true;
+    try {
+        // Step 1 — first sighting
+        var s1 = step('Ingesting first occurrence…');
+        var r1 = await ingest();
+        setStep(s1, 'Ingested first occurrence — ' + JSON.stringify(r1), 'done');
+        log('ingest #1', r1);
+
+        // Step 2 — locate the issue it grouped into
+        var s2 = step('Finding the grouped issue…');
+        var list = await api('/api/projects/' + state.slug + '/issues?q=' + encodeURIComponent('Harness regression probe'));
+        var issue = list.issues[0];
+        if (!issue) throw new Error('No issue found for the probe message');
+        setStep(s2, 'Issue #' + issue.id + ' — count ' + issue.count + ', status ' + issue.status, 'done');
+        log('issue', issue);
+
+        // Step 3 — resolve it
+        var s3 = step('Resolving the issue…');
+        var resolved = await api('/api/projects/' + state.slug + '/issues/' + issue.id, {
+            method: 'PATCH', body: { status: 'resolved' },
+        });
+        setStep(s3, 'Status is now "' + resolved.status + '"', 'done');
+
+        // Step 4 — note the unread count before the regression
+        var before = await api('/api/notifications');
+        log('unread before regression', { unreadCount: before.unreadCount });
+
+        // Step 5 — make it come back
+        var s5 = step('Making it recur (this is the regression)…');
+        var r2 = await ingest();
+        setStep(s5, 'Ingest reported regressions: ' + r2.regressions, r2.regressions === 1 ? 'done' : 'fail');
+        log('ingest #2', r2);
+
+        // Alerts dispatch after the 202 is sent, so give them a moment to land.
+        await new Promise(function (r) { setTimeout(r, 1500); });
+
+        // Step 6 — did an alert actually fire?
+        var s6 = step('Reading notifications…');
+        var after = await api('/api/notifications');
+        var fired = after.unreadCount > before.unreadCount;
+        var newest = after.notifications[0];
+        setStep(
+            s6,
+            fired
+                ? 'Alert fired — unread ' + before.unreadCount + ' → ' + after.unreadCount +
+                  ' · "' + (newest ? newest.title : '') + '"'
+                : 'No new notification (unread stayed ' + after.unreadCount + ')',
+            fired ? 'done' : 'fail'
+        );
+        log('newest notification', newest);
+
+        // Step 7 — confirm the issue really reopened
+        var s7 = step('Confirming the issue reopened…');
+        var reopened = await api('/api/projects/' + state.slug + '/issues/' + issue.id);
+        var good = reopened.status === 'unresolved' && reopened.reopenCount > 0;
+        setStep(
+            s7,
+            'status=' + reopened.status + ', reopenCount=' + reopened.reopenCount,
+            good ? 'done' : 'fail'
+        );
+
+        step(fired && good ? 'PASS — regression detected and alert delivered.' : 'FAIL — see the steps above.',
+             fired && good ? 'done' : 'fail');
+    } catch (e) {
+        step('Aborted: ' + e.message, 'fail');
+        nativeError('run failed', e);
+        log('Run failed: ' + e.message, e.data);
+    } finally {
+        btn.disabled = false;
+    }
+});
+
+document.getElementById('checkNotifs').addEventListener('click', async function () {
+    try {
+        var res = await api('/api/notifications');
+        log('notifications (unread ' + res.unreadCount + ')', res.notifications.slice(0, 5));
+    } catch (e) {
+        log('Failed to read notifications: ' + e.message);
+    }
+});
+</script>
+
+</body>
+</html>

@@ -15,7 +15,16 @@ export interface UseBugTrackerDataResult {
     refetch: () => Promise<void>;
 }
 
-export function useBugTrackerData(): UseBugTrackerDataResult {
+/**
+ * `projectId` scopes the tickets fetched (and, when creating, is passed
+ * separately by the caller — this hook only reads). Passing it also **skips
+ * `GET /api/logs`**: `Log` is ApexOps' own internal server log, unrelated to any
+ * one project, and `BugTracker.tsx` does not render it — fetching it on every
+ * project board would be a wasted round trip for data nothing shows.
+ * The unscoped `/bug-tracker` board (no `projectId`) keeps fetching both, since
+ * whatever consumes `logs` there may still exist.
+ */
+export function useBugTrackerData(projectId?: number): UseBugTrackerDataResult {
     const [logs, setLogs] = useState<Log[]>([]);
     const [tickets, setTickets] = useState<Ticket[]>([]);
     const [loading, setLoading] = useState(true);
@@ -26,8 +35,8 @@ export function useBugTrackerData(): UseBugTrackerDataResult {
         setLoading(true);
         try {
             const [logsData, ticketsData] = await Promise.all([
-                logsAPI.getAll(),
-                ticketsAPI.getAll(),
+                projectId ? Promise.resolve<Log[]>([]) : logsAPI.getAll(),
+                ticketsAPI.getAll(projectId ? { projectId } : undefined),
             ]);
             setLogs(logsData ?? []);
             setTickets(ticketsData ?? []);
@@ -41,7 +50,7 @@ export function useBugTrackerData(): UseBugTrackerDataResult {
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [projectId]);
 
     useEffect(() => {
         refetch();

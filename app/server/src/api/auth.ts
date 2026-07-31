@@ -2,6 +2,7 @@ import express, { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import prisma from '../lib/prisma';
+import { SECRET_KEY, REFRESH_SECRET_KEY, JWT_ALGORITHM } from '../lib/jwtSecrets';
 import { authenticate } from '../middleware/auth';
 import { validate } from '../middleware/validate';
 import { authLoginLimiter, authRegisterLimiter } from '../middleware/rateLimit';
@@ -12,16 +13,30 @@ import {
 
 const router = express.Router();
 
-const isProduction = process.env.NODE_ENV === 'production';
-const SECRET_KEY = process.env.JWT_SECRET || (isProduction ? 'REPLACE_IN_PRODUCTION' : 'mySecretKey');
-const REFRESH_SECRET_KEY = process.env.JWT_REFRESH_SECRET || (isProduction ? 'REPLACE_IN_PRODUCTION' : 'myRefreshSecretKey');
+/**
+ * Context stored alongside each refresh token so the active-sessions list is
+ * usable (spec S-D3). A list that says "session #4" tells you nothing; one that
+ * says "Chrome on Windows, 2 hours ago" is a security control someone can act on.
+ *
+ * Both fields are self-reported by the client and trivially spoofed — they are
+ * for recognition ("that is my laptop"), never for authorization.
+ */
+function sessionContext(req: Request): { userAgent: string | null; ipAddress: string | null } {
+    const forwarded = (req.headers['x-forwarded-for'] as string | undefined)?.split(',')[0]?.trim();
+    return {
+        userAgent: req.headers['user-agent']?.slice(0, 512) ?? null,
+        ipAddress: forwarded || req.ip || null,
+    };
+}
+
+// Secrets come from lib/jwtSecrets.ts, which refuses to boot in production when
+// they are missing. They were previously derived here AND in two other modules
+// with fallbacks that disagreed — see that file for what that would have cost.
 const ACCESS_TOKEN_EXPIRY = process.env.JWT_EXPIRY || '1h';
 const REFRESH_TOKEN_EXPIRY = process.env.JWT_REFRESH_EXPIRY || '7d';
 const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS || '12', 10);
 
-if (isProduction && (!SECRET_KEY || SECRET_KEY.length < 32)) {
-    console.warn('Security: JWT_SECRET should be at least 32 characters in production.');
-}
+
 
 interface TokenUser {
     id: number;
@@ -73,7 +88,9 @@ router.post('/register', authRegisterLimiter, validate(registerSchema), async (r
 
         const expiresAt = new Date();
         expiresAt.setDate(expiresAt.getDate() + 7);
-        await prisma.refreshToken.create({ data: { userId: user.id, token: refreshToken, expiresAt } }).catch(() => {});
+        await prisma.refreshToken.create({
+            data: { userId: user.id, token: refreshToken, expiresAt, ...sessionContext(req) },
+        }).catch(() => {});
 
         res.status(201).json({
             message: 'User registered successfully',
@@ -107,7 +124,9 @@ router.post('/login', authLoginLimiter, validate(loginSchema), async (req: Reque
 
         const expiresAt = new Date();
         expiresAt.setDate(expiresAt.getDate() + 7);
-        await prisma.refreshToken.create({ data: { userId: user.id, token: refreshToken, expiresAt } });
+        await prisma.refreshToken.create({
+            data: { userId: user.id, token: refreshToken, expiresAt, ...sessionContext(req) },
+        });
 
         res.json({
             message: 'Login successful',
@@ -129,7 +148,7 @@ router.post('/login', authLoginLimiter, validate(loginSchema), async (req: Reque
 router.post('/refresh', validate(refreshTokenSchema), async (req: Request, res: Response): Promise<void> => {
     try {
         const { refreshToken: oldToken } = req.body;
-        const decoded = jwt.verify(oldToken, REFRESH_SECRET_KEY) as { id: number; email: string };
+        const decoded = jwt.verify(oldToken, REFRESH_SECRET_KEY, { algorithms: [JWT_ALGORITHM] }) as { id: number; email: string };
 
         const stored = await prisma.refreshToken.findFirst({
             where: { token: oldToken, expiresAt: { gt: new Date() } },
@@ -148,7 +167,11 @@ router.post('/refresh', validate(refreshTokenSchema), async (req: Request, res: 
         const newRefreshToken = generateRefreshToken(user);
         const expiresAt = new Date();
         expiresAt.setDate(expiresAt.getDate() + 7);
-        await prisma.refreshToken.create({ data: { userId: user.id, token: newRefreshToken, expiresAt } });
+        // Refresh rotates the row, so the context is re-captured — otherwise a
+        // long-lived session would show where it was first created, not where it is.
+        await prisma.refreshToken.create({
+            data: { userId: user.id, token: newRefreshToken, expiresAt, ...sessionContext(req) },
+        });
 
         res.json({
             accessToken, token: accessToken, refreshToken: newRefreshToken,
@@ -319,6 +342,78 @@ router.put('/password', authenticate, validate(changePasswordSchema), async (req
     } catch (err: any) {
         console.error('Change password error:', err);
         res.status(500).json({ error: err.message || 'Failed to change password' });
+    }
+});
+
+// ── GET /sessions ────────────────────────────────────────────
+/**
+ * Active sessions (spec S-D3).
+ *
+ * Every login already writes a `RefreshToken` row, so that table *is* the
+ * session list — this is the one real security control that needed no new
+ * infrastructure. Expired rows are filtered out rather than shown as "expired",
+ * because a list of dead sessions is noise in a panel whose whole job is "is
+ * anything here not me?".
+ */
+router.get('/sessions', authenticate, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const rows = await prisma.refreshToken.findMany({
+            where: { userId: req.user!.id, expiresAt: { gt: new Date() } },
+            orderBy: { createdAt: 'desc' },
+            select: { id: true, token: true, userAgent: true, ipAddress: true, createdAt: true, expiresAt: true },
+        });
+
+        // The caller's own session is flagged so the UI can label it and refuse to
+        // let them revoke the thing they are currently using by accident.
+        const presented = typeof req.body?.refreshToken === 'string' ? req.body.refreshToken : null;
+
+        res.json({
+            sessions: rows.map((r) => ({
+                id: r.id,
+                // The token itself is NEVER returned — it is a bearer credential.
+                // A short fingerprint is enough for the client to mark "this one".
+                fingerprint: r.token.slice(-8),
+                current: presented ? r.token === presented : false,
+                userAgent: r.userAgent,
+                ipAddress: r.ipAddress,
+                createdAt: r.createdAt.toISOString(),
+                expiresAt: r.expiresAt.toISOString(),
+            })),
+        });
+    } catch (err: any) {
+        console.error('List sessions error:', err);
+        res.status(500).json({ error: err.message || 'Failed to list sessions' });
+    }
+});
+
+// ── DELETE /sessions/:id ─────────────────────────────────────
+router.delete('/sessions/:id', authenticate, async (req: Request, res: Response): Promise<void> => {
+    const id = Number.parseInt(String(req.params.id), 10);
+    if (!Number.isSafeInteger(id) || id <= 0) { res.status(404).json({ error: 'Session not found' }); return; }
+
+    try {
+        // userId in the filter, not just the id: revoking someone else's session
+        // must be impossible, and must not even reveal that the id exists.
+        const { count } = await prisma.refreshToken.deleteMany({
+            where: { id, userId: req.user!.id },
+        });
+        if (!count) { res.status(404).json({ error: 'Session not found' }); return; }
+        res.json({ revoked: true });
+    } catch (err: any) {
+        console.error('Revoke session error:', err);
+        res.status(500).json({ error: err.message || 'Failed to revoke session' });
+    }
+});
+
+// ── POST /sessions/revoke-all ────────────────────────────────
+/** "Sign out everywhere." Deletes every refresh token for the caller. */
+router.post('/sessions/revoke-all', authenticate, async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { count } = await prisma.refreshToken.deleteMany({ where: { userId: req.user!.id } });
+        res.json({ revoked: count });
+    } catch (err: any) {
+        console.error('Revoke all sessions error:', err);
+        res.status(500).json({ error: err.message || 'Failed to revoke sessions' });
     }
 });
 

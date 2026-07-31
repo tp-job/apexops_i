@@ -28,6 +28,10 @@ export interface Project {
     allowedOrigins: string[];
     captureLevels: CaptureLevel[];
     retentionDays: number;
+    /** Alerting is per-project, not per-user (spec S-D4). */
+    alertOnRegression: boolean;
+    /** https only, validated + SSRF-checked server-side. Null when unset. */
+    webhookUrl: string | null;
     ownerId: number;
     /** The *caller's* role in this project, not a property of the project. */
     role: ProjectRole;
@@ -51,6 +55,9 @@ export interface Issue {
     lastSeen: string;
     /** Non-null once promoted — render a link to the ticket, not a promote button. */
     ticketId: number | null;
+    /** > 0 means this was fixed and came back. Badge it as a regression. */
+    reopenCount: number;
+    lastReopenedAt: string | null;
 }
 
 export interface IssueEvent {
@@ -66,9 +73,40 @@ export interface IssueEvent {
     createdAt: string;
 }
 
+export type IssueRange = '24h' | '7d' | '30d';
+
+export interface TimelineBucket {
+    /** ISO start of the bucket — hourly for 24h, daily for 7d/30d. */
+    start: string;
+    count: number;
+}
+
+export interface BreakdownEntry {
+    name: string;
+    count: number;
+}
+
+export interface IssueBreakdown {
+    browsers: BreakdownEntry[];
+    os: BreakdownEntry[];
+    releases: BreakdownEntry[];
+    /** How many events the proportions were computed from (capped server-side). */
+    sampledFrom: number;
+}
+
 export interface IssueDetail extends Issue {
     latestEvent: IssueEvent | null;
     recentEvents: IssueEvent[];
+    range: IssueRange;
+    /**
+     * Occurrence histogram. Counts **stored events**, not occurrences: the SDK
+     * collapses repeats into one row carrying a count, so these bars will not sum
+     * to `count`. Label it as sampled wherever it is drawn.
+     */
+    timeline: TimelineBucket[];
+    storedInRange: number;
+    storedTotal: number;
+    breakdown: IssueBreakdown;
 }
 
 export interface IssueListResponse {
@@ -99,6 +137,77 @@ export interface IssueFilters {
     offset?: number;
 }
 
+// ── Overview surfaces ────────────────────────────────────────
+
+/** One row of the cross-project roll-up on the global dashboard. */
+export interface RollupProject {
+    id: number;
+    name: string;
+    slug: string;
+    role: ProjectRole;
+    unresolved: number;
+    events: number;
+    regressions: number;
+    newIssues: number;
+    /** `null` means the project has never received an event — not "quiet". */
+    lastEventAt: string | null;
+}
+
+export interface RollupResponse {
+    range: IssueRange;
+    /** Pre-ranked by the server: regressions, then unresolved, then volume. */
+    projects: RollupProject[];
+    totals: {
+        projects: number;
+        unresolved: number;
+        events: number;
+        regressions: number;
+        awaitingFirstEvent: number;
+    };
+}
+
+export interface ReleaseMarker {
+    release: string;
+    firstSeenAt: string;
+    eventsInWindow: number;
+}
+
+export interface OverviewIssue {
+    id: number;
+    title: string;
+    culprit: string | null;
+    level: string;
+    count: number;
+    lastSeen?: string;
+    reopenCount: number;
+    lastReopenedAt?: string | null;
+    status?: IssueStatus;
+    ticketId?: number | null;
+}
+
+export interface ProjectOverview {
+    project: { id: number; name: string; slug: string; role: ProjectRole };
+    range: IssueRange;
+    windowStart: string;
+    bucket: 'hour' | 'day';
+    kpis: {
+        unresolved: number;
+        totalIssues: number;
+        newIssues: number;
+        regressions: number;
+        eventsInWindow: number;
+        openTickets: number;
+        lastEventAt: string | null;
+    };
+    volume: TimelineBucket[];
+    /** Releases first seen inside the window — these pin onto the chart. */
+    releases: ReleaseMarker[];
+    /** Every known release, newest first. Context when none deployed in-window. */
+    allReleases: ReleaseMarker[];
+    topIssues: OverviewIssue[];
+    regressedIssues: OverviewIssue[];
+}
+
 export interface PromotedTicket {
     id: number;
     displayId: string;
@@ -106,4 +215,29 @@ export interface PromotedTicket {
     status: string;
     priority: string;
     projectId: number;
+}
+
+// ── Notifications (alerting) ─────────────────────────────────
+
+export type NotificationKind = 'regression';
+
+export interface AppNotification {
+    id: number;
+    kind: NotificationKind;
+    projectId: number;
+    issueId: number | null;
+    title: string;
+    body: string | null;
+    /** Null until read. */
+    readAt: string | null;
+    createdAt: string;
+    /** Resolved server-side so the feed can link without an extra fetch. */
+    projectSlug: string | null;
+    projectName: string | null;
+}
+
+export interface NotificationsResponse {
+    /** Always the unread total, regardless of any filter — it drives the badge. */
+    unreadCount: number;
+    notifications: AppNotification[];
 }

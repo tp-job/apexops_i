@@ -66,7 +66,10 @@ export const createProjectSchema = z.object({
         .min(1)
         .max(48)
         .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/, 'Slug must be lowercase letters, digits and single hyphens')
-        .refine((s) => !['new', 'api', 'settings', 'admin', 'p'].includes(s), {
+        // `rollup` is a sibling route of `/api/projects/:slug`, so a project with
+        // that slug would be shadowed by the cross-project endpoint and become
+        // unreachable. Anything mounted alongside `:slug` has to be listed here.
+        .refine((s) => !['new', 'api', 'settings', 'admin', 'p', 'rollup', 'overview'].includes(s), {
             message: 'That slug is reserved',
         })
         .optional(),
@@ -79,12 +82,39 @@ export const createProjectSchema = z.object({
     retentionDays: z.number().int().min(1).max(365).optional(),
 });
 
+/**
+ * Optional Slack/Discord/generic incoming webhook.
+ *
+ * Shape is validated here; the **resolved address** is re-checked immediately
+ * before every send (`lib/webhook.ts`), because a hostname that passes today can
+ * point somewhere private tomorrow. Empty string clears it — the alternative is
+ * making the client send `null` through a JSON body, which is easy to get wrong.
+ */
+const webhookUrlField = z
+    .string()
+    .trim()
+    .max(2048)
+    .refine(
+        (v) => {
+            if (v === '') return true;
+            try {
+                const u = new URL(v);
+                return u.protocol === 'https:' && !u.username && !u.password;
+            } catch {
+                return false;
+            }
+        },
+        { message: 'Must be an https URL with no credentials, or empty to clear' }
+    );
+
 export const updateProjectSchema = z
     .object({
         name: z.string().trim().min(1).max(80).optional(),
         captureLevels: captureLevelsField.optional(),
         allowedOrigins: allowedOriginsField.optional(),
         retentionDays: z.number().int().min(1).max(365).optional(),
+        alertOnRegression: z.boolean().optional(),
+        webhookUrl: webhookUrlField.optional(),
     })
     // Slug is intentionally absent: it is in every embedded snippet's dashboard
     // link and every bookmark. Renaming the project keeps the slug stable.

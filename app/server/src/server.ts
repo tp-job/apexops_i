@@ -25,6 +25,7 @@ import {
     RateLimiter,
 } from './utils/chatRoom';
 import prisma from './lib/prisma';
+import { SECRET_KEY, JWT_ALGORITHM } from './lib/jwtSecrets';
 import { scheduleRetentionPrune } from './lib/retention';
 
 // ── Express App ──────────────────────────────────────────────
@@ -64,6 +65,9 @@ interface AppInfo {
     connectedAt: string;
 }
 
+/** Upper bound on logs relayed per emit — one socket must not flood every monitor. */
+const MAX_RELAYED_LOGS = 100;
+
 const connectedClients = {
     monitors: new Set<string>(),
     targetApps: new Map<string, AppInfo>(),
@@ -98,7 +102,7 @@ io.use(async (socket, next) => {
     if (typeof token !== 'string' || !token) return next();
 
     try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'mySecretKey') as {
+        const decoded = jwt.verify(token, SECRET_KEY, { algorithms: [JWT_ALGORITHM] }) as {
             id: number;
             email: string;
         };
@@ -124,6 +128,16 @@ io.on('connection', (socket) => {
 
     socket.on('register', (data: { clientType: string; appName?: string; url?: string; userId?: string }) => {
         if (data.clientType === 'monitor') {
+            // AUTHENTICATED ONLY. This room receives every target app's console
+            // output, so an anonymous socket joining it is a cross-project leak —
+            // the exact defect that got the :8082 native relay deleted (spec D6).
+            // It survived here in socket.io form because the handshake auth is
+            // optional for the SDK's benefit; the room has to gate itself.
+            const user = socketUsers.get(socket.id);
+            if (!user) {
+                socket.emit('monitor-error', { error: 'Authentication required to monitor' });
+                return;
+            }
             connectedClients.monitors.add(socket.id);
             socket.join('monitors');
             socket.emit('target-apps-list', Array.from(connectedClients.targetApps.values()));
@@ -220,15 +234,25 @@ io.on('connection', (socket) => {
     socket.on('console-logs', async (data: { logs: any[] }) => {
         const logs = data.logs || [];
         if (!logs.length) return;
+
+        // Only a socket that actually registered as a target-app may relay. An
+        // unregistered socket emitting this was previously accepted outright.
         const appInfo = connectedClients.targetApps.get(socket.id);
-        const enrichedLogs = logs.map((log) => ({
-            ...log, appName: appInfo?.appName || log.appName, receivedAt: new Date().toISOString(),
+        if (!appInfo) return;
+
+        const enrichedLogs = logs.slice(0, MAX_RELAYED_LOGS).map((log) => ({
+            ...log, appName: appInfo.appName, receivedAt: new Date().toISOString(),
         }));
+
+        // Relayed to the (now authenticated) monitors room for live viewing.
         io.to('monitors').emit('console-logs', enrichedLogs);
 
-        enrichedLogs.forEach((log) => {
-            prisma.log.create({ data: { level: log.level, message: log.message, source: log.source, stack: log.stack || null } }).catch(() => {});
-        });
+        // The `prisma.log.create` fan-out that used to live here is GONE. It was
+        // an unauthenticated, unbounded write into `logs` from any socket — the
+        // same hole G2 closed on the HTTP side by 410-ing
+        // `POST /api/console-logs/realtime`. Persistence has exactly one
+        // supported path now: `POST /api/ingest`, which is keyed, rate limited,
+        // size capped and project scoped. This channel is live view only.
     });
 
     socket.on('disconnect', () => {
@@ -282,6 +306,11 @@ app.get('/sdk/demo', (_req: Request, res: Response) => {
     res.sendFile(path.join(__dirname, '../public/sdk/demo.html'));
 });
 
+/** Alerting harness: drives the regression -> notification loop end to end. */
+app.get('/sdk/test', (_req: Request, res: Response) => {
+    res.sendFile(path.join(__dirname, '../public/sdk/test.html'));
+});
+
 app.get('/console-monitor', (_req: Request, res: Response) => {
     res.sendFile(path.join(__dirname, '../public/console-monitor.html'));
 });
@@ -317,6 +346,7 @@ import consoleLogsRoutes from './api/console-logs';
 import aiRoutes from './api/ai';
 import consoleMonitorRoutes from './api/console-monitor';
 import chatRoutes from './api/chat';
+import notificationsRoutes from './api/notifications';
 import projectsRoutes from './api/projects';
 import ingestRoutes from './api/ingest';
 
@@ -334,6 +364,7 @@ app.use('/api/console-logs', consoleLogsRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/console-monitor', consoleMonitorRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/notifications', notificationsRoutes);
 
 // ── Legacy Redirects ─────────────────────────────────────────
 app.post('/register', (req: Request, res: Response) => res.redirect(307, '/api/auth/register'));

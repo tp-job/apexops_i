@@ -32,6 +32,13 @@ export type { Column, DataTableProps, SortDirection } from './DataTable';
 export { default as Modal } from './Modal';
 export { default as ConfirmDialog } from './ConfirmDialog';
 
+// Context menu. Always pair the right-click gesture with a visible trigger —
+// right-click alone is unreachable by keyboard and impossible on touch.
+export { default as ContextMenu } from './ContextMenu';
+export { useContextMenu } from './use-context-menu';
+export type { ContextMenuItem, MenuPosition } from './ContextMenu';
+export type { ContextMenuState } from './use-context-menu';
+
 // Composition primitives harvested from the `.agents/template` references.
 // See .agents/docs/guides/template-adoption.md for the mapping.
 export { default as Timeline } from './Timeline';

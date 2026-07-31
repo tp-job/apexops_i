@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 import type { Log } from '@/types/bugTrackerApp';
+import { getAuthToken } from '@/api/config';
 
 export interface TargetApp {
     socketId: string;
@@ -28,11 +29,17 @@ export const useBugTrackerSocket = (
         }
 
         const wsUrl = import.meta.env.VITE_WS_URL || 'http://localhost:8081';
+        // The `monitors` room is authenticated server-side (it carries every
+        // target app's console output), so the token goes in the handshake.
+        // Without it `register` is refused and live updates silently stop —
+        // which looks exactly like "nothing is happening", the worst failure a
+        // monitoring view can have.
         const socket = io(wsUrl, {
             transports: ['websocket', 'polling'],
             reconnection: true,
             reconnectionAttempts: 5,
-            reconnectionDelay: 1000
+            reconnectionDelay: 1000,
+            auth: { token: getAuthToken() ?? undefined }
         });
 
         socketRef.current = socket;
@@ -45,6 +52,13 @@ export const useBugTrackerSocket = (
 
         socket.on('disconnect', () => {
             console.log('🔌 Disconnected from WebSocket');
+            setWsConnected(false);
+        });
+
+        // Registration can be refused (no/expired token). Treat it as
+        // disconnected rather than showing a connected badge over a dead feed.
+        socket.on('monitor-error', (payload: { error?: string }) => {
+            console.warn('Monitor registration refused:', payload?.error);
             setWsConnected(false);
         });
 

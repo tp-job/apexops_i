@@ -129,6 +129,30 @@ export const authApi = {
         throw new Error('Invalid profile response');
     },
 
+    /**
+     * Change password. The server re-verifies `currentPassword` — this is not a
+     * client-side confirmation step, it is what stops a hijacked session from
+     * silently changing the credential and locking the real owner out.
+     */
+    async changePassword(currentPassword: string, newPassword: string): Promise<void> {
+        const token = getAuthToken();
+        if (!token) throw new Error('Not authenticated');
+
+        const response = await fetch(`${getApiBaseUrl()}/api/auth/password`, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ currentPassword, newPassword }),
+        });
+
+        if (!response.ok) {
+            const result = (await response.json().catch(() => ({}))) as { error?: string };
+            throw new Error(result.error || 'Failed to change password');
+        }
+    },
+
     async updateSettings(data: Partial<UserSettings>): Promise<{ settings: UserSettings }> {
         const token = getAuthToken();
         if (!token) throw new Error('Not authenticated');

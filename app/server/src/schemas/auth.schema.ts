@@ -45,19 +45,40 @@ export const updateProfileSchema = z.object({
     language: z.string().nullable().optional(),
 });
 
-export const updateSettingsSchema = z.object({
-    emailNotifications: z.boolean().optional(),
-    pushNotifications: z.boolean().optional(),
-    bugAlerts: z.boolean().optional(),
-    weeklyReports: z.boolean().optional(),
-    teamUpdates: z.boolean().optional(),
-    twoFactorAuth: z.boolean().optional(),
-    sessionTimeout: z.number().int().positive().optional(),
-    loginAlerts: z.boolean().optional(),
-    profileVisibility: z.boolean().optional(),
-    activityStatus: z.boolean().optional(),
-    dataCollection: z.boolean().optional(),
-});
+/**
+ * Account settings — **only fields that are actually enforced** (spec S-D1).
+ *
+ * The `user_settings` table still has eight more columns
+ * (`emailNotifications`, `pushNotifications`, `bugAlerts`, `weeklyReports`,
+ * `teamUpdates`, `twoFactorAuth`, `loginAlerts`, `profileVisibility`,
+ * `activityStatus`, `dataCollection`). Nothing reads them, so they are inert.
+ * They are deliberately **absent here rather than dropped**: removing them from
+ * this schema means nothing can write them until the feature that consumes them
+ * lands, and that is the cheap, reversible half of the change. Dropping the
+ * columns would be a migration that buys nothing.
+ *
+ * Notification preferences are **not** here on purpose — they are per-project
+ * (spec S-D4, `alertOnRegression` / `webhookUrl` on `Project`), because "alert me
+ * about this project" is the useful control and "alert me about everything" is not.
+ *
+ * `sessionTimeout` is accepted and stored but is **not yet enforced**: making it
+ * real means signing the access token with it as `expiresIn` (S-D2), which
+ * changes token issuance for every user and is deliberately not bundled into
+ * this change. It is excluded until that lands, for the same reason as the rest.
+ */
+export const updateSettingsSchema = z
+    .object({
+        /**
+         * Stored, bounded, and shown on the sessions panel as "sessions last N
+         * minutes" — but **not yet enforced**. Enforcement means signing the
+         * access token with this as `expiresIn` (S-D2), which is blocked on the
+         * 401-refresh-and-retry path existing: shortening tokens from 1h to the
+         * 30m default without it would just log people out mid-task. Bounded now
+         * so the value is never out of range when enforcement lands.
+         */
+        sessionTimeout: z.number().int().min(5).max(480).optional(),
+    })
+    .refine((body) => Object.keys(body).length > 0, { message: 'No settings to update' });
 
 export const changePasswordSchema = z.object({
     currentPassword: z.string().min(1, 'Current password is required'),

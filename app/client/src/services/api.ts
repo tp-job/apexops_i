@@ -39,7 +39,11 @@ function filterLogs(params?: { level?: string; source?: string; limit?: number }
     return result;
 }
 
-function filterTickets(params?: { status?: string; priority?: string; assignee?: string; limit?: number }): WithMockFlagArray<Ticket> {
+function filterTickets(params?: { status?: string; priority?: string; assignee?: string; limit?: number; projectId?: number }): WithMockFlagArray<Ticket> {
+    // Offline mock has no project concept — mockTickets is one flat unscoped
+    // list. Not filtering by projectId here is deliberate, not an oversight: it
+    // only matters when the network is actually down, and the alternative is
+    // teaching fixture data about project membership for a dev-only fallback.
     const status = params?.status;
     const priority = params?.priority;
     const assignee = params?.assignee?.toLowerCase();
@@ -111,7 +115,7 @@ export const logsAPI = {
 
 // Tickets API
 export const ticketsAPI = {
-    getAll: async (params?: { status?: string; priority?: string; assignee?: string; limit?: number }): Promise<Ticket[] | WithMockFlagArray<Ticket>> => {
+    getAll: async (params?: { status?: string; priority?: string; assignee?: string; limit?: number; projectId?: number }): Promise<Ticket[] | WithMockFlagArray<Ticket>> => {
         try {
             const response = await api.get<Ticket[]>('/api/tickets', { params });
             return response.data;
@@ -163,6 +167,13 @@ export const ticketsAPI = {
         assigneeId?: number | null;
         tags?: string[];
         relatedLogs?: string[];
+        /**
+         * Omit to let the server fall back to the caller's oldest project — the
+         * unscoped `/bug-tracker` board still relies on that. Pass it explicitly
+         * from a project-scoped board so the ticket lands on the project you were
+         * actually looking at, not wherever the fallback guesses.
+         */
+        projectId?: number;
     }): Promise<Ticket> => {
         try {
             const response = await api.post<Ticket>('/api/tickets', ticket);

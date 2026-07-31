@@ -9,8 +9,14 @@ import NotesCalendar from '@/pages/NotesCalendar';
 import Chat from '@/pages/Chat';
 import Projects from '@/pages/Projects';
 import ProjectIssues from '@/pages/ProjectIssues';
+import ProjectIssueDetail from '@/pages/ProjectIssueDetail';
+import ProjectOverview from '@/pages/ProjectOverview';
+import ProjectBoard from '@/pages/ProjectBoard';
+import Settings from '@/pages/Settings';
 import ProjectSettings from '@/pages/ProjectSettings';
 import DesignSystem from '@/pages/DesignSystem';
+import Docs from '@/pages/Docs';
+import { DEFAULT_DOC } from '@/content/docs';
 import AppLayout from '@/layouts/AppLayout';
 import ProtectedRoute from '@/routes/ProtectedRoute';
 
@@ -35,6 +41,12 @@ const AppRoutes: FC = () => (
             <Route path="/" element={<Home />} />
             <Route path="/design-system" element={<DesignSystem />} />
 
+            {/* Docs are public: whoever is pasting the SDK snippet into another
+                app needs the install instructions, and gating them turns a
+                one-line integration into a support conversation. */}
+            <Route path="/docs" element={<Navigate to={`/docs/${DEFAULT_DOC}`} replace />} />
+            <Route path="/docs/:slug" element={<Docs />} />
+
             {/* Auth */}
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
@@ -51,8 +63,17 @@ const AppRoutes: FC = () => (
                         store, so deep links, the back button and two tabs on two
                         projects all work without extra machinery. */}
                     <Route path="/projects" element={<Projects />} />
+                    {/* Issues stays the landing route: during an incident "what is
+                        broken" should cost zero clicks. Overview is one tab away. */}
                     <Route path="/p/:slug" element={<Navigate to="issues" replace />} />
+                    <Route path="/p/:slug/overview" element={<ProjectOverview />} />
                     <Route path="/p/:slug/issues" element={<ProjectIssues />} />
+                    <Route path="/p/:slug/issues/:id" element={<ProjectIssueDetail />} />
+                    <Route path="/p/:slug/board" element={<ProjectBoard />} />
+
+                    {/* Account settings. Alert preferences are NOT here — they are
+                        per-project (spec S-D4) and live on /p/:slug/settings. */}
+                    <Route path="/settings" element={<Settings />} />
                     <Route path="/p/:slug/settings" element={<ProjectSettings />} />
                 </Route>
             </Route>

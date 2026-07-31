@@ -1,6 +1,6 @@
 import type { FC } from 'react';
 import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { FiAlertTriangle, FiCheck, FiCopy, FiRadio, FiRefreshCw } from 'react-icons/fi';
 import {
     AccentButton,
@@ -11,8 +11,10 @@ import {
     Input,
     SkeletonText,
     Surface,
+    Switch,
 } from '@/components/design-system';
 import { PageHeader } from '@/components/common/layout';
+import ProjectTabs from '@/components/layouts/ProjectTabs';
 import { useProject } from '@/hooks/useProject';
 import { getApiBaseUrl } from '@/api/config';
 import { getErrorMessage } from '@/utils/error';
@@ -38,6 +40,10 @@ const ProjectSettings: FC = () => {
     const [saving, setSaving] = useState(false);
     const [saveError, setSaveError] = useState<string | null>(null);
     const [saved, setSaved] = useState(false);
+    const [alertOnRegression, setAlertOnRegression] = useState(true);
+    const [webhookUrl, setWebhookUrl] = useState('');
+    const [webhookError, setWebhookError] = useState<string | null>(null);
+    const [alertsSaved, setAlertsSaved] = useState(false);
 
     // Seed the form once the project arrives. Keyed on id so switching projects
     // re-seeds rather than showing the previous project's settings.
@@ -45,7 +51,29 @@ const ProjectSettings: FC = () => {
         if (!project) return;
         setLevels(project.captureLevels);
         setRetention(String(project.retentionDays));
+        setAlertOnRegression(project.alertOnRegression);
+        setWebhookUrl(project.webhookUrl ?? '');
     }, [project?.id, project?.captureLevels, project?.retentionDays, project]);
+
+    /**
+     * Saved separately from capture settings on purpose. The webhook is validated
+     * server-side (shape *and* resolved address), so it can fail on its own — and
+     * a rejected webhook must not also discard an unrelated retention change the
+     * user made in the same visit.
+     */
+    const saveAlerts = async () => {
+        setSaving(true);
+        setWebhookError(null);
+        try {
+            await update({ alertOnRegression, webhookUrl: webhookUrl.trim() });
+            setAlertsSaved(true);
+            setTimeout(() => setAlertsSaved(false), 2000);
+        } catch (err) {
+            setWebhookError(getErrorMessage(err, 'Could not save alert settings'));
+        } finally {
+            setSaving(false);
+        }
+    };
 
     const snippet = project
         ? `<script src="${getApiBaseUrl()}/sdk/v1.js" data-project="${project.ingestKey}" defer></script>`
@@ -106,6 +134,8 @@ const ProjectSettings: FC = () => {
         <div className="flex flex-col gap-6">
             <PageHeader title={project.name} subtitle={`Project settings · /${project.slug}`} />
 
+            {slug && <ProjectTabs slug={slug} />}
+
             {/* ── Install ─────────────────────────────────────────── */}
             <Surface variant="panel" padding="md" className="flex flex-col gap-4">
                 <div className="flex items-center justify-between gap-3">
@@ -131,7 +161,13 @@ const ProjectSettings: FC = () => {
                 <p className="max-w-2xl text-sm text-gray-500 dark:text-gray-400">
                     Paste this into the <code className="font-mono text-xs">&lt;head&gt;</code> of the app you
                     want to monitor. The key is public by design — it can only write events to this
-                    project, never read them.
+                    project, never read them.{' '}
+                    <Link
+                        to="/docs/sdk"
+                        className="font-medium text-brand-dark underline underline-offset-2 dark:text-brand-accent"
+                    >
+                        SDK reference
+                    </Link>
                 </p>
 
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -215,6 +251,57 @@ const ProjectSettings: FC = () => {
                             {saving ? 'Saving…' : 'Save changes'}
                         </AccentButton>
                         {saved && (
+                            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-500 dark:text-gray-400">
+                                <FiCheck size={13} /> Saved
+                            </span>
+                        )}
+                    </div>
+                )}
+            </Surface>
+
+            {/* ── Alerts ──────────────────────────────────────────── */}
+            <Surface variant="panel" padding="md" className="flex flex-col gap-5">
+                <div>
+                    <h2 className="font-heading text-base font-bold text-brand-dark dark:text-white">
+                        Alerts
+                    </h2>
+                    <p className="mt-1 max-w-2xl text-sm text-gray-500 dark:text-gray-400">
+                        Alerting is configured per project, not per account — &ldquo;tell me about
+                        this project&rdquo; is the useful control. Alerts always appear in the bell;
+                        a webhook is an extra copy, not a replacement.
+                    </p>
+                </div>
+
+                <Switch
+                    justified
+                    label="Alert on regressions"
+                    hint="When an issue you resolved starts happening again"
+                    checked={alertOnRegression}
+                    onChange={(e) => setAlertOnRegression(e.target.checked)}
+                    disabled={!canAdminister || saving}
+                />
+
+                <Field
+                    label="Webhook URL"
+                    hint="Optional. Slack or Discord incoming webhook — https only. Leave empty to send nowhere but the bell."
+                    error={webhookError ?? undefined}
+                    id="webhook-url"
+                >
+                    <Input
+                        type="url"
+                        placeholder="https://hooks.slack.com/services/..."
+                        value={webhookUrl}
+                        onChange={(e) => setWebhookUrl(e.target.value)}
+                        disabled={!canAdminister || saving}
+                    />
+                </Field>
+
+                {canAdminister && (
+                    <div className="flex items-center gap-3">
+                        <AccentButton size="sm" onClick={saveAlerts} disabled={saving}>
+                            {saving ? 'Saving…' : 'Save alert settings'}
+                        </AccentButton>
+                        {alertsSaved && (
                             <span className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-500 dark:text-gray-400">
                                 <FiCheck size={13} /> Saved
                             </span>

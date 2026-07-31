@@ -9,6 +9,8 @@ export const projectSelect = {
     allowedOrigins: true,
     captureLevels: true,
     retentionDays: true,
+    alertOnRegression: true,
+    webhookUrl: true,
     ownerId: true,
     archivedAt: true,
     createdAt: true,

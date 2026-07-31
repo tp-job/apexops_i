@@ -1,7 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 
-const SECRET_KEY = process.env.JWT_SECRET || 'mySecretKey';
+// Imported, never re-derived: this module VERIFIES what api/auth.ts SIGNS, so a
+// second fallback here is how a deploy ends up signing and verifying with two
+// different secrets.
+import { SECRET_KEY, JWT_ALGORITHM } from '../lib/jwtSecrets';
 
 interface JwtPayload {
     id: number;
@@ -23,7 +26,7 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
             return;
         }
 
-        const decoded = jwt.verify(token, SECRET_KEY) as JwtPayload;
+        const decoded = jwt.verify(token, SECRET_KEY, { algorithms: [JWT_ALGORITHM] }) as JwtPayload;
 
         req.user = {
             id: decoded.id,
@@ -55,7 +58,7 @@ export const optionalAuth = async (req: Request, res: Response, next: NextFuncti
 
         if (token) {
             try {
-                const decoded = jwt.verify(token, SECRET_KEY) as JwtPayload;
+                const decoded = jwt.verify(token, SECRET_KEY, { algorithms: [JWT_ALGORITHM] }) as JwtPayload;
                 req.user = { id: decoded.id, email: decoded.email, role: decoded.role };
             } catch {
                 req.user = undefined;

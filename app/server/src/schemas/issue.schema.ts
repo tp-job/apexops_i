@@ -24,6 +24,21 @@ export const listIssuesQuerySchema = z.object({
 });
 
 /**
+ * Time window for the occurrence timeline on the issue detail page.
+ *
+ * Bucket size is derived from the range rather than chosen by the caller: 24
+ * hourly bars, 7 daily, 30 daily. Letting a client ask for 30 days of hourly
+ * buckets is 720 rows to render a sparkline nobody can read.
+ */
+export const ISSUE_RANGES = { '24h': 24, '7d': 7 * 24, '30d': 30 * 24 } as const;
+
+export type IssueRange = keyof typeof ISSUE_RANGES;
+
+export const issueDetailQuerySchema = z.object({
+    range: z.enum(['24h', '7d', '30d']).optional().default('24h'),
+});
+
+/**
  * Status is the only mutable field on an issue. Everything else — title,
  * culprit, count, timestamps — is derived from ingested events, and letting a
  * user edit it would put the aggregate row out of step with the events it

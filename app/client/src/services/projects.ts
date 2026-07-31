@@ -1,14 +1,17 @@
-import { fetchWithAuth } from '@/api/client';
+import { apiRequest, buildQuery, apiPost } from '@/api/request';
 import type {
     CaptureLevel,
     Issue,
     IssueDetail,
     IssueFilters,
     IssueListResponse,
+    IssueRange,
     IssueStats,
     IssueStatus,
     Project,
+    ProjectOverview,
     PromotedTicket,
+    RollupResponse,
 } from '@/types/projects';
 
 /**
@@ -24,59 +27,21 @@ import type {
  * worse than one that admits it cannot reach the server.
  */
 
-export class ApiError extends Error {
-    status: number;
-    /** Extra server fields, e.g. `ticketId` on a 409 from promote. */
-    data?: Record<string, unknown>;
-
-    // Fields are declared and assigned explicitly rather than via constructor
-    // parameter properties: the client builds with `erasableSyntaxOnly`, which
-    // rejects any TypeScript syntax that emits runtime code.
-    constructor(status: number, message: string, data?: Record<string, unknown>) {
-        super(message);
-        this.name = 'ApiError';
-        this.status = status;
-        this.data = data;
-    }
-}
-
-async function request<T>(path: string, init?: RequestInit & { json?: boolean }): Promise<T> {
-    const res = await fetchWithAuth(path, init);
-
-    if (!res.ok) {
-        let message = `Request failed (${res.status})`;
-        let data: Record<string, unknown> | undefined;
-        try {
-            data = await res.json();
-            if (data && typeof data.error === 'string') message = data.error;
-        } catch {
-            // A non-JSON error body (proxy HTML, gateway timeout) still has to
-            // produce a usable message rather than a parse crash.
-        }
-        throw new ApiError(res.status, message, data);
-    }
-
-    if (res.status === 204) return undefined as T;
-    return (await res.json()) as T;
-}
-
-const qs = (filters: Record<string, unknown>): string => {
-    const params = new URLSearchParams();
-    Object.entries(filters).forEach(([k, v]) => {
-        if (v !== undefined && v !== null && v !== '') params.set(k, String(v));
-    });
-    const s = params.toString();
-    return s ? `?${s}` : '';
-};
+/**
+ * `ApiError` and the request helper now live in `api/request.ts` — they were
+ * duplicated across three service modules with subtly different error handling.
+ * Re-exported here so existing importers keep working.
+ */
+export { ApiError } from '@/api/request';
 
 export const projectsAPI = {
     list: (includeArchived = false): Promise<Project[]> =>
-        request<Project[]>(`/api/projects${includeArchived ? '?includeArchived=true' : ''}`),
+        apiRequest<Project[]>(`/api/projects${includeArchived ? '?includeArchived=true' : ''}`),
 
-    get: (slug: string): Promise<Project> => request<Project>(`/api/projects/${slug}`),
+    get: (slug: string): Promise<Project> => apiRequest<Project>(`/api/projects/${slug}`),
 
     create: (body: { name: string; slug?: string }): Promise<Project> =>
-        request<Project>('/api/projects', { method: 'POST', json: true, body: body as unknown as BodyInit }),
+        apiRequest<Project>('/api/projects', { method: 'POST', json: true, body: body as unknown as BodyInit }),
 
     update: (
         slug: string,
@@ -85,36 +50,46 @@ export const projectsAPI = {
             captureLevels?: CaptureLevel[];
             allowedOrigins?: string[];
             retentionDays?: number;
+            alertOnRegression?: boolean;
+            /** Empty string clears it — see project.schema.ts. */
+            webhookUrl?: string;
         }
     ): Promise<Project> =>
-        request<Project>(`/api/projects/${slug}`, {
+        apiRequest<Project>(`/api/projects/${slug}`, {
             method: 'PATCH',
             json: true,
             body: body as unknown as BodyInit,
         }),
 
     rotateKey: (slug: string): Promise<{ rotated: boolean; project: Project }> =>
-        request(`/api/projects/${slug}/rotate-key`, { method: 'POST', json: true, body: {} as unknown as BodyInit }),
+        apiPost(`/api/projects/${slug}/rotate-key`),
 
     archive: (slug: string): Promise<{ archived: boolean; project: Project }> =>
-        request(`/api/projects/${slug}`, { method: 'DELETE' }),
+        apiRequest(`/api/projects/${slug}`, { method: 'DELETE' }),
 
-    restore: (slug: string): Promise<Project> =>
-        request<Project>(`/api/projects/${slug}/restore`, { method: 'POST', json: true, body: {} as unknown as BodyInit }),
+    restore: (slug: string): Promise<Project> => apiPost<Project>(`/api/projects/${slug}/restore`),
+
+    /** Cross-project ranking for the global dashboard. Server-side ranked. */
+    rollup: (range: IssueRange = '24h'): Promise<RollupResponse> =>
+        apiRequest<RollupResponse>(`/api/projects/rollup?range=${range}`),
+
+    /** Single-project trend: volume, release markers, regressions, top issues. */
+    overview: (slug: string, range: IssueRange = '24h'): Promise<ProjectOverview> =>
+        apiRequest<ProjectOverview>(`/api/projects/${slug}/overview?range=${range}`),
 };
 
 export const issuesAPI = {
     list: (slug: string, filters: IssueFilters = {}): Promise<IssueListResponse> =>
-        request<IssueListResponse>(`/api/projects/${slug}/issues${qs(filters as Record<string, unknown>)}`),
+        apiRequest<IssueListResponse>(`/api/projects/${slug}/issues${buildQuery(filters as Record<string, unknown>)}`),
 
     stats: (slug: string): Promise<IssueStats> =>
-        request<IssueStats>(`/api/projects/${slug}/issues/stats`),
+        apiRequest<IssueStats>(`/api/projects/${slug}/issues/stats`),
 
-    get: (slug: string, id: number): Promise<IssueDetail> =>
-        request<IssueDetail>(`/api/projects/${slug}/issues/${id}`),
+    get: (slug: string, id: number, range: IssueRange = '24h'): Promise<IssueDetail> =>
+        apiRequest<IssueDetail>(`/api/projects/${slug}/issues/${id}?range=${range}`),
 
     setStatus: (slug: string, id: number, status: IssueStatus): Promise<Issue> =>
-        request<Issue>(`/api/projects/${slug}/issues/${id}`, {
+        apiRequest<Issue>(`/api/projects/${slug}/issues/${id}`, {
             method: 'PATCH',
             json: true,
             body: { status } as unknown as BodyInit,
@@ -130,7 +105,7 @@ export const issuesAPI = {
         id: number,
         body: { title?: string; priority?: string; assigneeId?: number | null } = {}
     ): Promise<{ ticket: PromotedTicket; issue: Issue }> =>
-        request(`/api/projects/${slug}/issues/${id}/ticket`, {
+        apiRequest(`/api/projects/${slug}/issues/${id}/ticket`, {
             method: 'POST',
             json: true,
             body: body as unknown as BodyInit,

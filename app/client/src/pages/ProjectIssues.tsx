@@ -1,7 +1,7 @@
 import type { FC } from 'react';
 import { useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
-import { FiAlertTriangle, FiInbox, FiRadio, FiSearch, FiZap } from 'react-icons/fi';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { FiAlertTriangle, FiInbox, FiRadio, FiRotateCcw, FiSearch, FiZap } from 'react-icons/fi';
 import {
     AccentButton,
     Badge,
@@ -14,6 +14,7 @@ import {
     type Column,
 } from '@/components/design-system';
 import { PageHeader } from '@/components/common/layout';
+import ProjectTabs from '@/components/layouts/ProjectTabs';
 import { useIssues } from '@/hooks/useIssues';
 import { useProject } from '@/hooks/useProject';
 import { getErrorMessage } from '@/utils/error';
@@ -29,6 +30,7 @@ const STATUS_SEGMENTS = [
 
 const ProjectIssues: FC = () => {
     const { slug } = useParams<{ slug: string }>();
+    const navigate = useNavigate();
     const { project, stats, waitingForFirstEvent } = useProject(slug);
     const {
         issues, total, pageSize, query, loading, error, filtered,
@@ -64,7 +66,20 @@ const ProjectIssues: FC = () => {
             header: 'Issue',
             render: (i) => (
                 <div className="flex min-w-0 flex-col">
-                    <span className="truncate font-medium">{i.title}</span>
+                    <span className="flex items-center gap-2">
+                        <span className="truncate font-medium">{i.title}</span>
+                        {/* A fix that did not hold is more urgent than a new bug, so
+                            it gets a badge in the list rather than only on detail. */}
+                        {i.reopenCount > 0 && (
+                            <span
+                                title={`Resolved and came back ${i.reopenCount} time${i.reopenCount === 1 ? '' : 's'}`}
+                                className="inline-flex shrink-0 items-center gap-1 rounded-md bg-global-red/10 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-global-red"
+                            >
+                                <FiRotateCcw size={9} />
+                                regression
+                            </span>
+                        )}
+                    </span>
                     {i.culprit && (
                         <span className="truncate font-mono text-[11px] text-gray-400">{i.culprit}</span>
                     )}
@@ -102,28 +117,38 @@ const ProjectIssues: FC = () => {
             key: 'actions',
             header: '',
             className: 'w-36 text-right',
-            render: (i) =>
-                // Already promoted: link to the ticket rather than offering a
-                // second one. `Issue.ticketId` is unique, so a duplicate would
-                // 409 anyway — this makes that state legible instead of an error.
-                i.ticketId ? (
-                    <Link
-                        to="/bug-tracker"
-                        className="text-xs font-semibold text-brand-dark underline-offset-2 hover:underline dark:text-brand-accent"
-                    >
-                        TICK-{String(i.ticketId).padStart(3, '0')}
-                    </Link>
-                ) : (
-                    <AccentButton
-                        size="sm"
-                        variant="ghost"
-                        icon={<FiZap size={13} />}
-                        disabled={promoting === i.id}
-                        onClick={() => void handlePromote(i)}
-                    >
-                        {promoting === i.id ? 'Creating…' : 'Create ticket'}
-                    </AccentButton>
-                ),
+            render: (i) => (
+                // The row navigates to the issue; these controls must not. Without
+                // stopping propagation, "Create ticket" would also open the detail
+                // page and the user would lose sight of what just happened.
+                <span
+                    onClick={(e) => e.stopPropagation()}
+                    onKeyDown={(e) => e.stopPropagation()}
+                    role="presentation"
+                >
+                    {/* Already promoted: link to the ticket rather than offering a
+                        second one. `Issue.ticketId` is unique, so a duplicate would
+                        409 anyway — this makes that state legible instead of an error. */}
+                    {i.ticketId ? (
+                        <Link
+                            to="/bug-tracker"
+                            className="text-xs font-semibold text-brand-dark underline-offset-2 hover:underline dark:text-brand-accent"
+                        >
+                            TICK-{String(i.ticketId).padStart(3, '0')}
+                        </Link>
+                    ) : (
+                        <AccentButton
+                            size="sm"
+                            variant="ghost"
+                            icon={<FiZap size={13} />}
+                            disabled={promoting === i.id}
+                            onClick={() => void handlePromote(i)}
+                        >
+                            {promoting === i.id ? 'Creating…' : 'Create ticket'}
+                        </AccentButton>
+                    )}
+                </span>
+            ),
         },
     ];
 
@@ -136,16 +161,9 @@ const ProjectIssues: FC = () => {
                         ? `${formatNumber(stats.unresolved)} unresolved · ${formatNumber(stats.eventsLast24h)} events in 24h`
                         : 'Grouped by fingerprint — one row per distinct error'
                 }
-                actions={
-                    project && (
-                        <Link to={`/p/${project.slug}/settings`}>
-                            <AccentButton variant="ghost" size="sm">
-                                Settings
-                            </AccentButton>
-                        </Link>
-                    )
-                }
             />
+
+            {slug && <ProjectTabs slug={slug} />}
 
             {promoted && (
                 <Surface variant="panel" padding="sm">
@@ -204,6 +222,7 @@ const ProjectIssues: FC = () => {
                     rows={issues}
                     rowKey={(i) => i.id}
                     loading={loading}
+                    onRowClick={(i) => navigate(`/p/${slug}/issues/${i.id}`)}
                     sort={{ key: query.sort, direction: query.direction }}
                     onSortChange={setSort}
                     empty={

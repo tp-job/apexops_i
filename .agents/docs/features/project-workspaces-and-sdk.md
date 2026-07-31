@@ -320,7 +320,7 @@ Two-week sprint, 10 working days, planned to **7.5d** per the existing conventio
 | G3 | ~~SDK v2 at `/sdk/v1.js` — `data-*` config, dedupe window, `sendBeacon`, circuit breaker, payload caps, **WS path removed**. Ship a `demo.html` fixture that proves it end-to-end.~~ **DONE 2026-07-28** | 1.5d | P0 |
 | G4 | ~~Workspace UI: `/projects` list + create, project switcher, `/p/:slug/settings` with live "waiting for first event" state~~ **DONE 2026-07-28** | 1.5d | P0 |
 | G5a | ~~`/p/:slug/issues` list; **Create ticket from issue**; board filtered by project~~ **DONE 2026-07-28** | 1.5d | P0 |
-| G5b | Issue detail: latest event, full stack, occurrence timeline, browser/OS breakdown | 1.5d | P1 |
+| G5b | ~~Issue detail: latest event, full stack, occurrence timeline, browser/OS breakdown~~ **DONE 2026-07-29** (pulled forward from Sprint 3) | 1.5d | P1 |
 | — | **Total** | **9.0d** | |
 
 **G5 was split on 2026-07-28.** The original 1.0d estimate covered list *and* detail; re-checked
@@ -471,6 +471,40 @@ Landmines:
   this is not currently a defect, but hand-written test fixtures will mislead you.
 - The dev Vite server and the API must agree on origin: CORS is pinned to `http://localhost:5173`,
   so a preview on any other port fails every call at the CORS layer with nothing in the server log.
+
+### G5b exit notes (2026-07-29)
+
+Pulled forward from Sprint 3 because the ingest data was already there to render.
+Shipped: [`api/issues.ts`](../../../app/server/src/api/issues.ts) `GET /:id` extended with a
+bucketed occurrence histogram (`range=24h|7d|30d`) and a browser/OS/release breakdown,
+[`lib/userAgent.ts`](../../../app/server/src/lib/userAgent.ts), client
+[`ProjectIssueDetail`](../../../app/client/src/pages/ProjectIssueDetail.tsx),
+[`OccurrenceTimeline`](../../../app/client/src/components/issues/OccurrenceTimeline.tsx) and
+`useIssueDetail`. Issue rows in the list now navigate to it. Clean lint, typecheck and build.
+
+**The landmine, and it is not specific to this feature: `events.created_at` is
+`timestamp without time zone`, and this database's session timezone is `Asia/Bangkok`.**
+Binding a JS `Date` into a `$queryRaw` comparison makes the driver shift it by the session
+offset, so the window boundary lands hours away and real events fall outside it. Measured
+directly: the identical query returned **0 rows with a `Date` parameter and 1 with
+`${iso}::timestamp`**. Reading is *not* symmetric — `date_trunc` results come back already
+matching the stored UTC wall-clock — so only comparisons need the cast. Prisma's query builder
+converts correctly on its own and is unaffected; this applies to **every raw query that filters
+on a timestamp**, of which this is currently the only one.
+
+Two decisions worth keeping:
+
+1. **The histogram counts stored events, not occurrences, and the page says so in words.** The
+   SDK collapses repeats into one row carrying a `count`, which is added to the issue total but
+   not stored per event — so the bars cannot sum to `issue.count`. On the verified data the page
+   reads *Occurrences 205 / Events stored 6*. Without the sentence explaining it, the chart looks
+   like it contradicts the headline number.
+2. **Hand-rolled bars, not `recharts`.** The dependency is installed but unused anywhere in the
+   app; this is a fixed-bucket histogram with no axes to compute, no legend and no zoom.
+
+Also: the breakdown is capped at the 500 most recent events, because a proportion does not get
+truer with more samples, and `userAgent` is filled from the request header when the SDK omits it
+(a curl-driven ingest shows up as `Bot / script`, which is correct).
 
 ### Deferred to v1.1 — named so they don't leak into the sprint
 
