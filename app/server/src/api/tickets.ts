@@ -9,6 +9,7 @@ import {
     listTicketsQuerySchema,
 } from '../schemas/ticket.schema';
 import { Prisma, TicketStatus, TicketPriority } from '@prisma/client';
+import { isProjectMember } from '../lib/projectAccess';
 
 const router = express.Router();
 router.use(authenticate);
@@ -136,6 +137,51 @@ async function memberProjectFilter(
     return { projectId: { in: memberships.map((m) => m.projectId) } };
 }
 
+/**
+ * Resolves `:id` to a ticket the caller is actually entitled to touch.
+ *
+ * `memberProjectFilter` fixed the *reads*; the write routes below were left
+ * addressing rows by bare integer, so `PUT /api/tickets/4` edited ticket 4
+ * wherever it lived. Every handler that takes a ticket id now goes through
+ * here, and the miss is a **404, not a 403** — same reasoning as
+ * `resolveMembership`: a 403 confirms the id is real and turns the route into a
+ * way to count other people's tickets.
+ *
+ * Returns `projectId` because the assignee check needs it: "is this user a
+ * member" is only meaningful against the project the ticket is actually in.
+ */
+async function resolveTicketAccess(
+    ticketId: number,
+    userId: number
+): Promise<{ projectId: number } | null> {
+    const scope = await memberProjectFilter(userId);
+    const ticket = await prisma.ticket.findFirst({
+        where: { id: ticketId, ...scope },
+        select: { projectId: true },
+    });
+    return ticket;
+}
+
+/**
+ * Validates `assigneeId` against the project the ticket lives in (T-D6).
+ *
+ * The previous check was `prisma.user.count({ where: { id: assigneeId } })` —
+ * "is this a real user" and nothing more. Because `formatTicket` returns the
+ * assignee's name, email and avatar, that made every write route an
+ * enumeration oracle: create a ticket in your own project with
+ * `assigneeId: 1, 2, 3…` and read back the directory of everyone in the
+ * database. Scoping the check to the project closes it, and the 400 says
+ * nothing about whether the id exists.
+ */
+async function assigneeError(
+    assigneeId: number | null | undefined,
+    projectId: number
+): Promise<string | null> {
+    if (!assigneeId) return null;
+    const member = await isProjectMember(projectId, assigneeId);
+    return member ? null : 'Assignee is not a member of this project';
+}
+
 const commentInclude = { author: { select: userSelect } } as const;
 type CommentWithAuthor = Prisma.TicketCommentGetPayload<{ include: typeof commentInclude }>;
 
@@ -261,13 +307,15 @@ router.post('/', validate(createTicketSchema), async (req: Request, res: Respons
     try {
         const { projectId, title, description, status, priority, assigneeId, tags, relatedLogs } = req.body;
 
-        if (assigneeId) {
-            const assignee = await prisma.user.count({ where: { id: assigneeId } });
-            if (!assignee) { res.status(400).json({ error: 'Assignee is not a known user' }); return; }
-        }
-
+        // Order matters: the assignee is validated against the project, so the
+        // project has to be resolved first. The old code checked the assignee
+        // before it knew where the ticket was going, which is exactly why the
+        // check could not be scoped.
         const resolved = await resolveProjectId(projectId, req.user!.id);
         if ('error' in resolved) { res.status(400).json({ error: resolved.error }); return; }
+
+        const badAssignee = await assigneeError(assigneeId, resolved.projectId);
+        if (badAssignee) { res.status(400).json({ error: badAssignee }); return; }
 
         const ticket = await prisma.ticket.create({
             data: {
@@ -299,10 +347,11 @@ router.put('/:id', validate(updateTicketSchema), async (req: Request, res: Respo
     const { title, description, status, priority, assigneeId, tags, relatedLogs, expectedUpdatedAt } = req.body;
 
     try {
-        if (assigneeId) {
-            const assignee = await prisma.user.count({ where: { id: assigneeId } });
-            if (!assignee) { res.status(400).json({ error: 'Assignee is not a known user' }); return; }
-        }
+        const access = await resolveTicketAccess(ticketId, req.user!.id);
+        if (!access) { res.status(404).json({ error: 'Ticket not found' }); return; }
+
+        const badAssignee = await assigneeError(assigneeId, access.projectId);
+        if (badAssignee) { res.status(400).json({ error: badAssignee }); return; }
 
         const updated = await prisma.$transaction(async (tx) => {
             const current = await tx.ticket.findUnique({ where: { id: ticketId }, include: ticketInclude });
@@ -382,6 +431,9 @@ router.delete('/:id', async (req: Request, res: Response): Promise<void> => {
     if (ticketId === null) { res.status(404).json({ error: 'Ticket not found' }); return; }
 
     try {
+        const access = await resolveTicketAccess(ticketId, req.user!.id);
+        if (!access) { res.status(404).json({ error: 'Ticket not found' }); return; }
+
         const ticket = await prisma.ticket.update({
             where: { id: ticketId },
             data: { archivedAt: new Date() },
@@ -401,6 +453,9 @@ router.post('/:id/restore', async (req: Request, res: Response): Promise<void> =
     if (ticketId === null) { res.status(404).json({ error: 'Ticket not found' }); return; }
 
     try {
+        const access = await resolveTicketAccess(ticketId, req.user!.id);
+        if (!access) { res.status(404).json({ error: 'Ticket not found' }); return; }
+
         const ticket = await prisma.ticket.update({
             where: { id: ticketId },
             data: { archivedAt: null },
@@ -420,6 +475,12 @@ router.get('/:id/comments', async (req: Request, res: Response): Promise<void> =
     if (ticketId === null) { res.status(404).json({ error: 'Ticket not found' }); return; }
 
     try {
+        // Comments carry author names and free-text discussion of a bug. Serving
+        // them by bare ticket id leaked another project's thread to anyone who
+        // could increment an integer.
+        const access = await resolveTicketAccess(ticketId, req.user!.id);
+        if (!access) { res.status(404).json({ error: 'Ticket not found' }); return; }
+
         const comments = await prisma.ticketComment.findMany({
             where: { ticketId },
             include: commentInclude,
@@ -441,8 +502,8 @@ router.post(
         if (ticketId === null) { res.status(404).json({ error: 'Ticket not found' }); return; }
 
         try {
-            const exists = await prisma.ticket.count({ where: { id: ticketId } });
-            if (!exists) { res.status(404).json({ error: 'Ticket not found' }); return; }
+            const access = await resolveTicketAccess(ticketId, req.user!.id);
+            if (!access) { res.status(404).json({ error: 'Ticket not found' }); return; }
 
             const comment = await prisma.ticketComment.create({
                 data: {

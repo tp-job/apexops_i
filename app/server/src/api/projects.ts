@@ -13,6 +13,7 @@ import { ProjectRole } from '@prisma/client';
 import {
     asStringArray,
     canAdminister,
+    isOwner,
     projectSelect,
     resolveMembership,
     type ProjectRow,
@@ -20,6 +21,7 @@ import {
 import { isSafeWebhookTarget } from '../lib/webhook';
 import issuesRouter from './issues';
 import overviewRouter from './overview';
+import teamRouter from './team';
 
 const router = express.Router();
 router.use(authenticate);
@@ -66,6 +68,12 @@ router.use('/:slug/issues', issuesRouter);
 // **before** the `/:slug` handlers, or `rollup` is swallowed as a project slug.
 // `project.schema.ts` already reserves the word so no project can shadow it.
 router.use('/', overviewRouter);
+
+// Members, invites and ownership transfer. Mounted at the root for the same
+// reason as overview — its paths are `/:slug/members`, `/:slug/invites` and
+// `/:slug/transfer-ownership`, which share `:slug` but no prefix — and **before**
+// the `/:slug` handlers below.
+router.use('/', teamRouter);
 
 // ── GET / ────────────────────────────────────────────────────
 router.get('/', async (req: Request, res: Response): Promise<void> => {
@@ -281,7 +289,7 @@ router.delete('/:slug', async (req: Request, res: Response): Promise<void> => {
         if (!found) { res.status(404).json({ error: 'Project not found' }); return; }
         // Archiving hides a workspace and stops its ingest; unlike a settings
         // change, that is the owner's call alone.
-        if (found.role !== 'owner') {
+        if (!isOwner(found.role)) {
             res.status(403).json({ error: 'Only the project owner can archive a project' });
             return;
         }
@@ -305,7 +313,7 @@ router.post('/:slug/restore', async (req: Request, res: Response): Promise<void>
     try {
         const found = await resolveMembership(req.params.slug, req.user!.id);
         if (!found) { res.status(404).json({ error: 'Project not found' }); return; }
-        if (found.role !== 'owner') {
+        if (!isOwner(found.role)) {
             res.status(403).json({ error: 'Only the project owner can restore a project' });
             return;
         }

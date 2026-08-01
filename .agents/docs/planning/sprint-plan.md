@@ -229,25 +229,62 @@ still need locking before it starts.
 
 ---
 
-### Sprint 5+ — not yet scoped
+### Sprint 6 — Team invites + roles that mean something
+**2026-09-22 → 2026-10-03** *(nominal — see the note under Sprints 5, 7)*
+**Goal:** *Invite a teammate into one project, give them a role, and have that role decide what they
+can actually do — enforced on the server, not just hidden in the UI.*
+
+Spec: [`team-and-roles.md`](../features/team-and-roles.md) — scoped to G0 on 2026-07-31. Decisions
+`T-D1`…`T-D7` are locked there; this file does not restate them.
+
+| P | Item | Gate | Est |
+|---|---|---|---|
+| P0 | **Assignee membership check** on ticket create + update; permission matrix asserted on every existing project route | G1 | 1.5d |
+| P0 | `ProjectInvite` migration + the eight invite/member routes; token hashing, expiry, rate limit | G2 | 2d |
+| P0 | `Select` primitive (**still unbuilt**) + Members tab on `/p/:slug/members` | G3 | 2d |
+| P0 | `/invite/:token` accept screen + the `invite` notification | G4 | 1.0d |
+| P1 | Leave project, remove member, transfer ownership | G5 | 1.5d |
+
+**Load 6.5d at P0, 8.0d with P1 — 0.5d over capacity, named before the sprint starts.** Cut order
+and the full exit test live in the spec.
+
+**Scoping this sprint found a live PII leak, and it is P0 here, first:** `assigneeId` in
+[`api/tickets.ts`](../../../app/server/src/api/tickets.ts) is validated as *"is a known user"* rather
+than *"is a member of this project"*, and the response embeds the assignee's email. Any authenticated
+user can enumerate every account's name and email by guessing integers. The correct check needs the
+membership surface this sprint builds, which is why it sits here rather than in a security pass.
+
+**One carried-forward risk is smaller than this plan priced it.** `ProjectRole` is **not** in the
+JWT — every project route resolves it per request via `resolveMembership`. A demotion therefore takes
+effect on the next request, with no token work at all. The token-staleness risk belongs to the
+global `User.role` only, which this sprint does not touch. See the spec's finding 2.
+
+---
+
+### Sprints 5, 7 — not yet scoped
 
 Sequenced, deliberately not estimated. Each needs a `features/` spec at G0 before it gets dates.
 
 | Sprint | Subject | Blocking question |
 |---|---|---|
-| 5 | Settings — function + account; **roles that mean something** | S-D1…S-D5 unlocked in [`settings.md`](../features/settings.md); which of the 11 toggles become real |
-| 6 | Team invites + `ProjectMember` UI | the table exists, the sharing model does not |
-| 7 | Alerting (email/Slack), Docs + AI Chat, CI on PR | what is worth waking someone up for |
+| 5 | Settings — **function** settings; the account half shipped early on 2026-07-31 | which of the 10 remaining inert `user_settings` toggles get a reader, per S-D1 in [`settings.md`](../features/settings.md) |
+| 7 | Docs + AI Chat, CI on PR, email delivery for alerts **and** invites | mail infrastructure — a sending domain and SPF/DKIM, not an afternoon |
+
+> **The dates above are nominal.** Work has been landing out of plan order: Sprint 5's
+> account-settings half and the alerting that was pencilled for Sprint 7 both shipped on 2026-07-31,
+> while Sprint 3's P0 401-refresh and all of Sprint 4's source maps are still unbuilt. Sprint 6 is
+> sequenced **by dependency, not by the calendar** — it needs nothing from Sprints 3, 4 or 5, so it
+> can be pulled forward without re-planning.
 
 **Two items carried forward from the old plan so they are not lost in the re-cut:**
 
 1. **`authorize()` has one caller in the whole codebase** — `DELETE /api/logs`, added by workspaces
-   G2. No user-facing endpoint is role-gated, so promoting a user to admin currently grants almost
-   nothing. Roles have to *mean* something before anything built on them is worth doing.
-2. **Token invalidation on role change** — role is signed into the JWT, so a demotion silently does
-   not take effect for up to an hour while the UI reports success. The old plan called this its
-   highest-risk single line and it was right. It is **not** cuttable once (1) lands, and it must be
-   scoped in the same sprint as the role-gating, never after it.
+   G2. No user-facing endpoint is gated by the *global* role. Sprint 6 closes this at the **project**
+   level (T-D3); the global `admin`/`user` role stays close to meaningless after it.
+2. **Token invalidation on role change** — the **global** role is signed into the JWT, so a demotion
+   silently does not take effect for up to an hour while the UI reports success. Scoped correctly it
+   is narrower than the old plan claimed, but it is still unbuilt, and it must be scoped in the same
+   sprint as any global role-gating, never after it.
 
 Deferred to v1.1 by the workspaces spec and still deferred: npm package, server-side/Node SDK,
 breadcrumbs, session replay, per-issue assignment rules.
@@ -291,5 +328,9 @@ breadcrumbs, session replay, per-issue assignment rules.
 
 ---
 
-**Last updated:** 2026-07-28 — Sprints 2–4 re-cut against the tree; Sprints 5–7 reduced to an
-unestimated backlog pending G0 specs.
+**Last updated:** 2026-07-31 — Sprint 6 scoped and estimated against
+[`team-and-roles.md`](../features/team-and-roles.md); Sprints 5 and 7 re-cut to reflect the
+account-settings and alerting work that shipped early.
+
+*Previously: 2026-07-28 — Sprints 2–4 re-cut against the tree; Sprints 5–7 reduced to an
+unestimated backlog pending G0 specs.*

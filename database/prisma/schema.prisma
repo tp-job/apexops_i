@@ -39,6 +39,7 @@ model User {
   ticketComments  TicketComment[] @relation("commentAuthor")
   ownedProjects   Project[]       @relation("projectOwner")
   projectMemberships ProjectMember[]
+  sentInvites        ProjectInvite[]     @relation("inviteSender")
   issueStatusChanges IssueStatusChange[]
   notifications      Notification[]
 
@@ -164,6 +165,7 @@ model Project {
 
   owner   User            @relation("projectOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   members ProjectMember[]
+  invites ProjectInvite[]
   issues  Issue[]
   events  Event[]
   tickets Ticket[]
@@ -187,6 +189,46 @@ model ProjectMember {
   @@id([projectId, userId])
   @@index([userId])
   @@map("project_members")
+}
+
+enum InviteStatus {
+  pending
+  accepted
+  revoked
+
+  @@map("invite_status")
+}
+
+/// A pending grant of membership, delivered as a link the inviter passes on
+/// themselves (spec T-D1) — there is no mail infrastructure, so "invite by
+/// email" would mean owning a sending domain and a deliverability problem.
+model ProjectInvite {
+  id        Int         @id @default(autoincrement())
+  projectId Int         @map("project_id")
+  /// Lowercased at write time. The invite is BOUND to this address: accepting
+  /// requires being signed in as a matching account, so a link forwarded into
+  /// the wrong channel is a dead link rather than a breach.
+  email String
+  role  ProjectRole @default(member)
+  /// SHA-256 of the token. The token itself is returned once, at creation, and
+  /// never stored — reading this table must not grant workspace access, for the
+  /// same reason a password column holds a hash.
+  tokenHash    String       @unique @map("token_hash")
+  status       InviteStatus @default(pending)
+  invitedById  Int          @map("invited_by_id")
+  expiresAt    DateTime     @map("expires_at")
+  acceptedAt   DateTime?    @map("accepted_at")
+  acceptedById Int?         @map("accepted_by_id")
+  createdAt    DateTime     @default(now()) @map("created_at")
+
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  invitedBy User    @relation("inviteSender", fields: [invitedById], references: [id], onDelete: Cascade)
+
+  /// One live invite per address per project. Re-inviting updates the row and
+  /// mints a new token rather than accumulating duplicates in the pending list.
+  @@unique([projectId, email])
+  @@index([projectId, status])
+  @@map("project_invites")
 }
 
 // ── Issues / events (SDK ingest) ─────────────────────────────
@@ -245,6 +287,9 @@ model Issue {
 /// adding a kind later does not require a migration on a table with rows.
 enum NotificationKind {
   regression
+  /// Written when the invited address already has an account — the common case
+  /// in a small team, and the only in-product channel an invite has.
+  invite
 
   @@map("notification_kind")
 }

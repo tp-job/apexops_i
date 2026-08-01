@@ -55,7 +55,8 @@ exit notes. **This is the folder to read before touching a feature**, and to upd
 - [`overview-and-regressions.md`](features/overview-and-regressions.md) — cross-project roll-up, project overview, release markers, regression tracking *(shipped)*
 - [`alerting-and-account-settings.md`](features/alerting-and-account-settings.md) — regression alerts (in-app + webhook), account settings, active sessions *(shipped)*
 - [`security-hardening-2026-07-31.md`](features/security-hardening-2026-07-31.md) — JWT secret fail-closed, socket monitors leak, shared fetch/dismiss helpers *(shipped)*
-- [`settings.md`](features/settings.md) — account + function settings *(proposed; scheduled Sprint 5)*
+- [`team-and-roles.md`](features/team-and-roles.md) — project invites, the three-role permission matrix, ownership transfer *(G0 scoped; **Sprint 6**)*
+- [`settings.md`](features/settings.md) — account + function settings *(account half shipped; function settings scheduled Sprint 5)*
 
 ### [`planning/`](planning/) — what happens next
 Sequencing and capacity. Closed sprints move to `archive/`.

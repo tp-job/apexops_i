@@ -1,7 +1,7 @@
 import express, { Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import { validate } from '../middleware/validate';
-import { resolveMembership } from '../lib/projectAccess';
+import { isProjectMember, resolveMembership } from '../lib/projectAccess';
 import {
     listIssuesQuerySchema,
     updateIssueSchema,
@@ -351,9 +351,13 @@ router.post('/:id/ticket', validate(promoteIssueSchema), async (req: Request, re
             return;
         }
 
-        if (req.body.assigneeId) {
-            const assignee = await prisma.user.count({ where: { id: req.body.assigneeId } });
-            if (!assignee) { res.status(400).json({ error: 'Assignee is not a known user' }); return; }
+        // Same rule as the ticket routes (T-D6): an assignee must be a member of
+        // the project the ticket is being created in. Promote is a third door
+        // into the same `Ticket.assigneeId` column and had the same bare
+        // "is a known user" check, so it had the same enumeration oracle.
+        if (req.body.assigneeId && !(await isProjectMember(found.project.id, req.body.assigneeId))) {
+            res.status(400).json({ error: 'Assignee is not a member of this project' });
+            return;
         }
 
         const latest = await prisma.event.findFirst({

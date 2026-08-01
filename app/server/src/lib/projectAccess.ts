@@ -55,3 +55,32 @@ export async function resolveMembership(
 }
 
 export const canAdminister = (role: ProjectRole) => role === 'owner' || role === 'admin';
+
+/**
+ * Paired with `canAdminister` rather than left as an inline `role === 'owner'`.
+ *
+ * The two predicates encode T-D3's split: `canAdminister` gates settings, key
+ * rotation and membership; `isOwner` gates the three actions an admin must not
+ * reach — archive, restore, and transfer. Naming both makes the distinction
+ * greppable, so a new owner-only route is written by reaching for a function
+ * that already exists instead of by retyping a comparison and getting it wrong.
+ */
+export const isOwner = (role: ProjectRole) => role === 'owner';
+
+/**
+ * Is this user a member of this project?
+ *
+ * Exists for the one question `resolveMembership` cannot answer: not "may the
+ * *caller* touch this project" but "may this *other* user be named in it". That
+ * is the check behind assignment (T-D6) — and it is deliberately a boolean, not
+ * a user row, because every caller so far wants to reject and none wants to
+ * echo back who the id belonged to. Returning the row would rebuild the
+ * enumeration oracle this function was written to close.
+ */
+export async function isProjectMember(projectId: number, userId: number): Promise<boolean> {
+    const membership = await prisma.projectMember.findUnique({
+        where: { projectId_userId: { projectId, userId } },
+        select: { userId: true },
+    });
+    return membership !== null;
+}

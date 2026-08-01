@@ -324,6 +324,7 @@ app.get('/', (_req: Request, res: Response) => {
             auth: ['/api/auth/register', '/api/auth/login', '/api/auth/profile'],
             logs: ['/api/logs', '/api/logs/stats', '/api/logs/:id'],
             projects: ['/api/projects', '/api/projects/:slug', '/api/projects/:slug/rotate-key'],
+            team: ['/api/projects/:slug/members', '/api/projects/:slug/invites', '/api/invites/:token'],
             tickets: ['/api/tickets', '/api/tickets/stats', '/api/tickets/:id'],
             notes: ['/api/notes', '/api/notes/:id'],
             ingest: ['/api/ingest'],
@@ -348,6 +349,7 @@ import consoleMonitorRoutes from './api/console-monitor';
 import chatRoutes from './api/chat';
 import notificationsRoutes from './api/notifications';
 import projectsRoutes from './api/projects';
+import invitesRoutes from './api/invites';
 import ingestRoutes from './api/ingest';
 
 // Mounted before the JSON-body and CORS defaults matter to it: `api/ingest` sets
@@ -358,6 +360,9 @@ app.use('/api/ingest', ingestRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/logs', logsRoutes);
 app.use('/api/projects', projectsRoutes);
+// Root-mounted on purpose (T-D2): an invitee is not yet a member, so an accept
+// route under `/api/projects/:slug` would 404 exactly the person it exists for.
+app.use('/api/invites', invitesRoutes);
 app.use('/api/tickets', ticketsRoutes);
 app.use('/api/notes', notesRoutes);
 app.use('/api/console-logs', consoleLogsRoutes);
