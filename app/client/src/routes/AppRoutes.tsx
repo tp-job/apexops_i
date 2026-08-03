@@ -14,6 +14,8 @@ import ProjectOverview from '@/pages/ProjectOverview';
 import ProjectBoard from '@/pages/ProjectBoard';
 import Settings from '@/pages/Settings';
 import ProjectSettings from '@/pages/ProjectSettings';
+import ProjectMembers from '@/pages/ProjectMembers';
+import InviteAccept from '@/pages/InviteAccept';
 import DesignSystem from '@/pages/DesignSystem';
 import Docs from '@/pages/Docs';
 import { DEFAULT_DOC } from '@/content/docs';
@@ -53,6 +55,13 @@ const AppRoutes: FC = () => (
 
             {/* Workspace */}
             <Route element={<ProtectedRoute />}>
+                {/* Inside the guard, outside the layout. The guard gives the
+                    signed-out → login → back-to-this-URL path for free via
+                    `state.from`; the layout is skipped because an invitee may
+                    have no projects yet, so the nav rail and switcher would
+                    render empty chrome around a single decision. */}
+                <Route path="/invite/:token" element={<InviteAccept />} />
+
                 <Route element={<AppLayout />}>
                     <Route path="/dashboard" element={<Dashboard />} />
                     <Route path="/bug-tracker" element={<BugTracker />} />
@@ -75,6 +84,7 @@ const AppRoutes: FC = () => (
                         per-project (spec S-D4) and live on /p/:slug/settings. */}
                     <Route path="/settings" element={<Settings />} />
                     <Route path="/p/:slug/settings" element={<ProjectSettings />} />
+                    <Route path="/p/:slug/members" element={<ProjectMembers />} />
                 </Route>
             </Route>
 

@@ -1,6 +1,6 @@
 import type { FC } from 'react';
 import { NavLink } from 'react-router-dom';
-import { FiActivity, FiClipboard, FiList, FiSettings } from 'react-icons/fi';
+import { FiActivity, FiClipboard, FiList, FiSettings, FiUsers } from 'react-icons/fi';
 
 /**
  * Sub-navigation inside a project workspace.
@@ -19,6 +19,11 @@ const ProjectTabs: FC<{ slug: string }> = ({ slug }) => {
         { to: `/p/${slug}/overview`, label: 'Overview', icon: <FiActivity size={15} /> },
         { to: `/p/${slug}/issues`, label: 'Issues', icon: <FiList size={15} /> },
         { to: `/p/${slug}/board`, label: 'Board', icon: <FiClipboard size={15} /> },
+        // Visible to every role, not just owner/admin: `GET /:slug/members` is a
+        // list any member is entitled to, and "who else can see this workspace"
+        // is a question a member has a legitimate reason to ask. What they cannot
+        // see is the pending-invite list, and that is enforced server-side.
+        { to: `/p/${slug}/members`, label: 'Members', icon: <FiUsers size={15} /> },
         { to: `/p/${slug}/settings`, label: 'Settings', icon: <FiSettings size={15} /> },
     ];
 

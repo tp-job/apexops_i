@@ -37,6 +37,7 @@ import {
     GanttTrack,
     Field,
     Input,
+    Select,
     Checkbox,
     Switch,
     DataTable,
@@ -166,6 +167,7 @@ const DesignSystem: FC = () => {
     const [dsPassword, setDsPassword] = useState('');
     const [dsLevels, setDsLevels] = useState<string[]>(['error', 'warn']);
     const [dsAllowlist, setDsAllowlist] = useState(true);
+    const [dsRole, setDsRole] = useState('member');
     const [dsSort, setDsSort] = useState<{ key: string; direction: SortDirection }>({
         key: 'lastSeen',
         direction: 'desc',
@@ -363,6 +365,31 @@ const DesignSystem: FC = () => {
 
                         <Field label="Billing reference" hint="Optional — appears on invoices." id="ds-disabled">
                             <Input placeholder="Unavailable on this plan" disabled />
+                        </Field>
+
+                        <Field
+                            label="Project role"
+                            hint="Native <select>: platform pickers on touch, type-ahead on keyboard."
+                            id="ds-select"
+                        >
+                            <Select
+                                options={[
+                                    { value: 'admin', label: 'admin' },
+                                    { value: 'member', label: 'member' },
+                                    { value: 'owner', label: 'owner — set by transfer only', disabled: true },
+                                ]}
+                                value={dsRole}
+                                onChange={(e) => setDsRole(e.target.value)}
+                            />
+                        </Field>
+
+                        <Field label="Assignee" error="Not a member of this project." id="ds-select-invalid">
+                            <Select
+                                placeholder="Choose a member"
+                                options={[{ value: 'a', label: 'Someone else' }]}
+                                value=""
+                                onChange={() => {}}
+                            />
                         </Field>
                     </div>
 

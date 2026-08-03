@@ -9,16 +9,19 @@ export { default as Meter } from './Meter';
 export { default as AccentButton } from './AccentButton';
 export { default as Badge } from './Badge';
 
-// Form kit — grown in Sprint 2 with the project settings screen (Checkbox, Switch).
-// Select, Textarea, RadioGroup, FormActions and useFormState are STILL UNBUILT —
+// Form kit — grown in Sprint 2 with the project settings screen (Checkbox,
+// Switch) and in Sprint 6 with the members screen (Select).
+// Textarea, RadioGroup, FormActions and useFormState are STILL UNBUILT —
 // price them in before estimating any form-heavy screen.
 // Status table: .agents/docs/planning/sprint-plan.md
 export { default as Field } from './Field';
 export { default as Input } from './Input';
+export { default as Select } from './Select';
 export { default as Checkbox } from './Checkbox';
 export { default as Switch } from './Switch';
 export { useFieldWiring } from './field-context';
 export type { FieldWiring } from './field-context';
+export type { SelectOption } from './Select';
 
 // Data-surface kit — one table for every list surface. Sorting and paging are
 // server-side; these components reflect state, they do not own it.

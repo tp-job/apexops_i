@@ -1,7 +1,7 @@
 import type { FC } from 'react';
 import { useCallback, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiBell, FiRotateCcw } from 'react-icons/fi';
+import { FiBell, FiRotateCcw, FiUserPlus } from 'react-icons/fi';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useDismissable } from '@/hooks/useDismissable';
 import { relativeTime } from '@/utils/format';
@@ -27,6 +27,17 @@ const NotificationBell: FC = () => {
     const openNotification = async (n: AppNotification) => {
         setOpen(false);
         if (!n.readAt) void markRead(n.id);
+
+        // An invite notification is an announcement, not a door. Accepting needs
+        // the token, and the token is never stored — so there is nothing to link
+        // to, and `/p/:slug/*` would 404 the recipient, who is by definition not
+        // a member yet. Marking it read is the whole interaction.
+        //
+        // The fix that would make this row actionable is a `GET /api/invites/mine`
+        // that resolves pending invites by the caller's own address instead of by
+        // token. That is a backend addition, tracked separately.
+        if (n.kind === 'invite') return;
+
         // Regressions always carry an issue; the guard is for future kinds that
         // may only reference a project.
         if (n.projectSlug && n.issueId) navigate(`/p/${n.projectSlug}/issues/${n.issueId}`);
@@ -98,8 +109,21 @@ const NotificationBell: FC = () => {
                                         n.readAt ? 'opacity-60' : ''
                                     }`}
                                 >
-                                    <span className="mt-0.5 shrink-0 text-global-red" aria-hidden>
-                                        <FiRotateCcw size={14} />
+                                    {/* Icon carries the kind, so the two are
+                                        distinguishable without reading the title. */}
+                                    <span
+                                        className={`mt-0.5 shrink-0 ${
+                                            n.kind === 'invite'
+                                                ? 'text-brand-dark dark:text-brand-accent'
+                                                : 'text-global-red'
+                                        }`}
+                                        aria-hidden
+                                    >
+                                        {n.kind === 'invite' ? (
+                                            <FiUserPlus size={14} />
+                                        ) : (
+                                            <FiRotateCcw size={14} />
+                                        )}
                                     </span>
                                     <span className="min-w-0 flex-1">
                                         <span className="flex items-baseline justify-between gap-2">
@@ -118,6 +142,13 @@ const NotificationBell: FC = () => {
                                         {n.body && (
                                             <span className="mt-0.5 block line-clamp-2 text-[12px] leading-5 text-gray-500 dark:text-gray-400">
                                                 {n.body}
+                                            </span>
+                                        )}
+                                        {n.kind === 'invite' && (
+                                            // Says what to do next, because this row
+                                            // cannot do it for them.
+                                            <span className="mt-1 block text-[11px] italic text-gray-400">
+                                                Open the invite link they sent you to join.
                                             </span>
                                         )}
                                         <span className="mt-1 block text-[11px] text-gray-400">

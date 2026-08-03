@@ -1,0 +1,227 @@
+{
+  "build": "Sprint 6 — team invites + roles, gates G3–G5 (client only)",
+  "spec": ".agents/docs/features/team-and-roles.md",
+  "note": "G1 + G2 shipped 2026-08-01 and are not re-litigated here. The whole server half of G3, G4 and G5 already exists (api/team.ts, api/invites.ts); every feature below is UI against routes that are already live and already tested by G2's 59 exit assertions.",
+  "features": [
+    {
+      "id": "F001",
+      "gate": "G3",
+      "title": "Select primitive",
+      "priority": "critical",
+      "depends_on": [],
+      "description": "Native <select> styled to match Input, wired to Field context for id/aria-describedby/aria-invalid/aria-required. Native rather than Radix: role pickers are 2-3 options, and native gets mobile pickers and keyboard type-ahead for free.",
+      "steps": [
+        "Renders inside a Field and the label's htmlFor resolves to the select (clicking the label focuses it)",
+        "Field error state paints the invalid border and sets aria-invalid on the select",
+        "Options render from an `options` prop; the selected value is controlled and onChange fires with the new value",
+        "disabled renders greyed with cursor-not-allowed and cannot be changed by keyboard",
+        "FAILURE CASE: used standalone with no Field, it falls back to the caller's own id/aria-* rather than throwing"
+      ],
+      "passes": true,
+      "notes": "Verified in-browser on /design-system: Field supplies the id, aria-describedby switches hint->error, aria-invalid set only when invalid, placeholder and per-option disabled both work."
+    },
+    {
+      "id": "F002",
+      "gate": "G3",
+      "title": "Team API client + types",
+      "priority": "critical",
+      "depends_on": [],
+      "description": "services/team.ts over apiRequest for all eight routes, plus ProjectMember / PendingInvite / MembersResponse / InvitePreview types mirroring api/team.ts and api/invites.ts response shapes.",
+      "steps": [
+        "teamAPI.members(slug) returns { members, invites, canManage } with ISO date strings",
+        "teamAPI.invite() returns inviteUrl on 201 and throws a typed ApiError carrying status 409 when the address is already a member",
+        "teamAPI.removeMember / setRole / transferOwnership / revokeInvite each hit the documented path and method",
+        "invitesAPI.preview(token) and invitesAPI.accept(token) hit /api/invites, NOT /api/projects/:slug (T-D2)",
+        "FAILURE CASE: a 403 from setRole on the owner's row surfaces the server's message verbatim, not 'Request failed (403)'"
+      ],
+      "passes": true,
+      "notes": "Verified against the running API — 409 (already a member) and 403/410 all surface the server message verbatim."
+    },
+    {
+      "id": "F003",
+      "gate": "G3",
+      "title": "useMembers hook",
+      "priority": "high",
+      "depends_on": [
+        "F002"
+      ],
+      "description": "Loads the roster, exposes canManage, and owns the mutations so the page stays presentational. Refetches after every mutation rather than patching local state — role and ownership changes have server-side side effects (T-D4, T-D5) the client cannot reproduce.",
+      "steps": [
+        "Loads on mount keyed on slug; switching slug re-loads rather than showing the previous project's roster",
+        "canManage comes from the server response, not from a locally inferred role",
+        "A failed mutation leaves the roster unchanged and surfaces the message",
+        "FAILURE CASE: hook called with slug === undefined does not fetch and does not throw"
+      ],
+      "passes": true,
+      "notes": "Verified: roster reloads after every mutation; the leave path skips the refetch, which would 404 on the way out."
+    },
+    {
+      "id": "F004",
+      "gate": "G3",
+      "title": "Members tab + /p/:slug/members route",
+      "priority": "critical",
+      "depends_on": [
+        "F003",
+        "F001"
+      ],
+      "description": "Member rows (avatar, name, email, role, joined), pending-invite list for owner/admin only, and the Members entry in ProjectTabs.",
+      "steps": [
+        "/p/:slug/members renders the roster with the owner first",
+        "Signed in as a `member`, the pending-invite section is absent entirely (not just disabled) — the server sends invites: []",
+        "The Members tab appears in ProjectTabs for every role",
+        "Loading shows a skeleton, and a project the caller cannot see shows the not-found surface rather than an empty table",
+        "FAILURE CASE: a project with exactly one member (the owner) renders that one row and no empty state"
+      ],
+      "passes": true,
+      "notes": "Verified as owner (3 roles rendered, owner first) and as a plain member (no invite button, no Selects, no pending-invite section at all)."
+    },
+    {
+      "id": "F005",
+      "gate": "G3",
+      "title": "Invite dialog with copy-once link",
+      "priority": "critical",
+      "depends_on": [
+        "F004"
+      ],
+      "description": "Email + role, POST, then the returned inviteUrl shown once with a Copy button and an explicit 'this is the only time you will see this' warning — the same treatment the ingest key gets.",
+      "steps": [
+        "Submitting a valid address returns a link that appears in the dialog with a Copy button",
+        "Closing and reopening the dialog does NOT show the previous link again",
+        "A 409 (already a member) shows the server's message next to the field and does not close the dialog",
+        "A 429 (rate limit, 20/hr per project) shows the server's message rather than a generic failure",
+        "FAILURE CASE: an empty or malformed email is rejected client-side before the request, and the button stays disabled"
+      ],
+      "passes": true,
+      "notes": "Verified: link shown once, reopening the dialog shows a blank form, 409 keeps the dialog open with the server message."
+    },
+    {
+      "id": "F006",
+      "gate": "G3",
+      "title": "Inline role editing + invite revoke",
+      "priority": "high",
+      "depends_on": [
+        "F005",
+        "F001"
+      ],
+      "description": "Per-row role Select for owner/admin, and a Revoke action on each pending invite.",
+      "steps": [
+        "Changing a member's role from the row Select persists and the roster re-sorts (admins above members)",
+        "The owner's row Select is disabled with a hint pointing at transfer-ownership (T-D3)",
+        "As an admin, attempting the owner's row is impossible in the UI and 403s at the API if forced",
+        "Revoking a pending invite removes it from the list",
+        "FAILURE CASE: a role change that fails leaves the Select showing the OLD role, not the attempted one"
+      ],
+      "passes": true,
+      "notes": "Verified: role change persisted and re-sorted the roster; owner row renders a Badge with no control; revoke removed the pending invite."
+    },
+    {
+      "id": "F007",
+      "gate": "G4",
+      "title": "/invite/:token accept screen",
+      "priority": "critical",
+      "depends_on": [
+        "F002"
+      ],
+      "description": "Preview then accept. Lives under ProtectedRoute but outside AppLayout — an invitee may have zero projects, so the workspace chrome has nothing to render.",
+      "steps": [
+        "Signed out, /invite/:token bounces to /login and returns to the same invite URL after signing in",
+        "Signed in as the invited address, the screen names the project, the inviter and the offered role, and Accept joins then lands on the project",
+        "Signed in as a DIFFERENT address, the wrong-email state renders before any accept attempt (emailMatches: false) and names which address the invite was sent to",
+        "An expired, revoked or already-accepted token renders the dead-link state (410) with 'ask your teammate for a new link'",
+        "FAILURE CASE: a garbage token renders not-found (404), not a crash or an infinite spinner"
+      ],
+      "passes": true,
+      "notes": "All four states verified in-browser — signed-out bounce to /login and back, happy-path accept landing on /p/test/issues, wrong-address, 410 dead link, 404 garbage token."
+    },
+    {
+      "id": "F008",
+      "gate": "G4",
+      "title": "invite notification in the bell",
+      "priority": "high",
+      "depends_on": [],
+      "description": "NotificationKind gains 'invite'; the bell renders it with its own icon and copy. It deliberately does NOT navigate — accepting requires the token, which is never stored, so there is no in-app destination.",
+      "steps": [
+        "An invite notification renders with the person-add icon, distinct from the regression icon",
+        "Clicking it marks it read and does NOT navigate to /p/:slug/* (the recipient is not a member yet and would 404)",
+        "A regression notification still navigates to its issue — no regression in the existing behaviour",
+        "FAILURE CASE: an invite notification for a project the user later joined still renders without throwing on the null issueId"
+      ],
+      "passes": true,
+      "notes": "Known gap, named not hidden: the bell cannot offer an Accept button because the token is not in the row. The real fix is GET /api/invites/mine (authenticated by email, no token) — a backend addition, out of G4's scope. | Verified: the invite row renders with its own icon and the follow-up hint, and clicking it marks read without navigating. Regression rows still navigate."
+    },
+    {
+      "id": "F009",
+      "gate": "G5",
+      "title": "Leave project",
+      "priority": "high",
+      "depends_on": [
+        "F004"
+      ],
+      "description": "Self-removal from the Members page via ConfirmDialog. DELETE /:slug/members/:selfId is the same route as removal — the server already distinguishes self.",
+      "steps": [
+        "A non-owner member sees Leave project; confirming lands them on /projects and the project is gone from the list",
+        "The owner sees Leave disabled with the reason (transfer first) — the server 409s, and the UI should say so before the click",
+        "Cancelling the dialog leaves membership intact",
+        "FAILURE CASE: a 409 from the server still surfaces its message rather than silently navigating away"
+      ],
+      "passes": true,
+      "notes": "Verified: left the project, landed on /projects, project gone from the list. Owner sees the disabled explanation instead."
+    },
+    {
+      "id": "F010",
+      "gate": "G5",
+      "title": "Remove member",
+      "priority": "high",
+      "depends_on": [
+        "F006"
+      ],
+      "description": "Row action for owner/admin, behind ConfirmDialog that names T-D5's blast radius: their tickets get unassigned with a system comment, and their notifications for this project are deleted.",
+      "steps": [
+        "Removing a member drops the row and the roster count",
+        "The dialog states the ticket-unassignment consequence before the click, not after",
+        "The response's ticketsUnassigned count is surfaced when non-zero",
+        "The owner's row offers no Remove action at all (409 territory)",
+        "FAILURE CASE: removing yourself through this path routes to the Leave flow's navigation, not a stale roster"
+      ],
+      "passes": true,
+      "notes": "Verified including the ticket count — removing a member with one assigned ticket reported \"1 ticket unassigned\"."
+    },
+    {
+      "id": "F011",
+      "gate": "G5",
+      "title": "Transfer ownership",
+      "priority": "high",
+      "depends_on": [
+        "F006",
+        "F001"
+      ],
+      "description": "Owner-only. Select over existing members (T-D4: the target must already be a member), behind ConfirmDialog — the one action in the product the actor cannot undo alone.",
+      "steps": [
+        "Only the owner sees the transfer control; an admin does not",
+        "The Select lists existing members excluding the owner themselves",
+        "Confirming transfers, and the page re-renders with the caller now shown as admin and the owner-only controls gone",
+        "The dialog says plainly that this cannot be undone without the new owner's cooperation",
+        "FAILURE CASE: with no other members, the transfer control explains why it is unavailable instead of opening an empty Select"
+      ],
+      "passes": true,
+      "notes": "Verified end to end: transfer flipped the roster, the caller re-rendered as admin with owner-only controls gone, and Project.ownerId + the owner member row agree (T-D4)."
+    },
+    {
+      "id": "F012",
+      "gate": "G3",
+      "title": "Select in the design-system showcase",
+      "priority": "medium",
+      "depends_on": [
+        "F001"
+      ],
+      "description": "Add Select to the Form kit section of /design-system and update the form-kit status comment in the design-system index, which currently lists Select as unbuilt.",
+      "steps": [
+        "/design-system renders a working Select in the Form kit section",
+        "The 'STILL UNBUILT' comment in components/design-system/index.ts no longer names Select",
+        "FAILURE CASE: the showcase Select is interactive, not a dead render"
+      ],
+      "passes": true,
+      "notes": "Verified on /design-system — two live Selects, one valid one showing the error state."
+    }
+  ]
+}

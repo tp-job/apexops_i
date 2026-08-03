@@ -219,7 +219,13 @@ export interface PromotedTicket {
 
 // ── Notifications (alerting) ─────────────────────────────────
 
-export type NotificationKind = 'regression';
+/**
+ * `invite` is written when an invited address already has an account (T-D1) —
+ * the common case in a small team. Unlike `regression` it carries no `issueId`
+ * and, deliberately, no token, so it announces the invitation without being a
+ * way to accept it. See `NotificationBell` for why that row does not navigate.
+ */
+export type NotificationKind = 'regression' | 'invite';
 
 export interface AppNotification {
     id: number;

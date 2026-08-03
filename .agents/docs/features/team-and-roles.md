@@ -1,6 +1,6 @@
 # Team invites + roles that mean something — feature spec
 
-> Status: **G1 + G2 shipped 2026-08-01 (backend complete). G3–G5 open — all three are UI.**
+> Status: **Complete. G1 + G2 shipped 2026-08-01 (backend); G3 + G4 + G5 shipped 2026-08-03 (UI).**
 > Owner: product + full-stack. Scheduled **Sprint 6**.
 > Closes the sprint plan's carried-forward item 1 (*"`authorize()` has one caller"*) at the
 > project level, and turns [`project-workspaces-and-sdk.md`](project-workspaces-and-sdk.md)'s
@@ -226,9 +226,9 @@ Plus `invite` added to `NotificationKind`.
 |---|---|---|
 | ~~**G1**~~ | ✅ **Shipped 2026-08-01.** Assignee membership check on ticket create + update **+ issue-promote** (closes finding 3); **every ticket write route and both comment routes scoped to membership** (closes finding 3b); permission matrix T-D3 asserted against the API on all six project routes; `canAdminister` joined by an explicit `isOwner` | 1.5d |
 | ~~**G2**~~ | ✅ **Shipped 2026-08-01.** `ProjectInvite` + `InviteStatus` + `NotificationKind.invite` pushed; all eight routes live in [`api/team.ts`](../../../app/server/src/api/team.ts) (project-scoped) and [`api/invites.ts`](../../../app/server/src/api/invites.ts) (root-mounted, T-D2); SHA-256 token hashing in [`lib/invites.ts`](../../../app/server/src/lib/invites.ts), 7-day expiry, 20/hour **per project**, archived-project 409. **G5's three actions — leave, remove with the T-D5 transaction, transfer — shipped with it**, because they are the same three routes; G5 is now UI only. 59/59 exit assertions green against the running API | 2d |
-| **G3** | `Select` primitive (**still unbuilt** — see the form-kit table in the sprint plan) + Members tab on `/p/:slug/members`: member rows, role editing, pending-invite list, invite dialog with copy-link | 2d |
-| **G4** | `/invite/:token` accept screen — signed-out → login-then-return, wrong-email state, expired state; the `invite` notification | 1.0d |
-| **G5** | *(P1)* Leave project, remove member with T-D5's transaction, transfer ownership with confirmation — **backend shipped in G2; what remains is the UI and the `ConfirmDialog` on transfer** | 1.5d → ~0.5d |
+| ~~**G3**~~ | ✅ **Shipped 2026-08-03.** [`Select`](../../../app/client/src/components/design-system/Select.tsx) — native `<select>`, `Field`-wired, in the showcase — plus [`ProjectMembers`](../../../app/client/src/pages/ProjectMembers.tsx) on `/p/:slug/members`: rows, inline role `Select`, pending-invite list (owner/admin only), invite dialog with copy-once link | 2d |
+| ~~**G4**~~ | ✅ **Shipped 2026-08-03.** [`InviteAccept`](../../../app/client/src/pages/InviteAccept.tsx) at `/invite/:token` — inside `ProtectedRoute`, **outside** `AppLayout`; all four states verified (login-then-return, accept, wrong address, 410/404). `invite` added to `NotificationKind` and rendered in the bell | 1.0d |
+| ~~**G5**~~ | ✅ **Shipped 2026-08-03.** Leave, remove (with T-D5's blast radius named in the dialog and `ticketsUnassigned` surfaced) and transfer ownership, all three behind `ConfirmDialog` | ~0.5d |
 
 **Load: 6.5d at P0, 8.0d with P1 — 0.5d over a 7.5d capacity, named now rather than discovered in
 week 2.** *Revised after G2: the remaining work is 3.5d of client, and the 0.5d overrun is gone —
@@ -271,6 +271,18 @@ Run for real, two browsers, two accounts.
 | Pending invites rot into a list of 40 dead rows | The Members panel stops being trustworthy | 7-day expiry, one live invite per address, revoke in the same panel |
 | `Select` is unbuilt and every role control needs one | A form-kit estimate is low again — the third sprint running | Priced inside G3 explicitly, not assumed |
 | Removal leaves work assigned to someone who cannot see it | Tickets stall silently — the failure mode this product exists to prevent | T-D5, exit step 6 |
+
+## Known gap, carried forward from G4
+
+**The `invite` notification announces an invitation but cannot accept it.** Accepting requires the
+token, and the token is deliberately never stored — so the bell row has no destination, and
+`/p/:slug/*` would 404 the recipient, who is not a member yet. The row therefore marks itself read
+and tells the user to open the link they were sent.
+
+The fix is a `GET /api/invites/mine` that resolves pending invites by the **caller's own verified
+address** rather than by token, plus an accept-by-id companion. That is strictly *stronger* than the
+token path — it is bound to an authenticated identity rather than to a secret that can be forwarded —
+but it is a backend addition, so it was named rather than smuggled into a UI gate.
 
 ## Not in scope
 
