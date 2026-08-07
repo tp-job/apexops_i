@@ -45,7 +45,7 @@ const PRIMARY: NavItem[] = [
 ];
 
 const ADMIN: NavItem[] = [
-    { to: '/admin/users', label: 'Users', icon: <FiUsers size={18} /> },
+    { to: '/admin/users', label: 'Users', icon: <FiUsers size={18} />, ready: true },
     { to: '/admin/docs', label: 'Documentation', icon: <FiBookOpen size={18} /> },
     { to: '/admin/console', label: 'Console Monitor', icon: <FiMonitor size={18} /> },
 ];

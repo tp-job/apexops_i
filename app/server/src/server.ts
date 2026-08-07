@@ -340,6 +340,7 @@ app.get('/api/health', (_req: Request, res: Response) => {
 
 // ── API Routes ───────────────────────────────────────────────
 import authRoutes from './api/auth';
+import usersRoutes from './api/users';
 import logsRoutes from './api/logs';
 import ticketsRoutes from './api/tickets';
 import notesRoutes from './api/notes';
@@ -358,6 +359,9 @@ import ingestRoutes from './api/ingest';
 app.use('/api/ingest', ingestRoutes);
 
 app.use('/api/auth', authRoutes);
+// Admin-only throughout — the router gates itself, so it is safe to mount here
+// alongside the ordinary routes rather than behind a separate prefix.
+app.use('/api/users', usersRoutes);
 app.use('/api/logs', logsRoutes);
 app.use('/api/projects', projectsRoutes);
 // Root-mounted on purpose (T-D2): an invitee is not yet a member, so an accept

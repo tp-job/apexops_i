@@ -1,7 +1,7 @@
 import type { FC } from 'react';
 import { FiLogOut, FiMenu, FiMoon, FiSun } from 'react-icons/fi';
 import { useAuth } from '@/context/auth-context';
-import { useTheme } from '@/context/theme-context';
+import { useThemeControl } from '@/hooks/useThemeControl';
 import { Badge } from '@/components/design-system';
 import ProjectSwitcher from './ProjectSwitcher';
 import NotificationBell from './NotificationBell';
@@ -17,7 +17,11 @@ import NotificationBell from './NotificationBell';
  */
 const Topbar: FC<{ onOpenNav: () => void }> = ({ onOpenNav }) => {
     const { user, logout } = useAuth();
-    const { isDark, toggleTheme } = useTheme();
+    // `useThemeControl`, not `useTheme`: the top bar is rendered on every
+    // authenticated page, so this is also where the account's stored theme gets
+    // applied after sign-in (spec D7). Toggling here persists to the account
+    // rather than to this browser only.
+    const { isDark, changeTheme } = useThemeControl();
 
     const initials = [user?.firstName?.[0], user?.lastName?.[0]].filter(Boolean).join('').toUpperCase() || '?';
     const fullName = [user?.firstName, user?.lastName].filter(Boolean).join(' ') || 'Signed in';
@@ -40,7 +44,7 @@ const Topbar: FC<{ onOpenNav: () => void }> = ({ onOpenNav }) => {
 
                 <button
                     type="button"
-                    onClick={toggleTheme}
+                    onClick={() => void changeTheme(isDark ? 'light' : 'dark')}
                     aria-label={isDark ? 'Switch to light theme' : 'Switch to dark theme'}
                     className="grid h-9 w-9 place-items-center rounded-xl text-gray-600 transition-colors hover:bg-black/5 dark:text-gray-300 dark:hover:bg-white/10"
                 >

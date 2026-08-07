@@ -7,6 +7,7 @@ import {
     FiLogOut,
     FiMonitor,
     FiShield,
+    FiSliders,
     FiUser,
 } from 'react-icons/fi';
 import {
@@ -15,16 +16,19 @@ import {
     ConfirmDialog,
     Field,
     Input,
+    Select,
     SkeletonText,
     Surface,
 } from '@/components/design-system';
 import { PageHeader } from '@/components/common/layout';
 import { useAuth } from '@/context/auth-context';
+import { useThemeControl } from '@/hooks/useThemeControl';
 import { authApi } from '@/services/auth';
 import { describeUserAgent, sessionsAPI, type ActiveSession } from '@/services/sessions';
 import { useToast } from '@/context/toast-context';
 import { getErrorMessage } from '@/utils/error';
 import { formatDate, relativeTime } from '@/utils/format';
+import { guessTimezone, timezoneOptions } from '@/utils/timezones';
 
 /**
  * `/settings` — account settings.
@@ -42,13 +46,22 @@ import { formatDate, relativeTime } from '@/utils/format';
  * `/p/:slug/settings` because they are per-project (S-D4): "alert me about this
  * project" is the useful control; "alert me about everything" is not.
  *
- * Scope note: `sessionTimeout` is stored but not yet enforced (S-D2 needs the
- * 401-refresh path), so it is not surfaced as a control either.
+ * As of Sprint 5 (2026-08-04) three more controls clear that bar and appear here:
+ * **session timeout** (now a real idle timeout — it sizes the access token and
+ * the refresh token's sliding window), **theme** (persisted to the account, so it
+ * follows you to another browser) and **timezone** (already enforced by the notes
+ * calendar; it was a free-text box, which is how an unparseable value silently
+ * fell back to a default).
+ *
+ * **Language is still absent, and that is the same rule, not an oversight.**
+ * There is no i18n framework and no message catalogue, so a language select would
+ * be exactly the false promise S-D1 exists to prevent.
  */
 const Settings: FC = () => {
     // `updateProfile` from context, not the raw service: it writes through to the
     // shared user state, so the Topbar's name and initials update with the form.
-    const { user, updateProfile } = useAuth();
+    const { user, updateProfile, settings, updateSettings } = useAuth();
+    const { preference, changeTheme } = useThemeControl();
     const toast = useToast();
 
     const [profile, setProfile] = useState({
@@ -64,6 +77,10 @@ const Settings: FC = () => {
     const [confirmPassword, setConfirmPassword] = useState('');
     const [savingPassword, setSavingPassword] = useState(false);
     const [passwordError, setPasswordError] = useState<string | null>(null);
+
+    const [timezone, setTimezone] = useState('');
+    const [savingTimezone, setSavingTimezone] = useState(false);
+    const [savingTimeout, setSavingTimeout] = useState(false);
 
     const [sessions, setSessions] = useState<ActiveSession[]>([]);
     const [loadingSessions, setLoadingSessions] = useState(true);
@@ -83,6 +100,10 @@ const Settings: FC = () => {
             timezone: user.timezone ?? '',
             bio: user.bio ?? '',
         });
+        // Falls back to the browser's zone only when nothing is stored — never
+        // overwriting a value the user chose with one inferred from where they
+        // happen to be sitting.
+        setTimezone(user.timezone ?? guessTimezone() ?? '');
     }, [user?.id, user]);
 
     const loadSessions = useCallback(async () => {
@@ -145,6 +166,44 @@ const Settings: FC = () => {
             setPasswordError(getErrorMessage(err, 'Could not change password'));
         } finally {
             setSavingPassword(false);
+        }
+    };
+
+    /**
+     * Timezone applies immediately — no Save button.
+     *
+     * It is a single value with an observable effect (the notes calendar files a
+     * note under a different day), so a Save button would add a step and a
+     * dirty-state to something that either worked or did not. The profile form
+     * above keeps its button because it is eight fields that should land together.
+     */
+    const saveTimezone = async (next: string) => {
+        const previous = timezone;
+        setTimezone(next);
+        setSavingTimezone(true);
+        try {
+            await updateProfile({ timezone: next });
+            toast.showSuccess('Timezone updated');
+        } catch (err) {
+            // Reverted on failure: leaving the select showing a zone the server
+            // does not hold would make every date on the calendar look wrong for
+            // a reason nothing on screen explains.
+            setTimezone(previous);
+            toast.showError(getErrorMessage(err, 'Could not save timezone'));
+        } finally {
+            setSavingTimezone(false);
+        }
+    };
+
+    const saveTimeout = async (minutes: number) => {
+        setSavingTimeout(true);
+        try {
+            await updateSettings({ sessionTimeout: minutes });
+            toast.showSuccess('Session timeout updated');
+        } catch (err) {
+            toast.showError(getErrorMessage(err, 'Could not save session timeout'));
+        } finally {
+            setSavingTimeout(false);
         }
     };
 
@@ -219,13 +278,6 @@ const Settings: FC = () => {
                             disabled={savingProfile}
                         />
                     </Field>
-                    <Field label="Timezone" id="timezone">
-                        <Input
-                            value={profile.timezone}
-                            onChange={(e) => setProfile((p) => ({ ...p, timezone: e.target.value }))}
-                            disabled={savingProfile}
-                        />
-                    </Field>
                 </div>
 
                 {profileError && (
@@ -244,6 +296,52 @@ const Settings: FC = () => {
                         </span>
                     )}
                 </div>
+            </Surface>
+
+            {/* ── Preferences ─────────────────────────────────────── */}
+            <Surface variant="panel" padding="md" className="flex flex-col gap-5">
+                <div className="flex items-center gap-2">
+                    <FiSliders size={15} className="text-gray-400" />
+                    <h2 className="font-heading text-base font-bold text-brand-dark dark:text-white">
+                        Preferences
+                    </h2>
+                </div>
+
+                <div className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
+                    <Field
+                        label="Theme"
+                        hint="Saved to your account, so it follows you to another browser."
+                        id="theme"
+                    >
+                        <Select
+                            value={preference}
+                            onChange={(e) => void changeTheme(e.target.value as 'light' | 'dark' | 'system')}
+                            options={[
+                                { value: 'system', label: 'Match my system' },
+                                { value: 'light', label: 'Light' },
+                                { value: 'dark', label: 'Dark' },
+                            ]}
+                        />
+                    </Field>
+
+                    <Field
+                        label="Timezone"
+                        hint="Used to decide which day your notes and calendar entries fall on."
+                        id="timezone"
+                    >
+                        <Select
+                            value={timezone}
+                            disabled={savingTimezone}
+                            placeholder="Choose a timezone"
+                            onChange={(e) => void saveTimezone(e.target.value)}
+                            options={timezoneOptions(timezone)}
+                        />
+                    </Field>
+                </div>
+
+                <p className="text-xs text-gray-400">
+                    Both apply immediately — there is nothing to save.
+                </p>
             </Surface>
 
             {/* ── Password ────────────────────────────────────────── */}
@@ -342,6 +440,27 @@ const Settings: FC = () => {
                     and change your password.
                 </p>
 
+                <div className="max-w-sm">
+                    <Field
+                        label="Sign me out after"
+                        hint="Idle time, not total time. Staying active keeps you signed in; the new value applies the next time your session renews."
+                        id="session-timeout"
+                    >
+                        <Select
+                            value={String(settings?.sessionTimeout ?? 480)}
+                            disabled={savingTimeout || !settings}
+                            onChange={(e) => void saveTimeout(Number(e.target.value))}
+                            options={[
+                                { value: '15', label: '15 minutes' },
+                                { value: '30', label: '30 minutes' },
+                                { value: '60', label: '1 hour' },
+                                { value: '240', label: '4 hours' },
+                                { value: '480', label: '8 hours' },
+                            ]}
+                        />
+                    </Field>
+                </div>
+
                 {sessionsError && (
                     <p className="flex items-center gap-2 text-sm text-global-red">
                         <FiAlertTriangle size={15} />
@@ -368,13 +487,26 @@ const Settings: FC = () => {
                                         {formatDate(s.expiresAt)}
                                     </p>
                                 </div>
-                                <AccentButton
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => void revokeSession(s.id)}
-                                >
-                                    Sign out
-                                </AccentButton>
+                                {/* No per-row control for the session you are
+                                    using. The server refuses it with a 409 too —
+                                    this only stops the click from being offered.
+                                    Before Sprint 5 the `current` flag was always
+                                    false, so this row DID show the button and
+                                    signing yourself out was the first thing the
+                                    page invited you to do. */}
+                                {s.current ? (
+                                    <span className="shrink-0 text-[11px] text-gray-400">
+                                        Sign out everywhere
+                                    </span>
+                                ) : (
+                                    <AccentButton
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={() => void revokeSession(s.id)}
+                                    >
+                                        Sign out
+                                    </AccentButton>
+                                )}
                             </div>
                         ))}
                     </div>

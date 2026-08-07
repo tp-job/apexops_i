@@ -1,6 +1,29 @@
 # Settings — function settings + account settings (G0 scope proposal)
 
-> Status: **proposed 2026-07-27**, awaiting decision lock on S-D1…S-D5.
+> ## Status: **SHIPPED.** S1/S2/S4a on 2026-07-31, S3/S4b/S5 on 2026-08-04.
+>
+> S-D1…S-D5 were locked as written and every one of them survived contact. Build record:
+> [`build-spec.md`](../../../build-spec.md), [`progress.md`](../../../progress.md),
+> [`feature-list.json`](../../../feature-list.json) — 17/17 features, 62/62 API assertions.
+>
+> **Three amendments made during the build**, each because implementing revealed something this
+> document could not have known:
+>
+> 1. **S-D2 was not sufficient as written.** "Sign the access token with `sessionTimeout` as
+>    `expiresIn`" enforces nothing a user can observe — the client silently re-issues an expired
+>    token, so every timeout value feels the same. The refresh token's expiry became a sliding idle
+>    window as well. See D1 in the build spec.
+> 2. **The old default had to be migrated before enforcement.** Every row held 30 minutes by column
+>    default, chosen by nobody. Enforcing it as written would have landed this sprint as *"the app
+>    started logging me out."* Untouched rows moved to 480 first.
+> 3. **S-D5's token-invalidation worry needed no token machinery.** `authorize()` resolves the role
+>    from the database per request, the same shape Sprint 6 used for project roles.
+>
+> The risk table at the bottom of this file is now a scorecard: every row was either prevented or
+> found live and fixed. The one that had already gone wrong is **"revoking the current session"** —
+> it shipped broken on 2026-07-31 and was caught while scoping this build.
+
+> Original status: **proposed 2026-07-27**, awaiting decision lock on S-D1…S-D5.
 > Owner: product + full-stack. Supersedes the "Account Settings tabs, 2d" line item that earlier
 > sprint plans carried: that estimate assumed the toggles were real. They are not — see below.
 >
@@ -197,12 +220,16 @@ ticket attachments) · account deletion/export.
 
 ## Risks / pre-mortem
 
-| Risk | Impact | Mitigation |
+| Risk | Impact | Outcome |
 |---|---|---|
-| **The 8 dead toggles ship anyway because they're already in the API** | The page lies to users about 2FA and privacy; nobody trusts any setting afterwards | S-D1 + S4 are P0 and the removal is a *deliverable*, not a cleanup task. The demo script asserts every visible switch is observable. |
-| `sessionTimeout` implemented as a client timer | Looks done, enforces nothing, and is the kind of bug that is only found during an incident | S-D2 fixes it at token-issue time; demo asserts on the token's `exp`. |
-| Role UI ships before endpoints are gated | Sprint goal is false on delivery day — promotion grants nothing | S5 bundles gating and UI in one gate; they cannot ship apart. |
-| Last-admin guard forgotten | An instance with zero admins and no recovery path | Explicit S5 acceptance criterion, tested by trying to demote the only admin. |
-| Revoking the current session | Every user signs themselves out on first visit | Current session labelled and excluded from per-row revoke. |
-| Email change with no verification | Account identity changes silently; `emailVerified` goes stale | v1 makes email read-only and says why. |
-| Two settings surfaces drift into duplicates | Users can't predict where anything lives | S-D4's boundary rule is written down before either is built. |
+| ~~The 8 dead toggles ship anyway~~ | — | ✅ **Prevented.** All ten are absent from the UI, from `updateSettingsSchema` and from the `GET /profile` response. `PUT /settings {twoFactorAuth:true}` answers 400 and writes nothing. Columns kept, inert. |
+| ~~`sessionTimeout` implemented as a client timer~~ | — | ✅ **Prevented, and the honest version went further than S-D2.** It sizes the access token *and* the refresh token's sliding idle window. Asserted on the decoded `exp`: 15 minutes → 900s. |
+| ~~Role UI ships before endpoints are gated~~ | — | ✅ **Prevented.** `api/users.ts` gates the whole router before `/admin/users` existed. The same access token: 403 → 200 after promotion → 403 after demotion. |
+| ~~Last-admin guard forgotten~~ | — | ✅ **Prevented.** Demote *and* deactivate both answer 409 for the last active admin, checked inside the write's transaction so two concurrent demotions cannot both win. |
+| **Revoking the current session** | Every user signs themselves out on first visit | ⚠️ **This one actually happened.** It shipped on 2026-07-31 with `current` computed from `req.body` on a **GET** — always `false`. Found while scoping this build, before anyone hit it. Fixed via a `sid` claim; the server now answers 409 and the UI shows no control. |
+| ~~Email change with no verification~~ | — | ✅ **Prevented.** Email is read-only in the UI and says why. |
+| ~~Two settings surfaces drift into duplicates~~ | — | ✅ **Held.** Alert preferences stayed per-project; `/settings` links to them rather than duplicating them. Instance administration went to `/admin/users`, not into `/settings`, by the same rule. |
+
+**One risk this table did not have**, found by verification rather than review: two logins in the
+same second produced a byte-identical refresh JWT and violated the unique index — a 500 on the second
+login, true of the implementation this spec was written against. Fixed with a random `jti`.

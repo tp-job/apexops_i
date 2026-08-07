@@ -13,6 +13,7 @@ import ProjectIssueDetail from '@/pages/ProjectIssueDetail';
 import ProjectOverview from '@/pages/ProjectOverview';
 import ProjectBoard from '@/pages/ProjectBoard';
 import Settings from '@/pages/Settings';
+import AdminUsers from '@/pages/AdminUsers';
 import ProjectSettings from '@/pages/ProjectSettings';
 import ProjectMembers from '@/pages/ProjectMembers';
 import InviteAccept from '@/pages/InviteAccept';
@@ -83,6 +84,12 @@ const AppRoutes: FC = () => (
                     {/* Account settings. Alert preferences are NOT here — they are
                         per-project (spec S-D4) and live on /p/:slug/settings. */}
                     <Route path="/settings" element={<Settings />} />
+
+                    {/* Instance administration, deliberately NOT under /settings:
+                        S-D4's rule is that /settings is about *you*, and who may
+                        sign in to this instance is not. The page refuses a
+                        non-admin, and so does every route it calls. */}
+                    <Route path="/admin/users" element={<AdminUsers />} />
                     <Route path="/p/:slug/settings" element={<ProjectSettings />} />
                     <Route path="/p/:slug/members" element={<ProjectMembers />} />
                 </Route>

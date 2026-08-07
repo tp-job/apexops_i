@@ -25,6 +25,11 @@ model User {
   gender         String?
   birthDate      DateTime? @map("birth_date") @db.Date
   language       String?   @default("ไทย (Thai)")
+  /// 'light' | 'dark' | 'system'. Persisted per account so the choice follows you
+  /// to a new browser (spec D7) — localStorage alone made it a per-device quirk.
+  /// `language` above is deliberately NOT surfaced anywhere: there is no i18n
+  /// framework, so a language control would be exactly the dead switch S-D1 bans.
+  theme          String?   @default("system")
   isActive       Boolean?  @default(true) @map("is_active")
   emailVerified  Boolean?  @default(false) @map("email_verified")
   createdAt      DateTime  @default(now()) @map("created_at")
@@ -57,7 +62,14 @@ model UserSettings {
   weeklyReports      Boolean  @default(false) @map("weekly_reports")
   teamUpdates        Boolean  @default(true) @map("team_updates")
   twoFactorAuth      Boolean  @default(false) @map("two_factor_auth")
-  sessionTimeout     Int      @default(30) @map("session_timeout")
+  /// Idle timeout in minutes (spec D1): it bounds the refresh token's sliding
+  /// window, not just the access token, because a shorter access token alone is
+  /// invisible — the client silently re-issues it.
+  ///
+  /// Default moved 30 -> 480 on 2026-08-04 (D3). Nobody ever chose 30; it was a
+  /// column default from a page that had no control for it. Enforcing it as
+  /// written would have shipped this sprint as "the app started logging me out".
+  sessionTimeout     Int      @default(480) @map("session_timeout")
   loginAlerts        Boolean  @default(true) @map("login_alerts")
   profileVisibility  Boolean  @default(true) @map("profile_visibility")
   activityStatus     Boolean  @default(true) @map("activity_status")
@@ -546,6 +558,16 @@ model RefreshToken {
   /// Nullable: sessions created before this landed have no context to show.
   userAgent String? @map("user_agent")
   ipAddress String? @map("ip_address")
+
+  /// The hard end of this session, stamped once at login and CARRIED FORWARD
+  /// through every rotation (spec D2). `expiresAt` is now a sliding idle window
+  /// (D1), so without this a session refreshed just inside its window would never
+  /// end — and neither would a stolen refresh token. Refusing to rotate past this
+  /// is what makes "sessions expire" true rather than nominal.
+  ///
+  /// Nullable so rows predating it keep working: they are treated as uncapped and
+  /// stamped on their first rotation, rather than logging everyone out on deploy.
+  absoluteExpiresAt DateTime? @map("absolute_expires_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

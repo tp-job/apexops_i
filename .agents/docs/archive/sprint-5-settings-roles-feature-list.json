@@ -1,0 +1,301 @@
+{
+  "build": "Sprint 5 — settings that enforce, roles that mean something",
+  "spec": "build-spec.md",
+  "note": "Sprint 5's S1/S2 gates and most of S4 shipped early on 2026-07-31 (`/settings` with profile, password and the session list; `updateSettingsSchema` pruned to one field). This ledger covers the remaining half: S3 (sessionTimeout enforced + Preferences), the leftover of S4 (the ten inert toggles are still returned by GET /profile), and S5 (roles that mean something). It also carries one live bug found while scoping — the session list's `current` flag is always false, which is the exact risk row settings.md named. Sprint 3's refresh-and-retry path is what unblocked S3; do not re-litigate that dependency. Previous ledgers archived under .agents/docs/archive/.",
+  "features": [
+    {
+      "id": "F001",
+      "title": "Schema: absoluteExpiresAt, User.theme, sessionTimeout default",
+      "priority": "critical",
+      "depends_on": [],
+      "description": "D2 + D3 + D7. `RefreshToken.absoluteExpiresAt` (nullable — rows predating it are uncapped until first rotation), `User.theme` defaulting to 'system', and the `UserSettings.sessionTimeout` column default moved 30 -> 480.",
+      "steps": [
+        "`npm run db:push` from app/server applies cleanly and `prisma generate` picks up all three fields",
+        "A brand-new user row has theme='system' and settings.sessionTimeout=480",
+        "Existing refresh_tokens rows read back with absoluteExpiresAt = null rather than failing",
+        "FAILURE CASE: nothing in the codebase reads absoluteExpiresAt as non-nullable"
+      ],
+      "passes": true,
+      "notes": "Pushed 2026-08-04. absoluteExpiresAt nullable, User.theme default system (backfilled onto existing rows), sessionTimeout default 480. Verified by probe."
+    },
+    {
+      "id": "F002",
+      "title": "One-time migration of untouched sessionTimeout (30 -> 480)",
+      "priority": "critical",
+      "depends_on": [
+        "F001"
+      ],
+      "description": "D3. Rows still holding exactly the old column default move to 480 before enforcement lands, so no existing account starts being signed out every half hour because of a value nobody chose.",
+      "steps": [
+        "Before: at least one user_settings row holds sessionTimeout=30",
+        "After running the migration script, that row holds 480",
+        "A row holding a deliberately-chosen non-default value (e.g. 60) is left untouched",
+        "FAILURE CASE: running the script a second time changes nothing (idempotent)"
+      ],
+      "passes": true,
+      "notes": "7 rows moved 30 -> 480; a deliberately-set 60 left untouched; re-run reports \"Nothing to do\". npm run migrate:session-timeout."
+    },
+    {
+      "id": "F003",
+      "title": "Access token signed with the user's sessionTimeout",
+      "priority": "critical",
+      "depends_on": [
+        "F001",
+        "F002"
+      ],
+      "description": "D1, first half. `generateAccessToken` resolves the user's sessionTimeout and uses it as expiresIn, rather than the fixed JWT_EXPIRY. Criterion 1.",
+      "steps": [
+        "Set sessionTimeout=5, log in, decode the access token: exp - iat is ~300s",
+        "Set sessionTimeout=480, log in again: exp - iat is ~28800s",
+        "A refresh issues a token with the same short life, not the 1h default",
+        "A user with no user_settings row still gets a token (falls back to the default, does not 500)",
+        "FAILURE CASE: a value outside 5-480 cannot reach token signing even if written directly to the DB"
+      ],
+      "passes": true,
+      "notes": "480 -> 28800s token, 5 -> ~300s, enforced on refresh as well as login; out-of-range rejected at the schema and clamped in lib/sessions.ts."
+    },
+    {
+      "id": "F004",
+      "title": "Refresh token becomes a sliding idle window",
+      "priority": "critical",
+      "depends_on": [
+        "F003"
+      ],
+      "description": "D1, second half — the part that makes the setting mean something. RefreshToken.expiresAt is set to now + sessionTimeout at login and re-set on every rotation. Criteria 2 and 3.",
+      "steps": [
+        "Log in with sessionTimeout=5: the refresh_tokens row expires ~5 min out, not 7 days",
+        "Refresh once: the new row's expiresAt has moved forward again",
+        "Backdate the row past its window, then refresh: 401, and the row is not re-issued",
+        "Continuous use with a 5-minute window survives several rotations without signing out (criterion 3)",
+        "FAILURE CASE: the 401 reaches the client as SessionExpiredError and lands on /login with a message, not a blank page (criterion 2)"
+      ],
+      "passes": true,
+      "notes": "Row expires ~5 min out not 7 days; rotation slides it forward; 4 consecutive rotations survive; backdated row -> 401."
+    },
+    {
+      "id": "F005",
+      "title": "Absolute session cap",
+      "priority": "high",
+      "depends_on": [
+        "F004"
+      ],
+      "description": "D2. absoluteExpiresAt is stamped once at login and carried forward through rotations; rotation past it is refused. Fixes the existing hole where a repeatedly-refreshed session never expired. Criterion 4.",
+      "steps": [
+        "Login stamps absoluteExpiresAt ~7 days out",
+        "A rotation carries the SAME absoluteExpiresAt forward — it does not move",
+        "Backdate absoluteExpiresAt into the past and refresh: 401 even though expiresAt is still in the future",
+        "FAILURE CASE: a pre-existing row with absoluteExpiresAt = null still refreshes (no mass logout on deploy) and gets stamped on that rotation"
+      ],
+      "passes": true,
+      "notes": "Cap stamped ~7d at login and carried forward byte-identical through rotation; backdated cap -> 401 with the idle window still open; null (legacy) row still refreshes and gets stamped. STEP AMENDED during build: the first step said 30 days, the spec now says 7. Tightened, not loosened, and for a reason found while implementing — the refresh JWT is itself signed for 7d, so a 30-day column cap would have been shadowed by the token's own expiry and the two clocks would have disagreed. 7d is also what JWT_REFRESH_EXPIRY has always claimed, so this makes an existing promise true rather than inventing a longer one. Spec D2 updated to match."
+    },
+    {
+      "id": "F006",
+      "title": "sid claim + correct `current` session flag",
+      "priority": "critical",
+      "depends_on": [
+        "F001"
+      ],
+      "description": "D4. The refresh row is created before the access token is signed, and its id rides in the token as `sid`. Fixes the live bug where GET /sessions read req.body on a GET so `current` was always false. Criterion 6.",
+      "steps": [
+        "Decode an access token: it carries a numeric sid matching a refresh_tokens row id",
+        "GET /api/auth/sessions marks exactly one row current: true, and it is the caller's",
+        "With two browsers signed in, each sees the other's row as current: false",
+        "After a refresh, `current` follows the rotation to the new row id",
+        "FAILURE CASE: the raw refresh token is still never returned by GET /sessions (fingerprint only)"
+      ],
+      "passes": true,
+      "notes": "sid rides in the access token; exactly one session flagged current and it is the caller’s; two live sessions each see the other as not current; raw token still never returned."
+    },
+    {
+      "id": "F007",
+      "title": "Current session cannot be revoked from the per-row control",
+      "priority": "high",
+      "depends_on": [
+        "F006"
+      ],
+      "description": "D4 + the risk row settings.md named ('every user signs themselves out on first visit'). The server refuses with 409, and the UI renders the badge instead of the button. Criteria 6 and 7.",
+      "steps": [
+        "DELETE /api/auth/sessions/:id for your own sid answers 409 and the row still exists",
+        "DELETE for another of your sessions answers 200 and that row is gone",
+        "That other browser's next refresh 401s and it lands on /login (criterion 7)",
+        "In the UI the current row shows 'this device' and has no Sign out control",
+        "FAILURE CASE: 'Sign out everywhere' still ends this device too — the deliberate exception"
+      ],
+      "passes": true,
+      "notes": "Self-revoke -> 409 with the row intact; revoking the other session -> 200 and gone."
+    },
+    {
+      "id": "F008",
+      "title": "Session timeout control in /settings",
+      "priority": "high",
+      "depends_on": [
+        "F003",
+        "F004"
+      ],
+      "description": "The control S-D1 would not let ship until it was enforced. Bounded Select (15/30/60/240/480), copy that says it is an idle timeout and applies to the next issued token. Criterion 1.",
+      "steps": [
+        "The Select shows the persisted value on load",
+        "Changing it PUTs /api/auth/settings and the value survives a reload",
+        "The next issued access token's exp reflects the new value",
+        "Copy states it is an idle timeout and that it applies to the next sign-in/refresh",
+        "FAILURE CASE: a failed save surfaces an error and reverts the control rather than showing a value the server does not hold"
+      ],
+      "passes": true,
+      "notes": "Bounded Select (15/30/60/240/480) in the sessions panel; picking \"15 minutes\" moved the next issued token from 28800s to 900s, checked by decoding it. Copy states it is an idle timeout and applies on the next renewal. Failed saves toast and re-read from the server."
+    },
+    {
+      "id": "F009",
+      "title": "Preferences: theme persisted to the account",
+      "priority": "high",
+      "depends_on": [
+        "F001"
+      ],
+      "description": "D7. Theme moves from localStorage-only to User.theme, with a real 'system' option that tracks the OS live. Criterion 8.",
+      "steps": [
+        "Set dark, sign in on a second browser profile: it is dark before touching the toggle",
+        "'System' follows the OS setting and reacts to a change with no reload",
+        "The existing Topbar toggle still works and writes through to the account",
+        "Signed-out pages (/login) still respect the last local value — no flash of the wrong theme",
+        "FAILURE CASE: a failed profile save leaves the theme applied locally rather than snapping back mid-session"
+      ],
+      "passes": true,
+      "notes": "CRITERION 8 proven the hard way: with localStorage cleared and the OS preferring dark, the account’s stored \"light\" won on load (darkClass=false). \"System\" tracks matchMedia live via a change listener. Topbar toggle now persists through the same hook. A failed save leaves the theme applied rather than snapping back."
+    },
+    {
+      "id": "F010",
+      "title": "Preferences: timezone becomes a bounded Select",
+      "priority": "high",
+      "depends_on": [],
+      "description": "D7. Timezone is already enforced (api/notes.ts resolves the calendar month in it) but was collected as free text, so an unparseable value silently fell back. Criterion 9.",
+      "steps": [
+        "The control is a Select of IANA zones and shows the persisted value",
+        "Picking a zone far from the current one changes which day the notes calendar files a note under (criterion 9)",
+        "The stored display format ('Asia/Bangkok (GMT+7)') still parses through resolveTimeZone",
+        "FAILURE CASE: a legacy free-text value already in the DB does not crash the Select — it is shown, not silently replaced"
+      ],
+      "passes": true,
+      "notes": "CRITERION 9 proven end to end: one note at 2026-08-10T02:00Z files under day 10 in Asia/Bangkok and day 9 in Pacific/Honolulu, and returns to 10 when the zone is restored. Curated 21-zone list; a stored value not on the list is prepended and kept selectable rather than silently rewritten."
+    },
+    {
+      "id": "F011",
+      "title": "The honest cleanup: ten inert toggles leave GET /profile",
+      "priority": "high",
+      "depends_on": [],
+      "description": "The remaining half of S4. updateSettingsSchema was pruned on 2026-07-31 but GET /api/auth/profile still returns all eleven columns, and the client types still declare them. Criterion 10.",
+      "steps": [
+        "GET /api/auth/profile returns settings containing sessionTimeout and nothing else",
+        "The client's settings types no longer declare the ten cut fields",
+        "The columns still exist in Postgres (deliberately kept — dropping them buys nothing)",
+        "FAILURE CASE: PUT /api/auth/settings with twoFactorAuth: true is rejected and writes nothing"
+      ],
+      "passes": true,
+      "notes": "GET /profile and PUT /settings both return only sessionTimeout; twoFactorAuth rejected 400 and nothing written; columns still present in Postgres."
+    },
+    {
+      "id": "F012",
+      "title": "authorize() resolves role and isActive from the database",
+      "priority": "critical",
+      "depends_on": [],
+      "description": "D5 — the answer to the token-invalidation risk the sprint plans have carried for months. Same shape as resolveMembership for project roles. Criteria 11 and 12.",
+      "steps": [
+        "A user holding an access token minted while they were 'admin' is refused after demotion, on the next request, with the same token",
+        "A user promoted to admin is accepted on the next request with the token they already hold",
+        "A deactivated user is refused by admin-gated routes immediately (criterion 12)",
+        "The lookup is by primary key and happens only on admin-gated routes — not on every authenticated request",
+        "FAILURE CASE: a token whose id no longer exists in the users table is refused, not treated as an admin"
+      ],
+      "passes": true,
+      "notes": "Same token 403 -> 200 across a promotion and back to 403 across a demotion; deactivated user refused immediately; fails closed on a lookup error."
+    },
+    {
+      "id": "F013",
+      "title": "GET /api/users — admin-only, paginated, searchable",
+      "priority": "high",
+      "depends_on": [
+        "F012"
+      ],
+      "description": "The list the admin screen reads. Returns id, name, email, role, isActive, createdAt. Admin-gated, because it is a directory of every account's email.",
+      "steps": [
+        "As admin: returns a page of users with total count",
+        "?q= filters by name and email; ?page/?pageSize page deterministically",
+        "As a non-admin: 403 (criterion 14)",
+        "Unauthenticated: 401",
+        "FAILURE CASE: password hashes are not in the response under any query"
+      ],
+      "passes": true,
+      "notes": "Paged, searchable, admin-only. Non-admin 403, anonymous 401, no password hashes, paging does not repeat rows."
+    },
+    {
+      "id": "F014",
+      "title": "PATCH role + PATCH active, with the last-admin guard",
+      "priority": "critical",
+      "depends_on": [
+        "F012"
+      ],
+      "description": "D6. Both routes delete the target's refresh tokens so the session cannot outlive the current access token. The last-admin guard counts inside the same transaction as the write. Criteria 11, 12, 13.",
+      "steps": [
+        "Promoting dev.user to admin: a route that 403'd a moment earlier now answers 200 with the SAME token (criterion 11)",
+        "Deactivating a user deletes their refresh_tokens rows; their next refresh 401s (criterion 12)",
+        "Demoting the last active admin answers 409 and the role is unchanged in the DB (criterion 13)",
+        "Deactivating the last active admin answers 409 and isActive is unchanged",
+        "PATCH on an id that does not exist answers 404 and reveals nothing about which ids do",
+        "FAILURE CASE: a non-admin PATCH answers 403 and writes nothing, whether or not the target exists"
+      ],
+      "passes": true,
+      "notes": "Promotion/demotion/deactivation all verified end to end including session revocation; last-admin demote AND deactivate both 409 with nothing written; missing id 404; unknown role 400."
+    },
+    {
+      "id": "F015",
+      "title": "/admin/users screen",
+      "priority": "high",
+      "depends_on": [
+        "F013",
+        "F014"
+      ],
+      "description": "D8. A DataTable of users with role and active controls, at /admin/users rather than under /settings, because who may sign in is about the instance and not about you. Nav entry rendered only for admins — and the server gates it regardless.",
+      "steps": [
+        "As admin the nav shows Users and the page lists accounts with search and paging",
+        "Changing a role and toggling active both persist and reflect immediately",
+        "The last-admin 409 surfaces as a readable message, not a toast saying 'error'",
+        "As a non-admin the nav entry is absent AND navigating to /admin/users directly is refused",
+        "Destructive actions go through ConfirmDialog, per the design-system rule",
+        "FAILURE CASE: an admin demoting themselves is warned before it happens, and the page reacts correctly when their own access disappears"
+      ],
+      "passes": true,
+      "notes": "/admin/users renders 9 accounts with search, role Select and active toggle; role change persists and toasts. Self-row Deactivate is disabled and self-demotion goes through a ConfirmDialog. Last-admin 409 verified with its readable message plus the actionable detail. As dev.user: nav entry absent, direct navigation shows a refusal, and GET /api/users answers 403 — all three layers."
+    },
+    {
+      "id": "F016",
+      "title": "Close the remaining ungated destructive route",
+      "priority": "high",
+      "depends_on": [
+        "F012"
+      ],
+      "description": "Criterion 14. DELETE /api/logs/:id deletes an arbitrary log row for any authenticated caller — the bulk route was gated in the workspaces sprint but the by-id one was not. Same gating pass, so it closes here rather than becoming a separate security ticket.",
+      "steps": [
+        "As a non-admin, DELETE /api/logs/:id answers 403 and the row still exists",
+        "As an admin it still works",
+        "A sweep of every router confirms no other destructive route is reachable by an authenticated non-admin without an ownership check",
+        "FAILURE CASE: the sweep is recorded in progress.md by route, not asserted as 'checked'"
+      ],
+      "passes": true,
+      "notes": "Non-admin DELETE /api/logs/:id -> 403 with the row intact; admin -> 200."
+    },
+    {
+      "id": "F017",
+      "title": "BUG: two logins in the same second collide on RefreshToken.token",
+      "priority": "critical",
+      "depends_on": [],
+      "description": "Found by F006's verification, and it predates this sprint. The refresh JWT's payload was `{id, email}` plus `iat`/`exp` at one-second resolution, so two logins by the same account inside the same second produced a byte-identical string and violated the unique index on `token` — the second login answered 500. Fixed by adding a random `jti`, which is also what makes the credential unguessable rather than a pure function of (user, second). Filed as a feature rather than fixed off-ledger, per the workflow's rule for confirmed bugs.",
+      "steps": [
+        "Two concurrent logins for the same account both answer 200",
+        "Their refresh tokens differ",
+        "Their sids differ, so they are two distinct sessions",
+        "FAILURE CASE: reverting the jti reproduces the 500 (the collision is real, not theoretical)"
+      ],
+      "passes": true,
+      "notes": "Two concurrent logins both 200 with distinct refresh tokens and distinct sids. Was a 500 before the jti."
+    }
+  ]
+}

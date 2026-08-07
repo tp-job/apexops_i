@@ -110,7 +110,19 @@ router.post('/batch', validate(batchLogSchema), async (req: Request, res: Respon
 });
 
 // ── DELETE /:id ──────────────────────────────────────────────
-router.delete('/:id', async (req: Request, res: Response): Promise<void> => {
+/**
+ * Gated 2026-08-04 (Sprint 5, criterion 14).
+ *
+ * The workspaces sprint closed the *bulk* delete below but left this one on
+ * `authenticate` alone — so any signed-in user could delete any log row by
+ * guessing an integer. Logs are instance-wide and carry no owner to check
+ * against, which leaves the role as the only boundary available.
+ *
+ * Found by the sweep that S-D5 asked for: gate the endpoints in the same pass
+ * that makes the role mean something, rather than filing it as a security ticket
+ * for a later sprint that has not been scheduled.
+ */
+router.delete('/:id', authorize('admin'), async (req: Request, res: Response): Promise<void> => {
     try {
         await prisma.log.delete({ where: { id: parseInt(req.params.id as string) } });
         res.json({ deleted: true, id: req.params.id });

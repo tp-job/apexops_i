@@ -2,7 +2,8 @@ import express, { Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import prisma from '../lib/prisma';
-import { SECRET_KEY, REFRESH_SECRET_KEY, JWT_ALGORITHM } from '../lib/jwtSecrets';
+import { REFRESH_SECRET_KEY, JWT_ALGORITHM } from '../lib/jwtSecrets';
+import { issueSession, resolveSessionTimeoutMinutes } from '../lib/sessions';
 import { authenticate } from '../middleware/auth';
 import { validate } from '../middleware/validate';
 import { authLoginLimiter, authRegisterLimiter } from '../middleware/rateLimit';
@@ -13,42 +14,15 @@ import {
 
 const router = express.Router();
 
-/**
- * Context stored alongside each refresh token so the active-sessions list is
- * usable (spec S-D3). A list that says "session #4" tells you nothing; one that
- * says "Chrome on Windows, 2 hours ago" is a security control someone can act on.
- *
- * Both fields are self-reported by the client and trivially spoofed — they are
- * for recognition ("that is my laptop"), never for authorization.
- */
-function sessionContext(req: Request): { userAgent: string | null; ipAddress: string | null } {
-    const forwarded = (req.headers['x-forwarded-for'] as string | undefined)?.split(',')[0]?.trim();
-    return {
-        userAgent: req.headers['user-agent']?.slice(0, 512) ?? null,
-        ipAddress: forwarded || req.ip || null,
-    };
-}
-
 // Secrets come from lib/jwtSecrets.ts, which refuses to boot in production when
 // they are missing. They were previously derived here AND in two other modules
 // with fallbacks that disagreed — see that file for what that would have cost.
-const ACCESS_TOKEN_EXPIRY = process.env.JWT_EXPIRY || '1h';
-const REFRESH_TOKEN_EXPIRY = process.env.JWT_REFRESH_EXPIRY || '7d';
 const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS || '12', 10);
 
-
-
-interface TokenUser {
-    id: number;
-    email: string;
-    role: string | null;
-}
-
-const generateAccessToken = (user: TokenUser): string =>
-    jwt.sign({ id: user.id, email: user.email, role: user.role || 'user' }, SECRET_KEY, { expiresIn: ACCESS_TOKEN_EXPIRY } as jwt.SignOptions);
-
-const generateRefreshToken = (user: TokenUser): string =>
-    jwt.sign({ id: user.id, email: user.email }, REFRESH_SECRET_KEY, { expiresIn: REFRESH_TOKEN_EXPIRY } as jwt.SignOptions);
+// Token minting, the sliding idle window and the absolute cap all live in
+// lib/sessions.ts (spec D1/D2/D4). Three routes here issue sessions and they must
+// do it identically; the previous inline version had the 7-day expiry written out
+// in three places, which is how they drift.
 
 // ── POST /register ───────────────────────────────────────────
 router.post('/register', authRegisterLimiter, validate(registerSchema), async (req: Request, res: Response): Promise<void> => {
@@ -80,17 +54,11 @@ router.post('/register', authRegisterLimiter, validate(registerSchema), async (r
             select: { id: true, firstName: true, lastName: true, email: true, role: true, createdAt: true },
         });
 
-        // Create default settings
+        // Created before the session is issued, not after: `issueSession` reads
+        // `sessionTimeout` from this row to size the token it mints.
         await prisma.userSettings.create({ data: { userId: user.id } }).catch(() => {});
 
-        const accessToken = generateAccessToken(user);
-        const refreshToken = generateRefreshToken(user);
-
-        const expiresAt = new Date();
-        expiresAt.setDate(expiresAt.getDate() + 7);
-        await prisma.refreshToken.create({
-            data: { userId: user.id, token: refreshToken, expiresAt, ...sessionContext(req) },
-        }).catch(() => {});
+        const { accessToken, refreshToken } = await issueSession(req, user);
 
         res.status(201).json({
             message: 'User registered successfully',
@@ -119,14 +87,7 @@ router.post('/login', authLoginLimiter, validate(loginSchema), async (req: Reque
         const isMatch = bcrypt.compareSync(password, user.password);
         if (!isMatch) { res.status(401).json({ error: 'Invalid email or password' }); return; }
 
-        const accessToken = generateAccessToken(user);
-        const refreshToken = generateRefreshToken(user);
-
-        const expiresAt = new Date();
-        expiresAt.setDate(expiresAt.getDate() + 7);
-        await prisma.refreshToken.create({
-            data: { userId: user.id, token: refreshToken, expiresAt, ...sessionContext(req) },
-        });
+        const { accessToken, refreshToken } = await issueSession(req, user);
 
         res.json({
             message: 'Login successful',
@@ -150,28 +111,50 @@ router.post('/refresh', validate(refreshTokenSchema), async (req: Request, res: 
         const { refreshToken: oldToken } = req.body;
         const decoded = jwt.verify(oldToken, REFRESH_SECRET_KEY, { algorithms: [JWT_ALGORITHM] }) as { id: number; email: string };
 
+        const now = new Date();
+
+        // `expiresAt` is the sliding IDLE window (spec D1). A row past it means the
+        // session went quiet for longer than the user's timeout, which is exactly
+        // what that setting promises — so this 401 is the feature, not a fault.
         const stored = await prisma.refreshToken.findFirst({
-            where: { token: oldToken, expiresAt: { gt: new Date() } },
+            where: { token: oldToken, expiresAt: { gt: now } },
         });
         if (!stored) { res.status(401).json({ error: 'Invalid or expired refresh token' }); return; }
 
+        // The absolute cap (D2), checked separately so the reason stays legible.
+        // Null means the row predates this column: treated as uncapped and stamped
+        // on this rotation, rather than logging every existing session out on deploy.
+        if (stored.absoluteExpiresAt && stored.absoluteExpiresAt <= now) {
+            await prisma.refreshToken.deleteMany({ where: { id: stored.id } });
+            res.status(401).json({ error: 'Session expired' });
+            return;
+        }
+
         const user = await prisma.user.findUnique({
             where: { id: decoded.id },
-            select: { id: true, firstName: true, lastName: true, email: true, role: true },
+            select: { id: true, firstName: true, lastName: true, email: true, role: true, isActive: true },
         });
         if (!user) { res.status(401).json({ error: 'User not found' }); return; }
 
+        // A deactivated account must not be able to extend its own session (D6).
+        // Their tokens are deleted at deactivation time; this is the backstop for a
+        // token that was already in flight.
+        if (user.isActive === false) {
+            await prisma.refreshToken.deleteMany({ where: { userId: user.id } });
+            res.status(403).json({ error: 'Account is deactivated' });
+            return;
+        }
+
         await prisma.refreshToken.deleteMany({ where: { token: oldToken } });
 
-        const accessToken = generateAccessToken(user);
-        const newRefreshToken = generateRefreshToken(user);
-        const expiresAt = new Date();
-        expiresAt.setDate(expiresAt.getDate() + 7);
-        // Refresh rotates the row, so the context is re-captured — otherwise a
-        // long-lived session would show where it was first created, not where it is.
-        await prisma.refreshToken.create({
-            data: { userId: user.id, token: newRefreshToken, expiresAt, ...sessionContext(req) },
-        });
+        // The absolute expiry is CARRIED FORWARD, not recomputed. Recomputing it is
+        // what made sessions immortal before: every rotation handed out a fresh
+        // seven days, so a token refreshed weekly never expired at all.
+        const { accessToken, refreshToken: newRefreshToken } = await issueSession(
+            req,
+            user,
+            stored.absoluteExpiresAt,
+        );
 
         res.json({
             accessToken, token: accessToken, refreshToken: newRefreshToken,
@@ -210,18 +193,20 @@ router.get('/profile', authenticate, async (req: Request, res: Response): Promis
 
         if (!user) { res.status(404).json({ error: 'User not found' }); return; }
 
+        /**
+         * **Only settings that are enforced** (spec S-D1, criterion 10).
+         *
+         * The other ten columns still exist in `user_settings` — dropping them is a
+         * migration that buys nothing — but they are read by nothing, so returning
+         * them invites a client to render a switch for them. `updateSettingsSchema`
+         * stopped accepting them on 2026-07-31; this is the read half of the same
+         * change, which was missed at the time.
+         *
+         * `sessionTimeout` earns its place here as of Sprint 5: it now sizes both
+         * the access token and the refresh token's idle window (D1).
+         */
         const settings = user.settings ? {
-            emailNotifications: user.settings.emailNotifications,
-            pushNotifications: user.settings.pushNotifications,
-            bugAlerts: user.settings.bugAlerts,
-            weeklyReports: user.settings.weeklyReports,
-            teamUpdates: user.settings.teamUpdates,
-            twoFactorAuth: user.settings.twoFactorAuth,
             sessionTimeout: user.settings.sessionTimeout,
-            loginAlerts: user.settings.loginAlerts,
-            profileVisibility: user.settings.profileVisibility,
-            activityStatus: user.settings.activityStatus,
-            dataCollection: user.settings.dataCollection,
         } : null;
 
         res.json({
@@ -232,6 +217,7 @@ router.get('/profile', authenticate, async (req: Request, res: Response): Promis
                 position: user.position, location: user.location, timezone: user.timezone,
                 bio: user.bio, avatarUrl: user.avatarUrl, role: user.role,
                 gender: user.gender, birthDate: user.birthDate, language: user.language,
+                theme: user.theme,
                 isActive: user.isActive, emailVerified: user.emailVerified,
                 createdAt: user.createdAt, updatedAt: user.updatedAt,
             },
@@ -246,7 +232,7 @@ router.get('/profile', authenticate, async (req: Request, res: Response): Promis
 // ── PUT /profile ─────────────────────────────────────────────
 router.put('/profile', authenticate, validate(updateProfileSchema), async (req: Request, res: Response): Promise<void> => {
     try {
-        const { firstName, lastName, email, phone, company, position, location, timezone, bio, gender, birthDate, language } = req.body;
+        const { firstName, lastName, email, phone, company, position, location, timezone, bio, gender, birthDate, language, theme } = req.body;
 
         if (email) {
             const taken = await prisma.user.findFirst({ where: { email, id: { not: req.user!.id } } });
@@ -268,6 +254,7 @@ router.put('/profile', authenticate, validate(updateProfileSchema), async (req: 
                 ...(gender !== undefined && { gender }),
                 ...(birthDate !== undefined && { birthDate: birthDate ? new Date(birthDate) : null }),
                 ...(language !== undefined && { language }),
+                ...(theme !== undefined && { theme }),
             },
         });
 
@@ -279,7 +266,7 @@ router.put('/profile', authenticate, validate(updateProfileSchema), async (req: 
                 position: user.position, location: user.location, timezone: user.timezone,
                 bio: user.bio, avatarUrl: user.avatarUrl, role: user.role,
                 gender: user.gender, birthDate: user.birthDate, language: user.language,
-                updatedAt: user.updatedAt,
+                theme: user.theme, updatedAt: user.updatedAt,
             },
         });
     } catch (err: any) {
@@ -299,21 +286,14 @@ router.put('/settings', authenticate, validate(updateSettingsSchema), async (req
             update: data,
         });
 
+        // Mirrors GET /profile: enforced settings only (criterion 10).
         res.json({
             message: 'Settings updated successfully',
-            settings: {
-                emailNotifications: settings.emailNotifications,
-                pushNotifications: settings.pushNotifications,
-                bugAlerts: settings.bugAlerts,
-                weeklyReports: settings.weeklyReports,
-                teamUpdates: settings.teamUpdates,
-                twoFactorAuth: settings.twoFactorAuth,
-                sessionTimeout: settings.sessionTimeout,
-                loginAlerts: settings.loginAlerts,
-                profileVisibility: settings.profileVisibility,
-                activityStatus: settings.activityStatus,
-                dataCollection: settings.dataCollection,
-            },
+            settings: { sessionTimeout: settings.sessionTimeout },
+            // The new value sizes the NEXT token, not the one in the caller's hand.
+            // Returned so the UI can say so precisely instead of implying it took
+            // effect immediately.
+            appliesFrom: 'next-token',
         });
     } catch (err: any) {
         console.error('Update settings error:', err);
@@ -363,9 +343,15 @@ router.get('/sessions', authenticate, async (req: Request, res: Response): Promi
             select: { id: true, token: true, userAgent: true, ipAddress: true, createdAt: true, expiresAt: true },
         });
 
-        // The caller's own session is flagged so the UI can label it and refuse to
-        // let them revoke the thing they are currently using by accident.
-        const presented = typeof req.body?.refreshToken === 'string' ? req.body.refreshToken : null;
+        // The caller's own session, from the access token's `sid` claim (spec D4).
+        //
+        // This previously read `req.body.refreshToken` — on a GET, which carries no
+        // body. So `current` was ALWAYS false: the "this device" badge never
+        // rendered and the per-row Sign out would cheerfully revoke the session you
+        // were using, which is the precise failure settings.md's risk table named.
+        // Sending the refresh token up to fix it would have been worse; it is a
+        // bearer credential and does not belong in a request the client can log.
+        const currentSid = req.user?.sid ?? null;
 
         res.json({
             sessions: rows.map((r) => ({
@@ -373,7 +359,7 @@ router.get('/sessions', authenticate, async (req: Request, res: Response): Promi
                 // The token itself is NEVER returned — it is a bearer credential.
                 // A short fingerprint is enough for the client to mark "this one".
                 fingerprint: r.token.slice(-8),
-                current: presented ? r.token === presented : false,
+                current: currentSid !== null && r.id === currentSid,
                 userAgent: r.userAgent,
                 ipAddress: r.ipAddress,
                 createdAt: r.createdAt.toISOString(),
@@ -390,6 +376,18 @@ router.get('/sessions', authenticate, async (req: Request, res: Response): Promi
 router.delete('/sessions/:id', authenticate, async (req: Request, res: Response): Promise<void> => {
     const id = Number.parseInt(String(req.params.id), 10);
     if (!Number.isSafeInteger(id) || id <= 0) { res.status(404).json({ error: 'Session not found' }); return; }
+
+    // Refusing to revoke the session making the request (spec D4). The UI hides the
+    // control, but hiding a button is not a rule — and the failure it prevents is
+    // "every user signs themselves out the first time they open this page".
+    // "Sign out everywhere" remains the deliberate exception.
+    if (req.user?.sid === id) {
+        res.status(409).json({
+            error: 'That is this device',
+            detail: 'Use "Sign out everywhere" to end this session too.',
+        });
+        return;
+    }
 
     try {
         // userId in the filter, not just the id: revoking someone else's session

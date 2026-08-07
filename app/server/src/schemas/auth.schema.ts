@@ -43,6 +43,16 @@ export const updateProfileSchema = z.object({
     gender: z.string().nullable().optional(),
     birthDate: z.string().nullable().optional(),
     language: z.string().nullable().optional(),
+    /**
+     * Theme, persisted per account (spec D7) so the choice follows you to a new
+     * browser instead of living only in that browser's localStorage.
+     *
+     * An enum, not a free string: this value is applied to `documentElement`, and
+     * an unrecognised one would leave the app in neither theme. Compare `timezone`
+     * above, which is still a string only because rows already hold display
+     * formats like `"Asia/Bangkok (GMT+7)"` — the UI narrows it to a Select.
+     */
+    theme: z.enum(['light', 'dark', 'system']).optional(),
 });
 
 /**
@@ -61,20 +71,23 @@ export const updateProfileSchema = z.object({
  * (spec S-D4, `alertOnRegression` / `webhookUrl` on `Project`), because "alert me
  * about this project" is the useful control and "alert me about everything" is not.
  *
- * `sessionTimeout` is accepted and stored but is **not yet enforced**: making it
- * real means signing the access token with it as `expiresIn` (S-D2), which
- * changes token issuance for every user and is deliberately not bundled into
- * this change. It is excluded until that lands, for the same reason as the rest.
+ * `sessionTimeout` became **enforced** in Sprint 5 (2026-08-04) and is now the
+ * only field here that means anything — which is exactly the bar S-D1 sets.
  */
 export const updateSettingsSchema = z
     .object({
         /**
-         * Stored, bounded, and shown on the sessions panel as "sessions last N
-         * minutes" — but **not yet enforced**. Enforcement means signing the
-         * access token with this as `expiresIn` (S-D2), which is blocked on the
-         * 401-refresh-and-retry path existing: shortening tokens from 1h to the
-         * 30m default without it would just log people out mid-task. Bounded now
-         * so the value is never out of range when enforcement lands.
+         * Idle timeout in minutes. **Enforced** as of Sprint 5: it sizes the access
+         * token's `expiresIn` *and* the refresh token's sliding window
+         * (`lib/sessions.ts`, spec D1).
+         *
+         * Both halves matter. Shortening only the access token enforces nothing
+         * observable — the client silently re-issues it — so the setting would have
+         * stayed decorative with more machinery behind it. Bounding the refresh
+         * row is what turns it into a real idle timeout.
+         *
+         * Unblocked by Sprint 3's 401-refresh-and-retry path. Before that, cutting
+         * token life would simply have logged people out mid-task.
          */
         sessionTimeout: z.number().int().min(5).max(480).optional(),
     })
