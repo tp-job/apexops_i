@@ -15,6 +15,7 @@ import {
 } from '@/components/design-system';
 import { PageHeader } from '@/components/common/layout';
 import ProjectTabs from '@/components/layouts/ProjectTabs';
+import SourceMapsPanel from '@/components/common/SourceMapsPanel';
 import { useProject } from '@/hooks/useProject';
 import { getApiBaseUrl } from '@/api/config';
 import { getErrorMessage } from '@/utils/error';
@@ -309,6 +310,11 @@ const ProjectSettings: FC = () => {
                     </div>
                 )}
             </Surface>
+
+            {/* ── Source maps ──────────────────────────────────── */}
+            {/* Owner/admin only — the list names releases and generated file
+                names, which is deploy detail, and the API 403s a member anyway. */}
+            {canAdminister && slug && <SourceMapsPanel slug={slug} />}
 
             {/* ── Danger zone ─────────────────────────────────────── */}
             {canAdminister && (

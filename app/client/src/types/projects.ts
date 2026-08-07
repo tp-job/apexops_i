@@ -94,8 +94,87 @@ export interface IssueBreakdown {
     sampledFrom: number;
 }
 
+/**
+ * One stack frame after symbolication. `raw` is always the line exactly as the
+ * browser reported it — the `view minified` toggle and Copy both render from it,
+ * so a bad map can never destroy the evidence.
+ */
+export interface ResolvedFrame {
+    raw: string;
+    functionName: string | null;
+    url: string | null;
+    line: number | null;
+    column: number | null;
+    /** The `TypeError: ...` line. Rendered, never treated as a frame. */
+    isHeader: boolean;
+    resolved: boolean;
+    originalFile: string | null;
+    originalLine: number | null;
+    originalColumn: number | null;
+    originalFunction: string | null;
+}
+
+/**
+ * Why the stack does or does not show original source. The reason is shown to
+ * the user, so each value maps to a different fix — `no-release` means wire up
+ * `data-release`, `no-maps-for-release` means upload, `no-matching-file` means
+ * the file names don't line up.
+ */
+export type SymbolicationReason =
+    | 'ok'
+    | 'no-stack'
+    | 'no-release'
+    | 'no-maps-for-release'
+    | 'no-matching-file'
+    | 'no-mappings-hit';
+
+export interface Symbolication {
+    frames: ResolvedFrame[];
+    /** True when at least one frame resolved — what the toggle keys off. */
+    applied: boolean;
+    release: string | null;
+    mapsUsed: number;
+    resolvedCount: number;
+    frameCount: number;
+    reason: SymbolicationReason;
+}
+
+/** Metadata only. The map content is never returned by any endpoint. */
+export interface SourceMapSummary {
+    id: number;
+    release: string;
+    fileName: string;
+    size: number;
+    uploadedBy: string | null;
+    createdAt: string;
+    updatedAt: string;
+}
+
+/** One release the project has actually reported, from `events`. */
+export interface ReleaseSummary {
+    release: string;
+    events: number;
+    firstSeen: string;
+    lastSeen: string;
+    /** Null for a `member`, who is not entitled to the source-map list at all. */
+    sourceMaps: number | null;
+}
+
+export interface ReleasesResponse {
+    releases: ReleaseSummary[];
+    canManage: boolean;
+}
+
+export interface SourceMapsResponse {
+    sourceMaps: SourceMapSummary[];
+    totalBytes: number;
+    maxBytes: number;
+}
+
 export interface IssueDetail extends Issue {
     latestEvent: IssueEvent | null;
+    /** Resolved frames for `latestEvent`. Null when there is no stored event. */
+    symbolication: Symbolication | null;
     recentEvents: IssueEvent[];
     range: IssueRange;
     /**

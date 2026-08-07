@@ -5,7 +5,6 @@ import {
     FiAlertTriangle,
     FiArrowLeft,
     FiCheckCircle,
-    FiCopy,
     FiEyeOff,
     FiRotateCcw,
     FiZap,
@@ -21,6 +20,7 @@ import {
 } from '@/components/design-system';
 import { PageHeader } from '@/components/common/layout';
 import EventVolumeChart from '@/components/charts/EventVolumeChart';
+import StackPanel from '@/components/common/StackPanel';
 import { useIssueDetail } from '@/hooks/useIssueDetail';
 import { useToast } from '@/context/toast-context';
 import { getErrorMessage } from '@/utils/error';
@@ -294,31 +294,20 @@ const ProjectIssueDetail: FC = () => {
                                 <p className="truncate font-mono text-xs text-gray-400">{latest.url}</p>
                             )}
 
-                            {latest.stack ? (
-                                <div className="relative">
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            void navigator.clipboard
-                                                .writeText(latest.stack ?? '')
-                                                .then(() => toast.showSuccess('Stack trace copied'))
-                                                .catch(() => toast.showError('Could not copy'));
-                                        }}
-                                        className="absolute right-2 top-2 z-10 inline-flex items-center gap-1.5 rounded-lg bg-white/80 px-2 py-1 text-[11px] font-semibold text-gray-500 shadow-sm outline-none transition-colors hover:text-brand-dark focus-visible:ring-2 focus-visible:ring-brand-dark/30 dark:bg-white/10 dark:text-gray-300 dark:hover:text-white"
-                                    >
-                                        <FiCopy size={11} /> Copy
-                                    </button>
-                                    <pre className="max-h-80 overflow-auto rounded-2xl border border-gray-200 bg-white/60 p-4 dark:border-white/10 dark:bg-white/[0.04]">
-                                        <code className="font-mono text-[12px] leading-6 text-brand-dark dark:text-gray-200">
-                                            {latest.stack}
-                                        </code>
-                                    </pre>
-                                </div>
-                            ) : (
-                                <p className="text-xs text-gray-400">
-                                    No stack trace was reported with this event.
-                                </p>
-                            )}
+                            {/* Symbolication lives in StackPanel, which owns the
+                                resolved/raw toggle and keeps `latest.stack` as
+                                the source of truth for Copy. */}
+                            <StackPanel
+                                event={latest}
+                                symbolication={issue.symbolication}
+                                slug={slug}
+                                onCopy={(text) => {
+                                    void navigator.clipboard
+                                        .writeText(text)
+                                        .then(() => toast.showSuccess('Stack trace copied'))
+                                        .catch(() => toast.showError('Could not copy'));
+                                }}
+                            />
                         </>
                     ) : (
                         <p className="text-sm text-gray-500 dark:text-gray-400">

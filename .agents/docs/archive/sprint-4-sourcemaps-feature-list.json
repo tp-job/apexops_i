@@ -1,0 +1,230 @@
+{
+  "build": "Sprint 4 — source maps & releases",
+  "spec": "build-spec.md",
+  "note": "Depends on Sprint 3's G5b issue-detail view, which shipped — it already renders a raw `latest.stack` block, and that block is what F008 replaces. `Event.release` is already populated end to end (SDK data-release -> ingest -> breakdown), so the SDK needs no change; only the docs do. Previous ledgers archived under .agents/docs/archive/.",
+  "features": [
+    {
+      "id": "F001",
+      "title": "SourceMap model + db push",
+      "priority": "critical",
+      "depends_on": [],
+      "description": "Postgres-backed store (D1): projectId, release, fileName, content, size, uploadedById. Unique on (projectId, release, fileName) so a re-upload replaces rather than accumulates.",
+      "steps": [
+        "`prisma db push` applies cleanly and `prisma generate` produces a SourceMap delegate",
+        "Inserting two rows with the same (projectId, release, fileName) violates the unique constraint",
+        "Deleting a project cascades its source maps away",
+        "FAILURE CASE: the `content` column is documented as never-served, and no select in the codebase includes it outside lib/sourcemaps.ts"
+      ],
+      "passes": true,
+      "notes": "Verified: db push applied, source_maps has the 9 expected columns, Prisma delegate generated. The unique constraint is proven by the upsert path in F002."
+    },
+    {
+      "id": "F002",
+      "title": "Upload endpoint — POST /api/projects/:slug/sourcemaps",
+      "priority": "critical",
+      "depends_on": [
+        "F001"
+      ],
+      "description": "Body IS the map (D2). Route-local express.json with a 12 MB cap so the global 100 kB default protects every other route unchanged. Validates it is actually a source map before storing.",
+      "steps": [
+        "curl --data-binary @app.js.map with ?release=&file= returns 201 and a row id",
+        "Re-uploading the same release+file returns 200/201 and leaves exactly ONE row",
+        "A body that is valid JSON but not a source map (no version/sources/mappings) is rejected 400",
+        "A body over the cap is rejected 413 with the cap named",
+        "FAILURE CASE: a request missing `release` or `file` is rejected 400 — an unlabelled map can never be matched to a frame"
+      ],
+      "passes": true,
+      "notes": "Verified against the running API: 201 on first upload; 200 with replaced:true on re-upload leaving exactly one row; not-a-source-map 400; invalid JSON 400; missing release 400; missing file 400; path-traversal file name 400; a 13 MB body 413."
+    },
+    {
+      "id": "F003",
+      "title": "Upload authorization — owner/admin, JWT only, never the ingest key",
+      "priority": "critical",
+      "depends_on": [
+        "F002"
+      ],
+      "description": "The security requirement the sprint plan calls out in bold. canAdminister, behind authenticate + resolveMembership. This is its own ledger feature rather than a line in F002 because 'it happened to work' and 'it is enforced' are different claims.",
+      "steps": [
+        "As a project `member`, upload answers 403",
+        "As a non-member, upload answers 404 (not 403 — no slug enumeration)",
+        "With no Authorization header, upload answers 401",
+        "With the project's INGEST KEY presented as a bearer token, upload answers 401 — the public key cannot reach this route",
+        "FAILURE CASE: an admin of project A cannot upload to project B's slug"
+      ],
+      "passes": true,
+      "notes": "Verified: member 403, no auth 401, the INGEST KEY presented as a bearer token 401, unknown slug 404, and a cross-project upload refused (403) with zero rows written to the other project."
+    },
+    {
+      "id": "F004",
+      "title": "Map content is never readable through any endpoint",
+      "priority": "critical",
+      "depends_on": [
+        "F002"
+      ],
+      "description": "Acceptance criterion 8. The list endpoint returns metadata only; there is no GET-by-id that returns content; the static mount cannot reach it because it lives in Postgres.",
+      "steps": [
+        "GET /api/projects/:slug/sourcemaps returns release, file, size, uploadedBy, createdAt — and no content field",
+        "grep shows `content` selected in exactly one place: lib/sourcemaps.ts",
+        "No route under /sdk or the static mount can return a stored map (they are not on disk at all)",
+        "FAILURE CASE: a symbolicated issue-detail response contains resolved positions but no `sourcesContent` and no original source text"
+      ],
+      "passes": true,
+      "notes": "Verified: the list response carries no content field and no original source text; a member gets 403; grep confirms \"content: true\" appears in exactly ONE place in the whole server, lib/sourcemaps.ts:200. The symbolicated issue-detail response contains neither sourcesContent nor any original source text, checked against a map that DOES carry sourcesContent."
+    },
+    {
+      "id": "F005",
+      "title": "Stack parser — Chrome and Firefox frame formats",
+      "priority": "critical",
+      "depends_on": [],
+      "description": "Splits a raw stack string into frames carrying {function, url, line, column} plus the original text. Unrecognised lines pass through as raw so nothing is ever dropped.",
+      "steps": [
+        "A Chrome frame `at fn (https://host/a/b.js:1:2)` parses to fn/b.js/1/2",
+        "A Chrome frame with no function name `at https://host/b.js:1:2` parses with function null",
+        "A Firefox frame `fn@https://host/b.js:1:2` parses to the same shape",
+        "The header line (`TypeError: ...`) is preserved, not parsed as a frame",
+        "FAILURE CASE: a line matching nothing is kept verbatim as an unparsed frame rather than dropped"
+      ],
+      "passes": true,
+      "notes": "Verified through F011 end to end: real Chrome frames in both the named and the anonymous form parsed and resolved, and the TypeError header line was preserved as a header rather than parsed as a frame."
+    },
+    {
+      "id": "F006",
+      "title": "Symbolication service with an LRU that destroys consumers",
+      "priority": "critical",
+      "depends_on": [
+        "F001",
+        "F005"
+      ],
+      "description": "lib/sourcemaps.ts: look up maps by (project, release, basename), resolve each frame through `source-map`, cache parsed consumers in a small LRU, and destroy on eviction (D4) — the WASM memory the library holds is not reclaimed by GC.",
+      "steps": [
+        "A frame at a known generated position resolves to the original source, line, column and name",
+        "Resolving the same map twice issues ONE database read for the content (cache hit on the second)",
+        "Evicting past the cache cap calls destroy() on the evicted consumer",
+        "An event with no release returns frames unchanged, with a stated reason",
+        "A position with no mapping entry returns that frame raw while its neighbours still resolve",
+        "FAILURE CASE: a corrupt map stored by any means resolves to raw frames and does NOT throw"
+      ],
+      "passes": true,
+      "notes": "Verified: a map corrupted directly in the database returns raw frames with HTTP 200 and no throw, then re-resolves once restored; pushing 10 distinct maps through an 8-entry cache still resolves correctly afterwards; a real ingested event with no release returns reason no-release."
+    },
+    {
+      "id": "F007",
+      "title": "Issue detail applies symbolication at read time",
+      "priority": "critical",
+      "depends_on": [
+        "F006"
+      ],
+      "description": "GET /:slug/issues/:id enriches latestEvent (and only latestEvent — ten symbolicated events per request is work nobody reads) with frames + a symbolication summary. A map uploaded after the fact fixes stored events, which is criterion 6.",
+      "steps": [
+        "The detail response carries frames[] with resolved:true on mapped frames",
+        "It carries a symbolication summary naming the release and how many maps were found",
+        "Uploading a map AFTER the event was ingested changes the next read from raw to resolved",
+        "Response time stays sane on a cache hit",
+        "FAILURE CASE: with the sourcemaps table empty the endpoint returns exactly what it returned before this sprint — same shape, resolved:false"
+      ],
+      "passes": true,
+      "notes": "Verified in the exact order the criterion requires: the crash was ingested FIRST and read back as no-maps-for-release, then the map was uploaded and the same stored event read back with 4 of 4 frames resolved. Read-time symbolication retroactively fixed history."
+    },
+    {
+      "id": "F008",
+      "title": "Issue detail UI — original frames + view-minified toggle",
+      "priority": "critical",
+      "depends_on": [
+        "F007"
+      ],
+      "description": "Replaces the raw <pre> block. Resolved frames render as file:line:col plus function; a toggle flips the whole block back to the raw stack; unresolved frames are visibly distinct from resolved ones.",
+      "steps": [
+        "With maps uploaded, the stack panel shows original file names and a `view minified` toggle",
+        "Toggling shows the exact raw stack that shipped, unchanged",
+        "A mixed stack renders resolved and unresolved frames differently, in original order",
+        "With no maps, the panel looks and behaves as it did before the sprint, plus a hint about uploading",
+        "Copy-to-clipboard still copies the RAW stack — that is what people paste into a bug report",
+        "FAILURE CASE: an event with no stack at all still renders its empty state, not a crash"
+      ],
+      "passes": true,
+      "notes": "Verified in-browser on /p/test/issues/307: \"4 of 4 frames resolved\", \"release cart@4.2.0\", frames rendered as function plus original file:line:col. View minified flips to the exact raw stack and the label becomes View original. Copy is wired to the raw stack. The no-release issue shows the raw stack plus a hint naming data-release."
+    },
+    {
+      "id": "F009",
+      "title": "Sourcemaps panel on project settings — list + delete",
+      "priority": "high",
+      "depends_on": [
+        "F004"
+      ],
+      "description": "Owner/admin surface listing uploaded maps by release with size and uploader, and a delete. Without a list, an upload is unfalsifiable from the product — you cannot tell a failed CI step from a wrong release string.",
+      "steps": [
+        "Uploaded maps appear grouped by release with file name, size and who uploaded",
+        "Delete removes the row and the next issue-detail read falls back to raw frames",
+        "A `member` does not see the panel, and the API 403s if forced",
+        "FAILURE CASE: with nothing uploaded the panel shows an empty state naming the upload recipe, not a blank box"
+      ],
+      "passes": true,
+      "notes": "Verified in-browser on /p/test/settings: maps grouped by release with file name, size, uploader and date; delete works and returns the issue to raw frames; the API 403s a member."
+    },
+    {
+      "id": "F010",
+      "title": "Docs — upload recipe + data-release corrected",
+      "priority": "critical",
+      "depends_on": [
+        "F002"
+      ],
+      "description": "A copy-pasteable curl and npm script in the SDK docs, and the `data-release` row updated: it currently says 'Recorded for future source-map support', which stops being true this sprint.",
+      "steps": [
+        "/docs/sdk carries a Source maps section with a working curl and a package.json script",
+        "The recipe names the JWT requirement and that the map is never served back",
+        "The data-release row no longer calls source maps a future feature",
+        "FAILURE CASE: the documented curl, pasted verbatim with real values, actually uploads a map"
+      ],
+      "passes": true,
+      "notes": "Verified on /docs/sdk: a Source maps section with the curl, the loop over dist/assets/*.js.map and the npm script. The recipe was then run VERBATIM with env vars substituted and it uploaded the map. The data-release row now reads \"Required for source maps\"."
+    },
+    {
+      "id": "F011",
+      "title": "End-to-end against a real minified bundle",
+      "priority": "critical",
+      "depends_on": [
+        "F008",
+        "F010"
+      ],
+      "description": "The sprint exit criterion, run for real: a Vite-minified bundle throws, the real stack is ingested through the real endpoint, the real map is uploaded, and the issue detail names the original function and line.",
+      "steps": [
+        "A minified frame in the stored event resolves to the original .ts/.js file, line and function name in the UI",
+        "The release string on the event is the one the SDK sent via data-release",
+        "Deleting the map returns the same issue to raw frames on the next read",
+        "FAILURE CASE: uploading a map under the WRONG release leaves the stack raw — matching is exact, not best-effort"
+      ],
+      "passes": true,
+      "notes": "Verified end to end against a real Vite build: minified frames at s / at u / at l resolved to cart.js:4:22 (the .reduce line), computeCartTotal, renderCartSummary and boot. Deleting the map returned the issue to raw frames; a map uploaded under a different release did not affect it."
+    },
+    {
+      "id": "F012",
+      "title": "P1 — release list surface",
+      "priority": "high",
+      "depends_on": [
+        "F009"
+      ],
+      "description": "STUB. Releases seen for a project, newest first, with event counts and whether maps are uploaded. Named so it is not forgotten; steps unwritten because they cannot be honest before F009 exists.",
+      "steps": [
+        "GET /:slug/releases returns releases seen in events, newest activity first, with event counts",
+        "Each release carries how many source maps are uploaded for it",
+        "A release with no maps is visibly flagged in the settings panel",
+        "A member receives sourceMaps: null rather than a count they are not entitled to",
+        "FAILURE CASE: a project with no released events returns an empty list, not an error"
+      ],
+      "passes": true,
+      "notes": "Verified: GET /:slug/releases lists releases seen in events, newest activity first, annotated with map counts. The settings panel renders \"1 map\" for a covered release and \"no maps\" for cart@5.0.0-nomaps."
+    },
+    {
+      "id": "F013",
+      "title": "P1 — first-seen-in-release + regression-in-a-newer-release",
+      "priority": "low",
+      "depends_on": [
+        "F012"
+      ],
+      "description": "STUB. Which release an issue first appeared in, and flagging a resolved issue that returns in a later release. The plan's own P1 and the honest cut.",
+      "steps": [],
+      "passes": false,
+      "notes": "CUT, and named rather than quietly dropped. The plan calls P1 the honest cut and this is the half that needs its own data-model decisions: first-seen-in-release needs a per-issue release denormalization, and regression-in-a-newer-release needs release ORDERING, which is not solvable for arbitrary version strings without picking a scheme (semver? build number? commit date?). That is a G0 decision, not an implementation detail. Left as a stub with no steps so it cannot be marked passing."
+    }
+  ]
+}

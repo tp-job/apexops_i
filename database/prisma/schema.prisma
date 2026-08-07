@@ -38,6 +38,7 @@ model User {
   reportedTickets Ticket[]        @relation("reporter")
   ticketComments  TicketComment[] @relation("commentAuthor")
   ownedProjects   Project[]       @relation("projectOwner")
+  uploadedSourceMaps SourceMap[]  @relation("sourceMapUploader")
   projectMemberships ProjectMember[]
   sentInvites        ProjectInvite[]     @relation("inviteSender")
   issueStatusChanges IssueStatusChange[]
@@ -169,6 +170,7 @@ model Project {
   issues  Issue[]
   events  Event[]
   tickets Ticket[]
+  sourceMaps SourceMap[]
 
   @@index([ownerId])
   @@index([archivedAt])
@@ -393,6 +395,49 @@ model Event {
   /// Drives the retention prune job.
   @@index([projectId, createdAt])
   @@map("events")
+}
+
+/// Uploaded JavaScript source maps, used to turn a minified stack frame back
+/// into original file/line/function at issue-detail read time.
+///
+/// **Stored in Postgres rather than on disk, deliberately.** `server.ts` serves
+/// `public/` statically so the SDK can be fetched from a page we do not control.
+/// A filesystem store would be permanently one misconfigured path away from
+/// publishing the customer's original source — the single worst outcome
+/// available in this feature. In a column, no URL serves it: the failure mode is
+/// removed by construction instead of by vigilance.
+model SourceMap {
+  id        Int    @id @default(autoincrement())
+  projectId Int    @map("project_id")
+  /// Must match `Event.release` exactly — that is the whole job `data-release`
+  /// exists to do. A map with no release could never be matched to a frame.
+  release   String
+  /// **Basename** of the generated file, e.g. `index-BwlN_KfP.js`. Basename and
+  /// not the full URL, so one upload works whether the bundle is served from a
+  /// CDN, a subpath or localhost.
+  fileName  String @map("file_name")
+  /// The raw `.map` JSON, verbatim.
+  ///
+  /// NEVER SERVED. No endpoint returns this column and none may be added: it is
+  /// the customer's original source. `lib/sourcemaps.ts` is the only place that
+  /// selects it, and only resolved positions leave the server.
+  content   String
+  /// Bytes, denormalized so the settings list can show sizes without reading
+  /// the content column it is forbidden from touching.
+  size      Int
+  /// Null once the uploader's account is deleted — attribution is history.
+  uploadedById Int?  @map("uploaded_by_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  project    Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  uploadedBy User?   @relation("sourceMapUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  /// Re-uploading the same file for the same release REPLACES it. Deploys get
+  /// re-run; accumulating rows would make the list useless and storage unbounded.
+  @@unique([projectId, release, fileName])
+  @@index([projectId, release])
+  @@map("source_maps")
 }
 
 // ── Tickets ──────────────────────────────────────────────────

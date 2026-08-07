@@ -22,6 +22,7 @@ import { isSafeWebhookTarget } from '../lib/webhook';
 import issuesRouter from './issues';
 import overviewRouter from './overview';
 import teamRouter from './team';
+import sourceMapsRouter from './sourcemaps';
 
 const router = express.Router();
 router.use(authenticate);
@@ -74,6 +75,13 @@ router.use('/', overviewRouter);
 // `/:slug/transfer-ownership`, which share `:slug` but no prefix — and **before**
 // the `/:slug` handlers below.
 router.use('/', teamRouter);
+
+// Source-map upload/list/delete — `/:slug/sourcemaps`. Same root mount, same
+// reason. Mounting it HERE rather than anywhere near `/api/ingest` is the
+// security control: everything under this router is behind `authenticate` and
+// `resolveMembership`, so the public ingest key cannot reach it. Uploaded maps
+// are the customer's original source.
+router.use('/', sourceMapsRouter);
 
 // ── GET / ────────────────────────────────────────────────────
 router.get('/', async (req: Request, res: Response): Promise<void> => {

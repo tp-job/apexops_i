@@ -284,7 +284,12 @@ export const DOCS: DocPage[] = [
                                 [
                                     <C>data-release</C>,
                                     <span className="text-gray-400">none</span>,
-                                    'Version string attached to every event. Recorded for future source-map support.',
+                                    <>
+                                        Version string attached to every event.{' '}
+                                        <strong>Required for source maps</strong> — maps are matched to
+                                        stack frames by release, so without it a minified stack stays
+                                        minified.
+                                    </>,
                                 ],
                                 [
                                     <C>data-sample</C>,
@@ -373,6 +378,103 @@ export const DOCS: DocPage[] = [
                                 consecutive failures the SDK backs off exponentially, up to five minutes.
                             </LI>
                         </UL>
+                    </div>
+                ),
+            },
+            {
+                id: 'source-maps',
+                title: 'Source maps',
+                body: (
+                    <div className="flex flex-col gap-4">
+                        <P>
+                            A production bundle throws from <C>index-BwlN_KfP.js:48:12934</C>, which is a
+                            fact about your bundler and not about your code. Upload the{' '}
+                            <C>.map</C> files your build produced and ApexOps resolves each frame back to
+                            the original file, line and function on the issue detail.
+                        </P>
+
+                        <Endpoint method="POST" path="/api/projects/:slug/sourcemaps?release=&amp;file=" />
+
+                        <P>
+                            The request body <em>is</em> the map file — no multipart, no envelope. One
+                            upload per generated file, per release:
+                        </P>
+
+                        <Code lang="bash">{`# One file
+curl -X POST \
+  "$APEXOPS_URL/api/projects/$PROJECT_SLUG/sourcemaps?release=$RELEASE&file=index-BwlN_KfP.js" \
+  -H "Authorization: Bearer $APEXOPS_TOKEN" \
+  -H "Content-Type: application/json" \
+  --data-binary @dist/assets/index-BwlN_KfP.js.map
+
+# Every map Vite emitted, with the file name taken from the map itself
+for map in dist/assets/*.js.map; do
+  name=$(basename "$map" .map)
+  curl -sS -X POST \
+    "$APEXOPS_URL/api/projects/$PROJECT_SLUG/sourcemaps?release=$RELEASE&file=$name" \
+    -H "Authorization: Bearer $APEXOPS_TOKEN" \
+    -H "Content-Type: application/json" \
+    --data-binary @"$map"
+done`}</Code>
+
+                        <P>As an npm script:</P>
+
+                        <Code lang="json">{`{
+  "scripts": {
+    "build": "vite build",
+    "postbuild": "./scripts/upload-sourcemaps.sh"
+  }
+}`}</Code>
+
+                        <Callout title="The release string has to match exactly">
+                            The <C>release</C> you upload under and the <C>data-release</C> on the script
+                            tag are compared verbatim. Deriving both from the same variable — a git SHA, a
+                            package version — is the whole trick. A map uploaded under the wrong release is
+                            indistinguishable from no map at all.
+                        </Callout>
+
+                        <Table
+                            columns={[{ header: 'Rule', width: 'w-64' }, { header: 'Detail' }]}
+                            rows={[
+                                [
+                                    'Authentication',
+                                    <>
+                                        Your <strong>JWT session token</strong>, and an owner or admin of the
+                                        project. The public ingest key cannot reach this endpoint.
+                                    </>,
+                                ],
+                                [
+                                    'File name',
+                                    <>
+                                        The bare generated file name, e.g. <C>index-BwlN_KfP.js</C> — not a
+                                        path and not a URL, so one upload works from any host or CDN.
+                                    </>,
+                                ],
+                                ['Size limit', <C>12 MB</C>],
+                                [
+                                    'Re-uploading',
+                                    'Same release + file replaces the previous map rather than adding a second.',
+                                ],
+                                [
+                                    'When to upload',
+                                    'Any time. Resolution happens when an issue is read, so a map uploaded after a crash fixes the stack that is already stored.',
+                                ],
+                            ]}
+                        />
+
+                        <Callout title="Your source is never served back">
+                            Uploaded maps are stored privately and no endpoint returns their contents — not
+                            to you, not to your teammates, not with the ingest key. What reaches the browser
+                            is the resolved position: file, line, column and function name. Original source
+                            text stays on the server.
+                        </Callout>
+
+                        <P>
+                            Frames with no matching map render exactly as they arrived, so a stack that
+                            mixes your code with a vendor bundle resolves the half it can. Uploads are
+                            listed on the project&rsquo;s settings screen, which is where to look when a
+                            stack you expected to resolve did not.
+                        </P>
                     </div>
                 ),
             },

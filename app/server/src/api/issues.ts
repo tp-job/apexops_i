@@ -2,6 +2,7 @@ import express, { Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import { validate } from '../middleware/validate';
 import { isProjectMember, resolveMembership } from '../lib/projectAccess';
+import { symbolicate } from '../lib/sourcemaps';
 import {
     listIssuesQuerySchema,
     updateIssueSchema,
@@ -247,9 +248,34 @@ router.get('/:id', async (req: Request, res: Response): Promise<void> => {
 
         const storedInRange = timeline.reduce((sum, b) => sum + b.count, 0);
 
+        // Symbolication runs at READ time, on the latest event only.
+        //
+        // Read time rather than ingest time because maps routinely arrive after
+        // the first errors of a deploy — resolving here means a map uploaded
+        // later retroactively fixes events already stored, and ingest stays off
+        // this path entirely. Latest event only because ten symbolicated stacks
+        // per request is work nobody scrolls to, and the panel that renders it
+        // shows one.
+        //
+        // It cannot fail the request: `symbolicate` never throws and always
+        // returns at least the raw frames. This endpoint is what people open
+        // during an incident.
+        const latest = events.length ? events[0] : null;
+        const symbolication = latest
+            ? await symbolicate(found.project.id, latest.release, latest.stack)
+            : null;
+
         res.json({
             ...formatIssue(issue),
             latestEvent: events.length ? formatEvent(events[0]) : null,
+            /**
+             * Resolved frames for `latestEvent`, plus why it did or did not work.
+             * Null when there is no stored event. `frames` always covers the
+             * whole stack, resolved or not, in original order — the client
+             * renders from this and keeps `latestEvent.stack` for the
+             * `view minified` toggle and for Copy.
+             */
+            symbolication,
             recentEvents: events.map(formatEvent),
             range,
             timeline,
