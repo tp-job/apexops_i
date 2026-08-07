@@ -10,6 +10,8 @@ import {
     inviteExpiry,
     normalizeEmail,
 } from '../lib/invites';
+import { currentDriver, sendMailDetached } from '../lib/mail';
+import { inviteEmail } from '../lib/mailTemplates';
 import {
     createInviteSchema,
     transferOwnershipSchema,
@@ -197,6 +199,32 @@ router.post(
                 });
             }
 
+            const inviteUrl = buildInviteUrl(token);
+
+            /**
+             * Email the invite (spec E-D6). Until this landed, the *entire*
+             * delivery mechanism was the inviter copying `inviteUrl` out of the
+             * response and pasting it somewhere.
+             *
+             * Detached on purpose: creating the invite has already succeeded, and
+             * the URL below works whether or not a mail server does. Awaiting a
+             * send here would let a slow SMTP host hold up a 201 that is already
+             * earned — and `sendMail` never throws, so there is nothing to catch.
+             *
+             * `inviteUrl` is still returned regardless, which is what keeps
+             * copy-paste working when mail is not configured.
+             */
+            sendMailDetached(
+                inviteEmail({
+                    to: invite.email,
+                    projectName: found.project.name,
+                    inviterEmail: req.user!.email,
+                    role: invite.role,
+                    inviteUrl,
+                    expiresAt: invite.expiresAt,
+                }),
+            );
+
             res.status(201).json({
                 invite: {
                     id: invite.id,
@@ -207,7 +235,10 @@ router.post(
                 },
                 // Shown once and never again — see the members list, which
                 // deliberately cannot return it.
-                inviteUrl: buildInviteUrl(token),
+                inviteUrl,
+                // Whether email will even be attempted, so the UI can say "we
+                // emailed them" only when that is true.
+                emailDriver: currentDriver(),
             });
         } catch (err: any) {
             console.error('Error creating invite:', err);

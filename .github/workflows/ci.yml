@@ -1,0 +1,71 @@
+name: CI
+
+# Checks only (spec E-D3). Pull requests and pushes to main, and nothing else.
+#
+# **This workflow must never deploy, publish, or release.** This repository had no
+# pipeline at all before 2026-08-04; the first one must not be something that
+# ships code as a side effect of a merge. Adding delivery later is a decision
+# somebody should make deliberately, in its own file, with its own review — not
+# something that accretes onto a check job.
+#
+# It is also written to need **no secrets**, so a pull request from a fork runs
+# the same checks as one from a branch. A CI job that silently skips its real
+# work on external contributions is worse than none: it reports green.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Cancel superseded runs on the same ref. Pushing three times to a PR should not
+# queue three full runs.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: typecheck · lint · test · build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      # `npm ci` and not `npm install`: the point of CI is to run against the
+      # lockfile, not against whatever resolves today.
+      - name: Install
+        run: npm ci
+
+      # The server imports `@prisma/client` at module load, so the generated
+      # client must exist before anything typechecks. `npm ci` runs the server's
+      # postinstall, which does this — but it is repeated explicitly because a
+      # missing client fails with a type error about a package that is installed,
+      # which is a genuinely confusing thing to debug from a CI log.
+      - name: Generate Prisma client
+        run: npm run db:generate --workspace app/server
+
+      - name: Typecheck (both workspaces)
+        run: npm run typecheck --workspaces --if-present
+
+      - name: Lint (client)
+        run: npm run lint --workspace app/client
+
+      # Both suites are pure functions — no database, no server, no .env. If a
+      # test here ever needs one of those, it is an integration test and this job
+      # gains a service container as a deliberate, reviewed change.
+      - name: Test (both workspaces)
+        run: npm run test --workspaces --if-present
+
+      - name: Build (client)
+        run: npm run build --workspace app/client
+
+      - name: Build (server)
+        run: npm run build --workspace app/server

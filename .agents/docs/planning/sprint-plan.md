@@ -87,17 +87,20 @@ The 2026-07-25 kit analysis still holds; the inventory has moved. Current state 
 Kit items are P0 **inside the sprint that needs them**, never a separate cleanup backlog. Each is
 listed against its first real consumer below, and every one has ≥2 consumers by Sprint 4.
 
-### One correction to the Sprint 1 record
+### One correction to the Sprint 1 record — ✅ closed 2026-08-03
 
-Sprint 1's stated exit was *"wait past token expiry → still works."* **That is not true today.**
-`authApi.refreshToken()` exists in [`services/auth.ts`](../../../app/client/src/services/auth.ts)
-and `AuthContext` wraps it — but grep finds **no caller**: no interval, no 401 interceptor, and
-[`api/client.ts`](../../../app/client/src/api/client.ts)'s `fetchWithAuth` returns a 401 unchanged.
-A token that expires mid-session silently breaks every request.
+Sprint 1's stated exit was *"wait past token expiry → still works."* **It was not true.**
+`authApi.refreshToken()` existed in `services/auth.ts` and `AuthContext` wrapped it — but grep found
+**no caller**: no interval, no 401 interceptor, and `fetchWithAuth` returned a 401 unchanged. A token
+that expired mid-session silently broke every request, while the app kept rendering a signed-in shell.
 
-It is carried as **P0 in Sprint 3**, not quietly dropped. It is one sprint late because nothing
-built so far runs long enough in one tab to hit it; the issue stream in Sprint 3 is the first
-surface that does.
+**Fixed as Sprint 3's P0 on 2026-08-03.** [`lib/authSession.ts`](../../../app/client/src/lib/authSession.ts)
+now owns the refresh with a single in-flight promise; all four client transports —
+[`fetchWithAuth`](../../../app/client/src/api/client.ts), the axios instance in `services/api.ts`,
+the six modules that called `fetch` directly, and `services/auth.ts` itself — refresh once and retry
+once on a 401. Spec and evidence: [`build-spec.md`](../../../build-spec.md),
+[`progress.md`](../../../progress.md). Socket handshakes are **not** covered and are recorded there
+as a gap belonging to the real-time-stream item.
 
 ---
 
@@ -171,7 +174,7 @@ second monitor — which is the only way a monitoring tool gets used.
 
 | P | Item | Est |
 |---|---|---|
-| P0 | API layer: `apiFetch` + `ApiError` + **refresh-once-and-retry on 401 with a single in-flight refresh** + `useResource` | 2d |
+| P0 | API layer: `apiFetch` + `ApiError` + **refresh-once-and-retry on 401 with a single in-flight refresh** + `useResource` — **401 half ✅ shipped 2026-08-03**; `useResource` still open | 2d |
 | P0 | Real-time issue stream — socket.io → issue list, per-project room, no double-applied optimistic updates | 1.5d |
 | P0 | **The three states** (spec §UX): zero-events-ever, receiving-then-silent-24h, flooding + inline *Ignore this issue* | 1.5d |
 | P0 | `SearchInput` + `FilterBar` + `useUrlFilters` on `/p/:slug/issues` (level, status, time) | 1d |
@@ -200,15 +203,30 @@ for 24h says so, in words, instead of showing an empty table.
 The last unshipped feature in the objective, and the one that decides whether the tracker is usable
 against a production React build at all. `Event.release` already exists as the hook; nothing else does.
 
-| P | Item | Est |
-|---|---|---|
-| P0 | `SourceMap` model + **authenticated** upload API scoped to project + release; size caps; overwrite semantics | 1.5d |
-| P0 | Symbolication service — `source-map` lib, frame resolution, LRU cache, graceful fallback to the raw frame | 2d |
-| P0 | Apply at issue-detail read time; show original frames with a *view minified* toggle | 1.5d |
-| P0 | Upload recipe (curl + npm script) and `data-release` wired end-to-end in SDK v2 + docs | 1d |
-| P1 | Release list; *first seen in release* on the issue; regression flag when a resolved issue returns in a newer release | 1.5d |
+**Status: P0 shipped 2026-08-04.** Spec and evidence:
+[`build-spec.md`](../../../build-spec.md), [`progress.md`](../../../progress.md),
+[`feature-list.json`](../../../feature-list.json) — 12/13 features verified.
 
-**Load 7.5d at P0 + P1.**
+| P | Item | Est | |
+|---|---|---|---|
+| P0 | `SourceMap` model + **authenticated** upload API scoped to project + release; size caps; overwrite semantics | 1.5d | ✅ |
+| P0 | Symbolication service — `source-map` lib, frame resolution, LRU cache, graceful fallback to the raw frame | 2d | ✅ |
+| P0 | Apply at issue-detail read time; show original frames with a *view minified* toggle | 1.5d | ✅ |
+| P0 | Upload recipe (curl + npm script) and `data-release` wired end-to-end in SDK v2 + docs | 1d | ✅ |
+| P1 | Release list | 0.5d | ✅ |
+| P1 | *First seen in release*; regression flag when a resolved issue returns in a newer release | 1.0d | ❌ **cut** |
+
+**Load 7.5d at P0 + P1; landed P0 plus the release list.**
+
+**The cut half of P1 is a G0 decision, not an implementation — which is why it was cut rather than
+rushed.** *Regression in a newer release* requires release **ordering**, and there is no correct
+ordering for arbitrary version strings: `cart@4.2.0`, `cart@4.10.0`, a git SHA and a CI build number
+are four different schemes. Picking one silently is how a "regression" badge starts lying. *First
+seen in release* additionally needs a per-issue release denormalization. Both belong in a spec.
+
+**`data-release` needed no SDK work.** It was already read from the script tag, stored on `Event`
+and tallied in the issue breakdown — the hook the plan described. Only the docs changed, including
+the row that called source maps "a future feature".
 
 **Hard dependency: this needs Sprint 3's P1 issue-detail view.** Symbolication with nowhere to
 render it is not shippable. If G5b slips out of Sprint 3, it becomes the first P0 item here and the
@@ -261,30 +279,115 @@ global `User.role` only, which this sprint does not touch. See the spec's findin
 
 ---
 
-### Sprints 5, 7 — not yet scoped
+### Sprint 5 — Settings that enforce, roles that mean something
 
-Sequenced, deliberately not estimated. Each needs a `features/` spec at G0 before it gets dates.
+**Status: shipped 2026-08-04.** Spec and evidence: [`build-spec.md`](../../../build-spec.md),
+[`progress.md`](../../../progress.md), [`feature-list.json`](../../../feature-list.json) —
+17/17 features, 62/62 API assertions, acceptance criteria 1–14 all met.
 
-| Sprint | Subject | Blocking question |
+Landed in two passes. S1/S2 and half of S4 shipped early on **2026-07-31** (`/settings` with profile,
+password change and the active-session list; `updateSettingsSchema` pruned to one field). The rest
+shipped **2026-08-04**, once Sprint 3's 401-refresh path unblocked S-D2.
+
+| # | Gate | Est | |
+|---|---|---|---|
+| S1 | `/settings` shell + Profile tab (email read-only) | 1.5d | ✅ 07-31 |
+| S2 | Security: change password, `RefreshToken` user-agent/IP, session list + revoke + sign-out-everywhere | 2.0d | ✅ 07-31 |
+| S3 | `sessionTimeout` made real + Preferences (theme/timezone applied) | 1.5d | ✅ 08-04 |
+| S4 | Honest cleanup: the ten unenforced toggles out of the schema **and** the `/profile` response | 0.5d | ✅ 07-31 + 08-04 |
+| S5 | Endpoint role-gating, `GET /api/users`, role/active PATCH, role-change invalidation, last-admin guard | 2.0d | ✅ 08-04 |
+
+**The sprint's two load-bearing findings, both of which changed the implementation:**
+
+1. **`sessionTimeout` had to bound the refresh token, not just the access token.** S-D2 said "sign the
+   access token with it as `expiresIn`", and that alone enforces *nothing observable* — since Sprint 3
+   the client silently re-issues an expired token, so a 5-minute setting and a 60-minute one feel
+   identical. `RefreshToken.expiresAt` is now a sliding idle window; that is what makes the label
+   true. The old column default (30) was migrated to 480 **before** enforcement, because nobody chose
+   30 and enforcing it would have shipped this sprint as "the app started logging me out".
+2. **Token-invalidation-on-role-change did not need a `tokenVersion` column.** This risk has been the
+   top item in every plan's backlog for months. Sprint 6 found the project-role half was never real;
+   the same answer works globally — `authorize()` resolves `role` and `isActive` from the database,
+   costing one primary-key lookup on gated routes only, with no window in which a revoked admin is
+   still an admin. **Both carried-forward items below are now closed.**
+
+**Also closed here, found while scoping or verifying:**
+
+- The session list's `current` flag was computed from `req.body` on a **GET**, so it was always
+  `false`: the "this device" badge never rendered and the per-row *Sign out* would revoke the session
+  in use. Exactly the failure settings.md's risk table predicted, shipped and live. Fixed with a `sid`
+  claim carrying the refresh row's id.
+- Sessions were effectively immortal — every rotation reset `expiresAt` to `now + 7d`. There is now a
+  true absolute cap, carried forward through rotations.
+- `DELETE /api/logs/:id` was reachable by any authenticated user. The bulk route was gated in the
+  workspaces sprint; the by-id one was missed.
+- **Two logins in the same second returned a 500** (identical refresh JWT → unique-constraint
+  violation). Pre-existing; fixed with a random `jti`.
+
+---
+
+### Sprint 7 — Platform hardening
+
+**Status: shipped 2026-08-04.** Spec [`platform-hardening.md`](../features/platform-hardening.md)
+(`E-D1`…`E-D6`); evidence [`build-spec.md`](../../../build-spec.md),
+[`progress.md`](../../../progress.md), [`feature-list.json`](../../../feature-list.json) —
+19/19 features, 77 assertions, criteria 1–14.
+
+Scoping the row changed it. Two of the three planned items were smaller than assumed, and **the most
+urgent work in the sprint was not on the plan.**
+
+| Planned | What scoping found | Landed |
 |---|---|---|
-| 5 | Settings — **function** settings; the account half shipped early on 2026-07-31 | which of the 10 remaining inert `user_settings` toggles get a reader, per S-D1 in [`settings.md`](../features/settings.md) |
-| 7 | Docs + AI Chat, CI on PR, email delivery for alerts **and** invites | mail infrastructure — a sending domain and SPF/DKIM, not an afternoon |
+| Docs + AI Chat | Both already built (`Chat.tsx` 339 lines, `Docs.tsx` 256) — but **`POST /api/ai/chat` had no auth, no rate limit and no input cap.** An anonymous request reached Google. | ✅ P0, first |
+| CI on PR | Not the gap. There was **no test runner at all**, and four consecutive sprints closed with "no automated tests" as their first known gap. | ✅ 59 tests + CI |
+| Email for alerts and invites | Blocked on a production domain, **not** on being built or verified — real SMTP against a local catcher exercises the whole path. | ✅ shipped |
 
-> **The dates above are nominal.** Work has been landing out of plan order: Sprint 5's
-> account-settings half and the alerting that was pencilled for Sprint 7 both shipped on 2026-07-31,
-> while Sprint 3's P0 401-refresh and all of Sprint 4's source maps are still unbuilt. Sprint 6 is
-> sequenced **by dependency, not by the calendar** — it needs nothing from Sprints 3, 4 or 5, so it
-> can be pulled forward without re-planning.
+**Two live security holes closed, neither of them on any plan:**
 
-**Two items carried forward from the old plan so they are not lost in the re-cut:**
+1. **The AI proxy was open to the internet.** With a valid key in the environment, anyone reachable
+   had free, unattributed use of the Gemini quota at 8192 output tokens per call. Four controls, all
+   refusing *before* the outbound call, because a cap that runs after the spend is a log message.
+2. **`POST /api/console-logs` was unauthenticated SSRF.** It took an arbitrary URL and drove a
+   headless Chrome to it — including `169.254.169.254`, the cloud metadata address. Now admin-gated,
+   rate-limited, and behind a guard that resolves DNS rather than pattern-matching hostnames.
 
-1. **`authorize()` has one caller in the whole codebase** — `DELETE /api/logs`, added by workspaces
-   G2. No user-facing endpoint is gated by the *global* role. Sprint 6 closes this at the **project**
-   level (T-D3); the global `admin`/`user` role stays close to meaningless after it.
-2. **Token invalidation on role change** — the **global** role is signed into the JWT, so a demotion
-   silently does not take effect for up to an hour while the UI reports success. Scoped correctly it
-   is narrower than the old plan claimed, but it is still unbuilt, and it must be scoped in the same
-   sprint as any global role-gating, never after it.
+**The four-sprint testing gap is closed and was proven rather than declared:** two real regressions
+were reintroduced (the timezone display-suffix strip, the fingerprint NUL separator) and the suite
+went red naming the right test each time. It also caught a bug in the new SSRF guard on its first
+run — an `::ffff:0:0/96` BlockList rule that silently blocked the entire public IPv4 internet.
+
+**Verifying CI against a clean checkout — rather than this working tree — found two more:**
+`package-lock.json` was **gitignored**, so `npm ci` was impossible and no install had ever been
+reproducible (the direct cause of Sprint 4's deduped `source-map` 0.5.7); and a pre-existing lint
+error that would have made the very first pull request red.
+
+**CI checks only — no deploy, no publish, no secrets.** This repo had no pipeline; the first one must
+not ship code as a side effect of a merge. Adding delivery is its own decision.
+
+The one thing still genuinely blocked is what the plan predicted: **a production sending domain with
+SPF/DKIM.** That is operator work. Everything up to it is built and asserted.
+
+> **The dates above are nominal.** Work has landed out of plan order throughout: Sprint 5's account
+> half and the alerting pencilled for Sprint 7 both shipped on 2026-07-31, then Sprints 6, 3, 4, the
+> rest of 5, and 7 all landed between 2026-08-01 and 2026-08-04. Sequencing has been **by dependency,
+> not by the calendar** — which is why Sprint 5's S3 waited for Sprint 3 rather than for its date.
+>
+> **Every sprint in this plan has now shipped.** What is left is named in each sprint's `progress.md`
+> gap list, not here; the largest are integration tests (everything covered today is a unit test), a
+> production sending domain for email, and the two release features cut from Sprint 4 pending a
+> decision on release ordering.
+
+**Two items carried forward from the old plan — both closed by Sprint 5 on 2026-08-04:**
+
+1. ~~**`authorize()` has one caller in the whole codebase**~~ — it now gates `GET /api/users`,
+   `PATCH /api/users/:id/role`, `PATCH /api/users/:id/active`, `DELETE /api/logs` and
+   `DELETE /api/logs/:id`. ✅ **Closed.** The global `admin` role decides something.
+2. ~~**Token invalidation on role change**~~ — ✅ **Closed, and it needed no token machinery.**
+   `authorize()` resolves `role` and `isActive` from the database rather than trusting the JWT claim,
+   so a demotion takes effect on the demoted user's next request. Asserted, not assumed: the same
+   access token answers 403, then 200 after promotion, then 403 again after demotion. Demotion and
+   deactivation also delete the target's refresh tokens, so ordinary access cannot outlive the current
+   access token either.
 
 Deferred to v1.1 by the workspaces spec and still deferred: npm package, server-side/Node SDK,
 breadcrumbs, session replay, per-issue assignment rules.
@@ -297,10 +400,10 @@ breadcrumbs, session replay, per-issue assignment rules.
 |---|---|---|
 | **Two half-built bug trackers** — the manual `Ticket` board and the SDK `Issue` pipeline both exist, neither seam-complete. The most believable 6-month failure. | Product has no answer to *"where do I look when something breaks?"* | `Issue.ticketId` is the seam. **Create-ticket-from-issue is P0 in Sprint 2 and explicitly not on the cut list.** A list + promote is a coherent product; a detail view with no promote is a dead end. |
 | Sprint 2 is 0.5d over capacity before it starts | Any further overrun pushes the demo | Named up front, not discovered in week 2. Cut order is written into the sprint, in order, before it starts. |
-| Form kit is thinner than every plan has assumed | Estimates that touch a form are low across Sprints 2, 4 and 5 | Inventory table above is now explicit about what exists. `Select`/`Textarea`/`RadioGroup`/`FormActions`/`useFormState` are **still unbuilt** and must be priced into Settings (Sprint 5), not assumed. |
+| ~~Form kit is thinner than every plan has assumed~~ | ~~Estimates that touch a form are low across Sprints 2, 4 and 5~~ | ✅ **Closed 2026-08-04.** `Select` shipped in Sprint 6 and carried Sprint 5's Preferences, session-timeout and per-row role controls with no new primitives. `Textarea`/`RadioGroup`/`FormActions`/`useFormState` are still unbuilt and still unneeded — price them the first time a screen actually wants one, rather than pre-building a kit. |
 | Real-time double-applies optimistic updates | Counts visibly wrong — fatal for trust in a *counting* tool | Two-window check is Sprint 3's exit criterion, not a QA afterthought |
-| Token refresh still unbuilt | Silent breakage in any long-lived tab — and Sprint 3 ships the first surface people leave open | P0 Sprint 3. Single in-flight refresh, tested with concurrent 401s |
-| Source maps leak original source | Customer codebase published | JWT-gated upload, non-public storage, never reachable via the ingest key. Asserted at Sprint 4 exit |
+| ~~Token refresh still unbuilt~~ | ~~Silent breakage in any long-lived tab~~ | ✅ **Closed 2026-08-03.** Single in-flight refresh, verified with 6 concurrent 401s producing one refresh, plus the cross-tab race and the network-down case |
+| ~~Source maps leak original source~~ | ~~Customer codebase published~~ | ✅ **Closed 2026-08-04.** Stored in Postgres so no URL serves them at all; upload is JWT + owner/admin; the ingest key presented as a bearer token answers 401; `content` is selected in exactly one module, and `sourcesContent` is never returned. Asserted, not assumed |
 | Feature spec and sprint plan drift apart again | Exactly what produced this rewrite | Precedence table at the top of this file. Sprint plans carry dates; specs carry decisions |
 | Docs updated "at the end" | This document was 3 sprints stale when audited | Sprint exit updates the spec's exit notes **and** this file's status table, in the same PR as the code |
 

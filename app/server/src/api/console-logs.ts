@@ -1,15 +1,50 @@
 import express, { Request, Response } from 'express';
 import prisma from '../lib/prisma';
+import { authenticate, authorize } from '../middleware/auth';
+import { urlScanLimiter } from '../middleware/rateLimit';
+import { assertFetchableUrl } from '../lib/urlGuard';
 
 const router = express.Router();
 
 // ── POST / ── Fetch console logs from URL via Puppeteer ──────
-router.post('/', async (req: Request, res: Response): Promise<void> => {
+/**
+ * Gated 2026-08-04 (Sprint 7, F005). It was a hole, and a bigger one than
+ * "missing auth".
+ *
+ * Until now this took an arbitrary URL from an **unauthenticated** request and
+ * drove a headless Chrome to it. That is server-side request forgery by
+ * construction: the caller chooses any address the *server* can reach, including
+ * every address they cannot — `http://localhost:5432`, an internal admin panel,
+ * or `http://169.254.169.254/`, which on most cloud providers hands instance
+ * credentials to anything asking from inside the instance. It also spawned a
+ * browser per request with `--no-sandbox` and wrote unbounded rows into `logs`,
+ * so it was a denial-of-service lever as well.
+ *
+ * `/realtime` below was retired in the workspaces sprint for a strictly smaller
+ * version of the same problem. This one was missed.
+ *
+ * Three controls, because no single one is sufficient:
+ *
+ *  1. **`authenticate` + `authorize('admin')`** — this reaches the internal
+ *     network, which makes it an operator tool, not a user feature. Nothing in
+ *     the client calls it: `consoleLogsAPI.fetchFromUrl` in `services/api.ts` has
+ *     no caller, so gating it breaks nothing that exists today.
+ *  2. **`assertFetchableUrl`** — resolves the hostname and refuses private,
+ *     loopback, link-local and reserved addresses. See `lib/urlGuard.ts` for what
+ *     it does not solve.
+ *  3. **Rate limit** — each call is a browser launch and a 30-second navigation.
+ *
+ * Deliberately gated rather than retired. A hardening sprint should not delete a
+ * feature; retiring this in favour of `api/console-monitor.ts` is a product
+ * decision, and it is reversible in a way that deletion is not.
+ */
+router.post('/', authenticate, authorize('admin'), urlScanLimiter, async (req: Request, res: Response): Promise<void> => {
     const { url } = req.body;
 
-    if (!url) { res.status(400).json({ error: 'URL is required' }); return; }
+    if (!url || typeof url !== 'string') { res.status(400).json({ error: 'URL is required' }); return; }
 
-    try { new URL(url); } catch { res.status(400).json({ error: 'Invalid URL format' }); return; }
+    const guard = await assertFetchableUrl(url);
+    if (!guard.ok) { res.status(400).json({ error: guard.reason }); return; }
 
     let puppeteer: any;
     let browser: any = null;

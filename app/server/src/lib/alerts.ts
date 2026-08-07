@@ -1,5 +1,7 @@
 import prisma from './prisma';
 import { sendWebhook } from './webhook';
+import { sendMailDetached } from './mail';
+import { regressionEmail } from './mailTemplates';
 
 /**
  * Alert dispatch for regressions.
@@ -37,7 +39,9 @@ export async function dispatchRegressionAlert(input: RegressionAlertInput): Prom
 
         const members = await prisma.projectMember.findMany({
             where: { projectId: input.projectId },
-            select: { userId: true },
+            // The email is selected here so the mail channel below needs no second
+            // query. It never leaves the server — it is only used as a recipient.
+            select: { userId: true, user: { select: { email: true } } },
         });
 
         const title = `Regression in ${project.name}`;
@@ -62,6 +66,33 @@ export async function dispatchRegressionAlert(input: RegressionAlertInput): Prom
                     body,
                 })),
             });
+        }
+
+        /**
+         * Email, the third channel (spec E-D6).
+         *
+         * Detached, like everything else on this path. `dispatchRegressionAlert`
+         * runs **inside the ingest request** — awaiting a mail server here would
+         * mean an unreachable SMTP host adds its full timeout to somebody's error
+         * report, and a slow one makes ingest slow for everyone.
+         *
+         * The in-app rows above are still the system of record. Email is a
+         * convenience on top of them, and it is ordered after them for the reason
+         * the module header gives: a channel that silently stops delivering must
+         * never be the only place a regression was recorded.
+         */
+        for (const member of members) {
+            if (!member.user?.email) continue;
+            sendMailDetached(
+                regressionEmail({
+                    to: member.user.email,
+                    projectName: project.name,
+                    issueTitle: input.issueTitle,
+                    culprit: input.culprit,
+                    reopenCount: input.reopenCount,
+                    issueUrl: input.issueUrl,
+                }),
+            );
         }
 
         if (project.webhookUrl) {

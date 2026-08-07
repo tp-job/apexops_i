@@ -16,6 +16,24 @@ services:
       timeout: 5s
       retries: 10
 
+  # Local mail catcher (spec E-D5). Real SMTP on 1025, a web UI and a JSON API on
+  # 8025. It exists so email is *verifiable* without a production sending domain:
+  # the acceptance test sends an invite and then reads the message back out of the
+  # API at :8025, asserting on the recipient, the subject and a working link.
+  #
+  # That is the difference between "the code called sendMail" and "an email
+  # arrived containing a link that works". Nothing here ever leaves the machine.
+  mail:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    ports:
+      - "${SMTP_PORT:-1025}:1025"   # SMTP
+      - "${MAILPIT_UI_PORT:-8025}:8025"  # web UI + JSON API
+    environment:
+      MP_MAX_MESSAGES: 500
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+
   server:
     build:
       context: .

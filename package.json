@@ -2,7 +2,10 @@
   "name": "apexops",
   "version": "1.0.0",
   "private": true,
-  "workspaces": ["app/client", "app/server"],
+  "workspaces": [
+    "app/client",
+    "app/server"
+  ],
   "scripts": {
     "install:all": "npm install --workspaces --include-workspace-root",
     "dev": "npm run dev --workspaces --if-present",
@@ -13,6 +16,8 @@
     "lint": "npm run lint --workspace app/client",
     "docker:up": "docker compose up -d --build",
     "docker:down": "docker compose down",
-    "docker:logs": "docker compose logs -f"
+    "docker:logs": "docker compose logs -f",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present"
   }
 }

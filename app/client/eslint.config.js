@@ -19,5 +19,23 @@ export default defineConfig([
       ecmaVersion: 2020,
       globals: globals.browser,
     },
+    rules: {
+      // A leading underscore means "deliberately discarded", which is exactly
+      // what rest-destructuring does when it strips a key from an object:
+      //   const { json, skipAuthRetry: _skip, ...init } = options
+      // The default rule flags that as an unused variable, so the one honest way
+      // to omit a property fails lint. Added 2026-08-04 when CI first ran and
+      // found this pre-existing error in `api/client.ts`.
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+          destructuredArrayIgnorePattern: '^_',
+          ignoreRestSiblings: true,
+        },
+      ],
+    },
   },
 ])

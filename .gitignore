@@ -2,7 +2,19 @@
 #  Dependencies
 # ══════════════════════════════════════════════
 node_modules/
-package-lock.json
+
+# package-lock.json is deliberately NOT ignored (Sprint 7, 2026-08-04).
+#
+# It was, and that had two costs. CI cannot run `npm ci` without it, so there is
+# no way to check a pull request against the dependency tree it actually ships
+# with. And every install re-resolves from scratch, so nobody's node_modules is
+# the same as anybody else's — which is exactly how Sprint 4 ended up with npm
+# quietly deduping `source-map` to a hoisted 0.5.7 with a different, synchronous
+# API than the 0.7.4 the code was written against.
+#
+# Ignoring a lockfile is a reasonable choice for a published library, whose
+# consumers resolve their own tree. This is an application. It should install the
+# same way twice.
 
 # ══════════════════════════════════════════════
 #  Environment Variables (secrets)

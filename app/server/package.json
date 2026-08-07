@@ -15,8 +15,11 @@
     "seed:dev": "ts-node -T src/scripts/seed-dev-users.ts",
     "backfill:projects": "ts-node -T src/scripts/backfill-default-project.ts",
     "prune:events": "ts-node -T src/scripts/prune-events.ts",
+    "migrate:session-timeout": "ts-node -T src/scripts/migrate-session-timeout.ts",
     "postinstall": "prisma generate",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
   },
   "keywords": [],
   "author": "",
@@ -35,9 +38,11 @@
     "express-rate-limit": "^8.2.1",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
+    "nodemailer": "7.0.13",
     "pg": "^8.16.3",
     "puppeteer": "^23.11.1",
     "socket.io": "^4.8.1",
+    "source-map": "0.7.4",
     "ws": "^8.18.3",
     "zod": "^4.3.6"
   },
@@ -47,11 +52,13 @@
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^25.2.2",
+    "@types/nodemailer": "^8.0.1",
     "@types/ws": "^8.18.1",
     "axios": "^1.13.2",
     "nodemon": "^3.1.10",
     "prisma": "^6.19.2",
     "ts-node-dev": "^2.0.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
   }
 }
