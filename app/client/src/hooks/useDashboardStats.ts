@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getApiBaseUrl, getAuthHeaders, getAuthToken } from '@/api/config';
+import { getAuthToken } from '@/api/config';
+import { fetchWithAuth } from '@/api/client';
 import type { TicketStats, LogStats } from '@/types/dashboard';
 
 /**
@@ -27,7 +28,7 @@ export interface UseDashboardStatsResult {
 }
 
 async function getJson<T>(path: string): Promise<T> {
-    const res = await fetch(`${getApiBaseUrl()}${path}`, { headers: getAuthHeaders() });
+    const res = await fetchWithAuth(path);
     if (!res.ok) throw new Error(`${path} responded ${res.status}`);
     return (await res.json()) as T;
 }

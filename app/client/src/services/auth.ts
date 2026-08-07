@@ -1,22 +1,34 @@
 /**
  * Auth API: all HTTP calls for authentication and user profile/settings.
  * AuthContext uses this module and updates state; no React here.
+ *
+ * **Two transports on purpose (Sprint 3, 2026-08-03).**
+ *
+ * The *session* calls — login, register, logout — use raw `fetch`, because they
+ * are precisely the requests that must never trigger a token refresh: a 401 from
+ * `/login` means "wrong password", and refreshing there would turn a typo into a
+ * logout. `api/client.ts` also skips them by path, so this is belt and braces.
+ *
+ * Everything else — profile, password, settings — goes through `fetchWithAuth`
+ * and therefore recovers from an expired access token like the rest of the app.
+ * Before this they hand-rolled their own `Authorization` header, which made them
+ * the last authed surface with no retry.
+ *
+ * `refreshToken()` used to live here. It now lives in `lib/authSession.ts`,
+ * because a refresh needs the single-in-flight coordination that a plain API
+ * wrapper cannot provide — and having two implementations of it was a live risk
+ * of them disagreeing about when a session is over.
  */
 
-import { getApiBaseUrl, getAuthToken } from '@/api/config';
-import type { LoginResponse, ProfileResponse, RefreshResponse, User, UserSettings } from '@/types/auth';
+import { getApiBaseUrl } from '@/api/config';
+import { fetchWithAuth } from '@/api/client';
+import type { LoginResponse, ProfileResponse, User, UserSettings } from '@/types/auth';
 
 export const authApi = {
     async getProfile(): Promise<ProfileResponse> {
-        const token = getAuthToken();
-        if (!token) throw new Error('Not authenticated');
-
-        const response = await fetch(`${getApiBaseUrl()}/api/auth/profile`, {
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json',
-            },
-        });
+        // No local token check: `fetchWithAuth` may mint one on the way in, and
+        // a stale guard here would reject a request that was about to succeed.
+        const response = await fetchWithAuth('/api/auth/profile', { json: true });
 
         if (response.ok) {
             return (await response.json()) as ProfileResponse;
@@ -27,22 +39,6 @@ export const authApi = {
             throw e;
         }
         throw new Error('Failed to fetch profile');
-    },
-
-    async refreshToken(): Promise<RefreshResponse> {
-        const refreshTokenValue = typeof localStorage !== 'undefined' ? localStorage.getItem('refreshToken') : null;
-        if (!refreshTokenValue) throw new Error('No refresh token');
-
-        const response = await fetch(`${getApiBaseUrl()}/api/auth/refresh`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ refreshToken: refreshTokenValue }),
-        });
-
-        if (response.ok) {
-            return (await response.json()) as RefreshResponse;
-        }
-        throw new Error('Failed to refresh token');
     },
 
     async login(email: string, password: string): Promise<LoginResponse> {
@@ -97,7 +93,7 @@ export const authApi = {
         const refreshTokenValue = typeof localStorage !== 'undefined' ? localStorage.getItem('refreshToken') : null;
         if (!refreshTokenValue) return;
 
-        const token = getAuthToken();
+        const token = typeof localStorage !== 'undefined' ? localStorage.getItem('accessToken') : null;
         await fetch(`${getApiBaseUrl()}/api/auth/logout`, {
             method: 'POST',
             headers: {
@@ -109,15 +105,9 @@ export const authApi = {
     },
 
     async updateProfile(data: Partial<User>): Promise<{ user: User }> {
-        const token = getAuthToken();
-        if (!token) throw new Error('Not authenticated');
-
-        const response = await fetch(`${getApiBaseUrl()}/api/auth/profile`, {
+        const response = await fetchWithAuth('/api/auth/profile', {
             method: 'PUT',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json',
-            },
+            json: true,
             body: JSON.stringify(data),
         });
 
@@ -135,15 +125,9 @@ export const authApi = {
      * silently changing the credential and locking the real owner out.
      */
     async changePassword(currentPassword: string, newPassword: string): Promise<void> {
-        const token = getAuthToken();
-        if (!token) throw new Error('Not authenticated');
-
-        const response = await fetch(`${getApiBaseUrl()}/api/auth/password`, {
+        const response = await fetchWithAuth('/api/auth/password', {
             method: 'PUT',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json',
-            },
+            json: true,
             body: JSON.stringify({ currentPassword, newPassword }),
         });
 
@@ -154,15 +138,9 @@ export const authApi = {
     },
 
     async updateSettings(data: Partial<UserSettings>): Promise<{ settings: UserSettings }> {
-        const token = getAuthToken();
-        if (!token) throw new Error('Not authenticated');
-
-        const response = await fetch(`${getApiBaseUrl()}/api/auth/settings`, {
+        const response = await fetchWithAuth('/api/auth/settings', {
             method: 'PUT',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json',
-            },
+            json: true,
             body: JSON.stringify(data),
         });
 

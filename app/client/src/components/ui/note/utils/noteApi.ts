@@ -6,7 +6,8 @@
  * without changing any behavior.
  */
 
-import { getApiBaseUrl, getAuthHeaders, getAuthToken } from '@/api/config';
+import { getAuthToken } from '@/api/config';
+import { fetchWithAuth } from '@/api/client';
 import type { Note } from '@/components/ui/note/utils/noteTypes';
 import { isMockEnabled, isNetworkFailure, readOnlyOfflineMessage } from '@/utils/offlineMock';
 import { mockNotes } from '@/utils/mockData';
@@ -26,9 +27,7 @@ export const fetchNotes = async (): Promise<{ success: boolean; data?: Note[]; e
     }
 
     try {
-        const res = await fetch(`${getApiBaseUrl()}/api/notes`, {
-            headers: getAuthHeaders(true)
-        });
+        const res = await fetchWithAuth('/api/notes', { json: true });
 
         if (res.ok) {
             const data = await res.json();
@@ -56,9 +55,7 @@ export const fetchNoteById = async (noteId: string): Promise<{ success: boolean;
     }
 
     try {
-        const res = await fetch(`${getApiBaseUrl()}/api/notes/${noteId}`, {
-            headers: getAuthHeaders(true)
-        });
+        const res = await fetchWithAuth(`/api/notes/${noteId}`, { json: true });
 
         if (res.ok) {
             const data = await res.json();
@@ -103,9 +100,9 @@ export const createNote = async (params: CreateNoteParams): Promise<{ success: b
     }
 
     try {
-        const res = await fetch(`${getApiBaseUrl()}/api/notes`, {
+        const res = await fetchWithAuth('/api/notes', {
             method: 'POST',
-            headers: getAuthHeaders(true),
+            json: true,
             body: JSON.stringify({
                 title: params.title,
                 content: params.content,
@@ -164,9 +161,9 @@ export const updateNote = async (noteId: string, params: UpdateNoteParams): Prom
     }
 
     try {
-        const res = await fetch(`${getApiBaseUrl()}/api/notes/${noteId}`, {
+        const res = await fetchWithAuth(`/api/notes/${noteId}`, {
             method: 'PATCH',
-            headers: getAuthHeaders(true),
+            json: true,
             body: JSON.stringify(params)
         });
 
@@ -197,9 +194,9 @@ export const toggleNotePin = async (noteId: string, isPinned: boolean): Promise<
     }
 
     try {
-        const res = await fetch(`${getApiBaseUrl()}/api/notes/${noteId}`, {
+        const res = await fetchWithAuth(`/api/notes/${noteId}`, {
             method: 'PUT',
-            headers: getAuthHeaders(true),
+            json: true,
             body: JSON.stringify({ isPinned: !isPinned })
         });
 
@@ -232,10 +229,7 @@ export const deleteNote = async (noteId: string): Promise<{ success: boolean; er
     }
 
     try {
-        const res = await fetch(`${getApiBaseUrl()}/api/notes/${noteId}`, {
-            method: 'DELETE',
-            headers: getAuthHeaders(true)
-        });
+        const res = await fetchWithAuth(`/api/notes/${noteId}`, { method: 'DELETE', json: true });
 
         if (res.ok) {
             return { success: true };

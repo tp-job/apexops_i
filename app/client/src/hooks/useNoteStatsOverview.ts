@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getApiBaseUrl, getAuthHeaders, getAuthToken } from '@/api/config';
+import { getAuthToken } from '@/api/config';
+import { fetchWithAuth } from '@/api/client';
 import type { NoteStats } from '@/types/notes';
 import { isMockEnabled, isNetworkFailure } from '@/utils/offlineMock';
 import { mockNoteStatsOverview } from '@/utils/mockData';
@@ -31,9 +32,7 @@ export function useNoteStatsOverview(): UseNoteStatsOverviewResult {
         setLoading(true);
         setError(null);
         try {
-            const res = await fetch(`${getApiBaseUrl()}/api/notes/stats/overview`, {
-                headers: getAuthHeaders(),
-            });
+            const res = await fetchWithAuth('/api/notes/stats/overview');
             if (res.ok) {
                 const data = (await res.json()) as NoteStats;
                 setStats(data);

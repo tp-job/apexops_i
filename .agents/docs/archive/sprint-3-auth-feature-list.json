@@ -1,0 +1,164 @@
+{
+  "build": "Sprint 3 P0 — 401 refresh-and-retry",
+  "spec": "build-spec.md",
+  "note": "Client-only. The server's /api/auth/refresh already rotates single-use refresh tokens correctly; nothing under app/server changes. Previous ledger (Sprint 6) archived at .agents/docs/archive/sprint-6-feature-list.json.",
+  "features": [
+    {
+      "id": "F001",
+      "title": "authSession — single in-flight refresh coordinator",
+      "priority": "critical",
+      "depends_on": [],
+      "description": "lib/authSession.ts owns token lifecycle outside React: read/write tokens, decode `exp`, and `refreshOnce()` with a module-level in-flight promise so N concurrent callers produce one POST /api/auth/refresh. AuthContext cannot be the mechanism — services are not React and cannot call a hook.",
+      "steps": [
+        "Two concurrent refreshOnce() calls resolve from ONE network request (asserted by counting requests, not by inspecting code)",
+        "A successful refresh writes accessToken, refreshToken and user to localStorage before resolving",
+        "The in-flight slot is cleared on both success and failure — a failed refresh does not poison every later call with a rejected promise",
+        "isExpired() returns true for a token whose `exp` has passed and false for a live one, applying the skew",
+        "FAILURE CASE: a malformed / non-JWT token makes isExpired() return false rather than throwing — never log someone out over a parse bug"
+      ],
+      "passes": true,
+      "notes": "Verified in-browser: 6 concurrent fetchWithAuth calls past expiry produced exactly ONE POST /api/auth/refresh (counted by patching window.fetch) and six 200s. isExpired() returns false for garbage, empty and null tokens."
+    },
+    {
+      "id": "F002",
+      "title": "Terminal vs. survivable refresh failure",
+      "priority": "critical",
+      "depends_on": [
+        "F001"
+      ],
+      "description": "A 401 from /refresh, or no stored refresh token, ends the session. A network failure does not — it throws to the caller with the session intact, matching the rule AuthContext's hydrate path already follows.",
+      "steps": [
+        "Refresh answering 401 clears accessToken, refreshToken and user from localStorage",
+        "Refresh failing with a network error leaves all three in localStorage untouched",
+        "With no refreshToken stored, refreshOnce() rejects immediately without issuing a request",
+        "FAILURE CASE: a 500 from /refresh is treated as survivable, not terminal — the server being broken is not the user's session being over"
+      ],
+      "passes": true,
+      "notes": "Verified by driving refreshOnce() against stubbed responses: 401 with an unchanged token throws SessionExpiredError and clears storage; 500 and a thrown TypeError both leave accessToken/refreshToken/user intact."
+    },
+    {
+      "id": "F003",
+      "title": "Cross-tab race — adopt the winner's token instead of logging out",
+      "priority": "critical",
+      "depends_on": [
+        "F002"
+      ],
+      "description": "Refresh tokens are single-use. Two tabs that both refresh mean one presents a deleted row and gets a 401. Before treating that 401 as terminal, re-read localStorage: if the access token changed while our refresh was in flight, another tab won — adopt its token and continue.",
+      "steps": [
+        "Simulating the loss (stored access token replaced mid-flight, refresh answering 401) resolves with the NEW token instead of throwing",
+        "The session is NOT cleared in that case — localStorage still holds a user",
+        "The same 401 with an unchanged stored token IS terminal",
+        "FAILURE CASE: an unrelated 401 while the token happens to be rewritten with the SAME value is still terminal — the comparison is on value, not on a write happening"
+      ],
+      "passes": true,
+      "notes": "Verified: with /refresh answering 401 while the stored access token was rewritten mid-flight, refreshOnce() resolved with the winner’s token and the session was kept. The same 401 with an unchanged token stayed terminal."
+    },
+    {
+      "id": "F004",
+      "title": "fetchWithAuth — pre-flight refresh + retry once on 401",
+      "priority": "critical",
+      "depends_on": [
+        "F001"
+      ],
+      "description": "The primary surface (services/projects.ts, team.ts, notifications.ts, sessions.ts via api/request.ts). Refresh before sending when the token is already expired; retry exactly once on a 401; skip both for the auth routes.",
+      "steps": [
+        "With an expired token, one call produces a refresh and then the real request — and the real request is never sent with the dead token",
+        "A 401 from an otherwise valid request triggers one refresh and one retry, and the caller receives the retried 200",
+        "A 401 on the RETRY is returned to the caller unchanged — exactly one retry, no loop",
+        "POST /api/auth/login answering 401 (wrong password) does not trigger a refresh",
+        "FAILURE CASE: a request with a JSON body that gets retried sends the body again intact, not an empty second request"
+      ],
+      "passes": true,
+      "notes": "Verified both paths separately. Pre-flight: an expired token refreshes before sending and the dead token never goes out. Reactive: a forged token with a far-future exp but a bad signature produced a real 401, one refresh, and a 200 on the retry. A wrong-password 401 from /login fired zero refreshes."
+    },
+    {
+      "id": "F005",
+      "title": "axios interceptor — same policy for the Bug Tracker",
+      "priority": "critical",
+      "depends_on": [
+        "F004"
+      ],
+      "description": "services/api.ts (logs + tickets) is a separate axios instance with its own request interceptor and no 401 handling. A response interceptor applies the identical refresh-and-retry policy, guarded by a per-config retried flag.",
+      "steps": [
+        "A 401 from a tickets call refreshes once and replays the request, and the caller sees the data",
+        "The replayed request carries the NEW bearer token, not the stale one from the original config",
+        "A second 401 on the replay propagates as an axios error rather than looping",
+        "FAILURE CASE: a 403 or 500 is passed through untouched — only 401 triggers the path"
+      ],
+      "passes": true,
+      "notes": "Verified: ticketsAPI.getAll() with a forged token refreshed once and returned 2 rows. The replay carries the new bearer token, set explicitly on the config."
+    },
+    {
+      "id": "F006",
+      "title": "Migrate the six raw-fetch modules onto fetchWithAuth",
+      "priority": "critical",
+      "depends_on": [
+        "F004"
+      ],
+      "description": "noteApi.ts, noteAi.ts, calendarApi.ts, chatApi.ts, useDashboardStats.ts, useNoteStatsOverview.ts each call fetch() with getAuthHeaders() and therefore get no retry. 11 call sites, mechanical. Without this, 'tokens no longer expire mid-session' would be false for Notes, Calendar, Chat and the Dashboard.",
+      "steps": [
+        "grep finds no remaining `fetch(` paired with getAuthHeaders() outside api/client.ts and services/auth.ts",
+        "Notes, Calendar, Chat and Dashboard all still load normally after the swap (no behaviour change on the happy path)",
+        "With an expired token, each of those surfaces recovers instead of erroring",
+        "FAILURE CASE: a module that sent its own Content-Type still sends it — the swap must not drop request headers"
+      ],
+      "passes": true,
+      "notes": "Verified: grep finds getAuthHeaders with exactly one consumer left (api/client.ts). Walking Dashboard, Bug Tracker, Chat, Projects and Notes past expiry via client-side navigation produced ONE refresh and ZERO failed requests."
+    },
+    {
+      "id": "F007",
+      "title": "AuthContext reacts to an expired session",
+      "priority": "critical",
+      "depends_on": [
+        "F002"
+      ],
+      "description": "Clearing localStorage is not enough — React still holds `user` and keeps rendering a signed-in shell. AuthContext subscribes to authSession's session-expired event and drops its state, and also listens to `storage` so a sign-out in another tab is honoured here.",
+      "steps": [
+        "A terminal refresh failure flips isAuthenticated to false without a reload, and ProtectedRoute redirects to /login",
+        "The redirect carries state.from, so signing back in returns to the page the user was on",
+        "Signing out in a second tab logs this tab out too",
+        "The subscription is torn down on unmount — no listener leak across provider remounts",
+        "FAILURE CASE: a survivable (network) refresh failure does NOT log the user out of the shell"
+      ],
+      "passes": true,
+      "notes": "Verified without a reload: a terminal refresh failure redirected to /login, and history.state carried from=/dashboard. Signing out in a second tab logged the first tab out too."
+    },
+    {
+      "id": "F008",
+      "title": "authApi's own calls stop hand-rolling auth headers",
+      "priority": "high",
+      "depends_on": [
+        "F004"
+      ],
+      "description": "services/auth.ts calls getProfile/updateProfile/changePassword/updateSettings with hand-built Authorization headers, so they are the one authed surface left without retry. They move onto fetchWithAuth; login, register, refresh and logout deliberately stay on raw fetch — they are the skip-list.",
+      "steps": [
+        "getProfile, updateProfile, changePassword and updateSettings recover from an expired token",
+        "login with a wrong password still surfaces the server's message and does NOT trigger a refresh",
+        "refreshToken() itself still uses raw fetch — it is what the retry path calls, and routing it through the retry would recurse",
+        "FAILURE CASE: getProfile against a genuinely dead session still throws the 401 that AuthContext's hydrate path depends on"
+      ],
+      "passes": true,
+      "notes": "Verified: getProfile, updateProfile, changePassword and updateSettings now route through fetchWithAuth and recover from expiry; login/register/refresh/logout stay on raw fetch and are also skipped by path in api/client.ts."
+    },
+    {
+      "id": "F009",
+      "title": "End-to-end: a tab past token expiry keeps working",
+      "priority": "critical",
+      "depends_on": [
+        "F004",
+        "F005",
+        "F006",
+        "F007"
+      ],
+      "description": "The sprint's own exit criterion, run for real against the API with a short JWT_EXPIRY so the hour does not have to be waited out.",
+      "steps": [
+        "Sign in with JWT_EXPIRY set to a few seconds; wait past it; navigate the app — every surface loads, and the network log shows exactly one refresh",
+        "Load a page that fires several authed requests at once past expiry — still exactly one refresh, and every request succeeds",
+        "Revoke the refresh token server-side, then act — the app lands on /login rather than showing a broken shell",
+        "FAILURE CASE: stop the API entirely and act — the user is NOT logged out, and the error names the unreachable server"
+      ],
+      "passes": true,
+      "notes": "Verified end to end with JWT_EXPIRY set to 20s then 45s (restored to 1h afterwards). Past expiry the app keeps working with one refresh. With the API stopped, an expired token and a failed refresh, the user is NOT logged out — still on /dashboard with tokens intact."
+    }
+  ]
+}

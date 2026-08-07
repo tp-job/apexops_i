@@ -5,7 +5,8 @@
  * chat route that exists).
  */
 
-import { getApiBaseUrl, getAuthHeaders, getAuthToken } from '@/api/config';
+import { getAuthToken } from '@/api/config';
+import { fetchWithAuth } from '@/api/client';
 import type { ChatUser } from '@/types/chat';
 
 /** Users available to start a direct conversation with. Empty (not throwing) if logged out or offline. */
@@ -15,9 +16,7 @@ export async function fetchChatUsers(query?: string): Promise<ChatUser[]> {
 
     const qs = query?.trim() ? `?q=${encodeURIComponent(query.trim())}` : '';
     try {
-        const res = await fetch(`${getApiBaseUrl()}/api/chat/users${qs}`, {
-            headers: getAuthHeaders(),
-        });
+        const res = await fetchWithAuth(`/api/chat/users${qs}`);
         if (!res.ok) return [];
         const data = (await res.json()) as { users: ChatUser[] };
         return data.users ?? [];

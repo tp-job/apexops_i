@@ -1,5 +1,7 @@
 import axios from 'axios';
+import type { InternalAxiosRequestConfig } from 'axios';
 import { getApiBaseUrl, getAuthToken } from '@/api/config';
+import { isExpired, refreshOnce } from '@/lib/authSession';
 import type { Log, Ticket, TicketComment, TicketPriority, TicketStatus } from '@/types/bugTrackerApp';
 import type { LogsStats, TicketsStats, WithMockFlagArray } from '@/types/api';
 import { createReadOnlyOfflineError, isMockEnabled, isNetworkFailure } from '@/utils/offlineMock';
@@ -20,11 +22,64 @@ const api = axios.create({
  * endpoint behind this module is `authenticate`-gated server-side; without this
  * they answer 401 no matter who is signed in.
  */
-api.interceptors.request.use((config) => {
+api.interceptors.request.use(async (config) => {
+    // Pre-flight refresh, same rule as `fetchWithAuth`: a token already past
+    // `exp` makes this request a guaranteed 401, so spend the refresh instead of
+    // the round trip. Failure is ignored here — the response interceptor below
+    // gets the same chance rather than the caller eating an invented error.
+    if (isExpired(getAuthToken())) {
+        try {
+            await refreshOnce();
+        } catch {
+            /* fall through */
+        }
+    }
     const token = getAuthToken();
     if (token) config.headers.Authorization = `Bearer ${token}`;
     return config;
 });
+
+/**
+ * Refresh-and-retry on 401, for the Bug Tracker's axios surface.
+ *
+ * This instance is separate from `fetchWithAuth` and had no 401 handling at all,
+ * so logs and tickets would have kept breaking silently past token expiry even
+ * after the fetch path was fixed. The policy is deliberately identical to
+ * `api/client.ts`: refresh once, replay once, never loop.
+ *
+ * `_retried` is stamped on the request config rather than tracked in a module
+ * variable — the flag has to travel with the individual request, or two
+ * concurrent 401s would consume one shared "already retried" bit between them.
+ */
+api.interceptors.response.use(
+    (response) => response,
+    async (error: unknown) => {
+        const err = error as {
+            response?: { status?: number };
+            config?: (InternalAxiosRequestConfig & { _retried?: boolean }) | undefined;
+        };
+        const config = err.config;
+
+        if (err.response?.status !== 401 || !config || config._retried) {
+            return Promise.reject(error);
+        }
+
+        config._retried = true;
+        try {
+            const token = await refreshOnce();
+            // Set explicitly rather than relying on the request interceptor:
+            // the replay reuses this config object, which still carries the
+            // stale header from the first attempt.
+            config.headers.Authorization = `Bearer ${token}`;
+            return await api.request(config);
+        } catch {
+            // Session over, or the network is down. Hand back the original 401
+            // so the caller's error handling — including the offline-mock
+            // fallbacks below — sees what actually happened.
+            return Promise.reject(error);
+        }
+    }
+);
 
 function filterLogs(params?: { level?: string; source?: string; limit?: number }): WithMockFlagArray<Log> {
     const level = params?.level;

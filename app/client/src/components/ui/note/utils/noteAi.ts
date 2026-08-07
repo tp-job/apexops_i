@@ -1,4 +1,4 @@
-﻿import { getApiBaseUrl, getAuthHeaders } from '@/api/config';
+﻿import { fetchWithAuth } from '@/api/client';
 import { isMockEnabled, isNetworkFailure } from '@/utils/offlineMock';
 import { mockAiReply } from '@/utils/mockData';
 
@@ -9,9 +9,9 @@ export interface AiMessagePayload {
 
 export async function generateAiReply(history: AiMessagePayload[], prompt: string): Promise<string> {
     try {
-        const response = await fetch(`${getApiBaseUrl()}/api/ai/chat`, {
+        const response = await fetchWithAuth('/api/ai/chat', {
             method: 'POST',
-            headers: getAuthHeaders(true),
+            json: true,
             body: JSON.stringify({ prompt, history: history.map((m) => ({ role: m.role, text: m.text })) }),
         });
         if (!response.ok) {

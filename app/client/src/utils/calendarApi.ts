@@ -3,7 +3,8 @@
  * Reads base URL and token from api/config; no requests if token is missing.
  */
 
-import { getApiBaseUrl, getAuthHeaders, getAuthToken } from '@/api/config';
+import { getAuthToken } from '@/api/config';
+import { fetchWithAuth } from '@/api/client';
 import { isMockEnabled, isNetworkFailure } from '@/utils/offlineMock';
 import { buildMockCalendarNotes } from '@/utils/mockData';
 
@@ -47,9 +48,7 @@ export async function fetchCalendarNotes(params: FetchCalendarNotesParams): Prom
     }
     const { year, month } = params;
     try {
-        const res = await fetch(`${getApiBaseUrl()}/api/notes/calendar/${year}/${month}`, {
-            headers: getAuthHeaders(),
-        });
+        const res = await fetchWithAuth(`/api/notes/calendar/${year}/${month}`);
         if (!res.ok) {
             console.error('Failed to load calendar data', res.status, await res.text());
             return null;
