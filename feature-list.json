@@ -1,335 +1,174 @@
 {
-  "build": "Sprint 7 — platform hardening: the open AI proxy, tests, CI, email delivery",
+  "build": "Sprint 9 — the two admin surfaces: Documentation editor & Console Monitor",
   "spec": "build-spec.md",
-  "decisions": ".agents/docs/features/platform-hardening.md (E-D1..E-D6)",
-  "note": "Scoping the last unscoped sprint row found that POST /api/ai/chat is an unauthenticated, unmetered LLM proxy — verified live, the request reached Google with no bearer token. That is P0 and goes first. 'Docs + AI Chat' is otherwise already built (Chat.tsx 339 lines, Docs.tsx 256). 'CI on PR' is not the real gap: there is no test runner at all, and four consecutive sprints have closed with 'no automated tests' as their first known gap. Email is blocked on a production sending domain but NOT on being built or verified — real SMTP against a local Mailpit exercises the whole path. Previous ledgers archived under .agents/docs/archive/.",
+  "decisions": ".agents/docs/features/admin-docs-and-console.md (S9-D1..S9-D8)",
+  "note": "Scoped 2026-08-08 from the two disabled 'soon' rows in Sidebar.tsx:49-50, the only unfinished entries in the app shell. Verified against the tree: neither has a route. Documentation was never possible because the six public /docs pages are 929 lines of hand-authored JSX in content/docs.tsx, so the CMS is a storage-format change first and a UI second. Console Monitor is the reverse: the authenticated monitors room, target-app registry, capped console-logs relay and /api/console-logs/targets all exist in server.ts, and hooks/useBugTrackerSocket.ts already consumes every event — but the hook has ZERO call sites, an orphan from the 2026-07-24 UI reset. It is also missing an authorization level: the monitors room admits any signed-in user, not just admins. Sprint 8 (real-time issue stream) was scoped and never started; archived intact under .agents/docs/archive/sprint-8-realtime-issue-stream-* and re-scopeable as written.",
   "features": [
     {
       "id": "F001",
-      "title": "P0: authenticate the AI proxy",
+      "title": "DocPage model, migration, and the six pages converted to Markdown",
       "priority": "critical",
       "depends_on": [],
-      "description": "E-D1, first control. `api/ai.ts` has no `authenticate` at all — an anonymous POST currently reaches the model provider. The 401 must happen before any outbound request, because the whole point is that nobody spends the key's money.",
+      "description": "S9-D1 + S9-D2. JSX cannot round-trip through a textarea, so the storage format has to change before any editor can exist. Body is one Markdown string with container directives; the TOC is derived from headings at read time rather than stored, so there is one editable structure instead of two.",
       "steps": [
-        "POST /api/ai/chat with no Authorization answers 401",
-        "GET /api/ai/status with no Authorization answers 401",
-        "With a valid token, /chat still works end to end",
-        "FAILURE CASE: instrument the outbound call — an unauthenticated request makes ZERO calls to the provider, not one that is then discarded"
+        "DocPage: slug @unique, title, group, groupOrder, order, summary, body, status draft|published, updatedAt, updatedById",
+        "Migration applied — stop the :3000 dev server first, prisma generate EPERMs on Windows otherwise",
+        "A one-time script converts all six pages in content/docs.tsx to Markdown + directives",
+        "The conversion diff is reviewed page by page; the SDK page is expected to need hand-finishing",
+        "content/docs.tsx STAYS in the tree until F010 passes — the JSX is otherwise only in git"
       ],
-      "passes": true,
-      "notes": "POST /api/ai/chat and GET /api/ai/status both answer 401 unauthenticated, verified against the running server. The 401 body names neither the provider nor the key. Authenticated calls still work."
+      "passes": null,
+      "notes": ""
     },
     {
       "id": "F002",
-      "title": "P0: per-user quota on the AI proxy",
+      "title": "Markdown + directive renderer over the existing DocsPrimitives",
       "priority": "critical",
-      "depends_on": [
-        "F001"
-      ],
-      "description": "E-D1, second control. Authentication alone does not bound cost: a signed-in loop bills exactly the same as an anonymous one. Keyed on user id, not IP — two users behind one NAT must not share a budget, and one user on two networks must not get two.",
+      "depends_on": ["F001"],
+      "description": "S9-D1. Plain Markdown was rejected: Callout, Endpoint and Table carry most of what makes the SDK and Quickstart pages readable. Directives map onto the eleven primitives that already exist, so there is one rendering path rather than a second look-alike.",
       "steps": [
-        "A user past AI_RATE_LIMIT_PER_HOUR answers 429",
-        "The 429 body says when the quota resets",
-        "A DIFFERENT user is unaffected at that moment (proves it keys on user, not IP)",
-        "FAILURE CASE: the limiter cannot be bypassed by omitting the token — that path is already 401"
+        ":::callout{tone title}, :::endpoint{method path}, tables, fenced code with lang all render through DocsPrimitives",
+        "Rendered output for a migrated page matches the pre-migration screenshot",
+        "An unknown directive degrades to plain text rather than throwing — one bad edit must not blank a public page",
+        "FAILURE CASE: a malformed directive does not take down the whole page render"
       ],
-      "passes": true,
-      "notes": "aiChatLimiter keyed on req.user.id (not IP), AI_RATE_LIMIT_PER_HOUR=30, with an IP fallback that can only matter if the mount order is broken. The 429 body names the window."
+      "passes": null,
+      "notes": ""
     },
     {
       "id": "F003",
-      "title": "P0: input caps and a lower output ceiling",
+      "title": "The escaping allowlist — raw HTML never reaches the DOM",
       "priority": "critical",
-      "depends_on": [
-        "F001"
-      ],
-      "description": "E-D1, third and fourth controls. There is currently no prompt length limit, no history length limit, and maxOutputTokens is 8192. A cap that runs after the outbound call is not a cost control.",
+      "depends_on": ["F002"],
+      "description": "S9-D4. /docs is public and unauthenticated on purpose; the SDK snippet lives there. Piping admin-authored Markdown into dangerouslySetInnerHTML turns one compromised admin account into stored XSS on the most public page in the product.",
       "steps": [
-        "An oversized prompt answers 400 with a readable message",
-        "An over-long history answers 400",
-        "Both refusals happen with ZERO outbound provider calls",
-        "A normal prompt is unaffected",
-        "FAILURE CASE: a non-string prompt, a non-array history and a history holding junk are all refused rather than forwarded"
+        "Raw HTML in source is escaped and rendered as text",
+        "href is restricted to http:, https:, mailto: and same-origin relative paths",
+        "javascript: hrefs are dropped, not rendered",
+        "FAILURE CASE: a body containing <img src=x onerror=alert(1)> renders inert, asserted on rendered output in a test"
       ],
-      "passes": true,
-      "notes": "7 refusals verified, all 400 and all before any outbound call: oversized prompt, over-long history by count, over-large history by characters, junk history entries, non-string prompt, empty prompt, non-array history. maxOutputTokens cut 8192 -> 2048."
+      "passes": null,
+      "notes": ""
     },
     {
       "id": "F004",
-      "title": "AI key read at request time; honest /status",
-      "priority": "high",
-      "depends_on": [
-        "F001"
-      ],
-      "description": "The key is captured in a module-level const at import, so /status reports the state at boot rather than now. Smaller than the missing auth, same class of thing: a status endpoint that can be wrong is worse than none.",
+      "title": "/docs reads from the database, published-only, still anonymous",
+      "priority": "critical",
+      "depends_on": ["F002", "F003"],
+      "description": "S9-D3. The public route filters to published so an editor's in-progress keystrokes are not live. The route staying anonymous is not incidental — gating install instructions behind a login is how a one-line integration turns into a support conversation.",
       "steps": [
-        "/status reports ready/not-configured from a request-time read",
-        "With no key configured, /chat answers 503 (not 500) with a clear message",
-        "The 401 still wins over the 503 for an unauthenticated caller — auth is the outer gate",
-        "FAILURE CASE: no response from either route ever contains the key or any part of it"
+        "All six pages render at /docs/* from the DB, signed out",
+        "A draft page does not appear in the sidebar and its slug redirects to the default page",
+        "The TOC lists the same headings the JSX version did and anchors clear the sticky header",
+        "FAILURE CASE: an unauthenticated request for a draft slug leaks neither body nor title"
       ],
-      "passes": true,
-      "notes": "Key read per request via apiKey(); /status reports request-time state and publishes the caps. Missing key -> 503 not 500, and the 401 still wins for an unauthenticated caller. No response contains the key."
+      "passes": null,
+      "notes": ""
     },
     {
       "id": "F005",
-      "title": "Resolve whether POST /api/console-logs is a hole",
-      "priority": "high",
-      "depends_on": [],
-      "description": "Carried in from the build spec's known gaps. It is unauthenticated like `/api/ingest`, but unlike ingest it has no project key, no origin check and no rate limit. Establish which it is and close it if it is a hole. A decision either way, written down.",
+      "title": "Admin docs CRUD API, authorize('admin') on every route",
+      "priority": "critical",
+      "depends_on": ["F001"],
+      "description": "Hiding a sidebar link is presentation, not access control — Sidebar.tsx:26 says so about this exact group. Every route gates server-side, and it is asserted per route because a gate applied to four of five routes is the shape this codebase has already been bitten by.",
       "steps": [
-        "The route's trust model is stated in a comment: who may call it and why",
-        "If it is a hole: unauthenticated writes are refused and the refusal is asserted",
-        "If it is deliberate ingest: it gains the same rate limiting as /api/ingest",
-        "FAILURE CASE: an unauthenticated caller cannot write unbounded rows either way"
+        "List, read, create, update, publish/unpublish, delete, reorder",
+        "Slug uniqueness is enforced at the DB and surfaced as a field error, not a 500",
+        "Slug edits are permitted behind a confirmation naming the broken-link consequence (S9-D8)",
+        "FAILURE CASE: a non-admin gets 403 on EVERY route, asserted per route, not on one representative"
       ],
-      "passes": true,
-      "notes": "It was a hole, and worse than missing auth: an anonymous caller could make the server drive a headless Chrome to ANY URL - SSRF against localhost, private ranges and 169.254.169.254. Now authenticate + authorize(admin) + urlScanLimiter + lib/urlGuard.ts. Verified 401 anonymous, 403 non-admin, 400 for loopback/metadata/private/file:// URLs. The client helper calling it had no caller, so nothing broke."
+      "passes": null,
+      "notes": ""
     },
     {
       "id": "F006",
-      "title": "Vitest wired into both workspaces",
-      "priority": "critical",
-      "depends_on": [],
-      "description": "E-D2. `npm test` from the repo root runs both suites. app/server's script is currently `echo \"Error: no test specified\" && exit 1`, which is what four sprints of 'no automated tests' has been resting on.",
+      "title": "/admin/docs — editor, preview, reorder",
+      "priority": "high",
+      "depends_on": ["F005", "F004"],
+      "description": "S9-D3. Preview renders through the same renderer as the public page, which makes preview a guarantee rather than an approximation. Built on the AdminUsers page pattern so the admin surfaces read as one thing.",
       "steps": [
-        "`npm test` at the repo root runs both workspaces and reports a combined result",
-        "A failing test makes the command exit non-zero",
-        "The client suite runs without a browser and without a dev server",
-        "The server suite runs without a database",
-        "FAILURE CASE: `npm ci && npm test` works from a clean clone, not just this working tree"
+        "Edit Quickstart's body, publish, reload /docs/quickstart — the change is there, no rebuild, no restart",
+        "Draft preview and the public page produce identical rendered output for the same body, asserted by diff not by eye",
+        "Reordering within a group changes the public sidebar order on reload",
+        "Route is admin-gated client-side AND server-side; the row is ready: true"
       ],
-      "passes": true,
-      "notes": "Vitest in both workspaces. `npm test` at the repo root runs 59 tests across 6 files and exits non-zero on failure. No database, no browser, no dev server. Verified from a clean checkout after npm ci."
+      "passes": null,
+      "notes": ""
     },
     {
       "id": "F007",
-      "title": "Suite: stack frame parsing",
-      "priority": "high",
-      "depends_on": [
-        "F006"
-      ],
-      "description": "E-D2. `lib/stackFrames.ts` — named in Sprint 4's gaps as the first thing worth covering. It is the input to symbolication, so a regression here silently returns raw frames and looks like 'source maps are broken'.",
+      "title": "The monitors room gates on role === 'admin'",
+      "priority": "critical",
+      "depends_on": [],
+      "description": "S9-D5. The room refuses anonymous sockets but admits any signed-in user, and it carries every target app's console output. Shipping an Administration-labelled route over that transport makes a hidden link the only protection. Deliberately landed BEFORE the page: gate-after means the insecure version is the one that exists longest and gets demoed.",
       "steps": [
-        "Chrome frames with and without a function name parse correctly",
-        "Firefox frames parse correctly",
-        "An unrecognised line is kept verbatim rather than dropped",
-        "basenameOf and isMappableUrl behave on CDN, subpath and localhost URLs",
-        "FAILURE CASE: an empty stack and a null stack both return safely rather than throwing"
+        "Role is read from the database at join time, the way authorize() does it, never from a JWT claim",
+        "A signed-in non-admin emitting register{clientType:'monitor'} is refused",
+        "FAILURE CASE: that non-admin receives ZERO console-logs frames, asserted on the wire, not by an empty UI",
+        "FAILURE CASE: the anonymous target-app path still registers and still relays — io.use is NOT tightened as a side effect"
       ],
-      "passes": true,
-      "notes": "8 tests. Chrome named/bare/modifier frames, Firefox frames, unrecognised lines kept verbatim, line count preserved so the stack reassembles, open-ended error names treated as headers, basenameOf across CDN/subpath/Windows paths, isMappableUrl rejecting data:/blob:/anonymous/native."
+      "passes": null,
+      "notes": ""
     },
     {
       "id": "F008",
-      "title": "Suite: timezone resolution, including the +7h trap",
-      "priority": "critical",
-      "depends_on": [
-        "F006"
-      ],
-      "description": "E-D2. `utils/timezone.ts`. This has already gone wrong once — a JS Date bound into a raw query shifted every result by seven hours. A regression here moves every date on the calendar.",
+      "title": "/admin/console — target list and live stream",
+      "priority": "high",
+      "depends_on": ["F007"],
+      "description": "A port of the standalone page documented in archive/console-monitor.md into the app shell, driven by the orphaned useBugTrackerSocket hook. Empty state says the feed is live-only, so a blank panel is never read as 'no errors ever happened'.",
       "steps": [
-        "resolveTimeZone parses the stored display format ('Asia/Bangkok (GMT+7)')",
-        "An unknown or malformed zone falls back rather than throwing",
-        "zonedDayOfMonth puts 2026-08-10T02:00Z on day 10 in Bangkok and day 9 in Honolulu",
-        "zonedMonthRange bounds the month correctly across a year boundary (December)",
-        "FAILURE CASE: reintroducing the raw-Date bug turns this suite red (criterion 7)"
+        "Every connected target app is listed; connect/disconnect updates within 2s without a reload",
+        "A console.error in a target app appears within 2s, once, with level, timestamp, source, app name and stack",
+        "Level filter, copy, clear and auto-scroll behave as the archived doc describes",
+        "The connection badge never reads connected over a dead feed; restart reconnects and the target list is correct"
       ],
-      "passes": true,
-      "notes": "10 tests including the exact Sprint 5 assertion: 2026-08-10T02:00Z is day 10 in Bangkok and day 9 in Honolulu. Also the display-format parse, the December year rollover, and a DST transition in America/New_York."
+      "passes": null,
+      "notes": ""
     },
     {
       "id": "F009",
-      "title": "Suite: fingerprint grouping",
-      "priority": "critical",
-      "depends_on": [
-        "F006"
-      ],
-      "description": "E-D2. `lib/fingerprint.ts` decides whether two errors are one issue. A regression that loosens it merges unrelated bugs into one row; a regression that tightens it turns one bug into thousands of issues. Neither announces itself.",
+      "title": "Pause buffers, the ring buffer holds 500, nothing is persisted",
+      "priority": "high",
+      "depends_on": ["F008"],
+      "description": "S9-D6 + S9-D7. A pause that unsubscribes drops exactly the burst you paused to read. And server.ts:249-255 is explicit that persistence has one supported path — POST /api/ingest, keyed and rate limited. This sprint does not reopen that.",
       "steps": [
-        "Two identical errors produce the same fingerprint",
-        "Two genuinely different errors do not",
-        "The same error from two different releases or URLs still groups together",
-        "The fingerprint is stable across runs and processes (no Math.random, no Date, no object key order dependence)",
-        "FAILURE CASE: an error with no stack, no message, or neither still produces a usable stable key"
+        "Pause, generate 20 logs, resume — all 20 are there; a pending count showed while paused",
+        "The buffer holds at most 500 entries and drops oldest first",
+        "The panel does not degrade after 5 000 logs in a session",
+        "FAILURE CASE: after a session with hundreds of logs, SELECT count(*) FROM logs is unchanged"
       ],
-      "passes": true,
-      "notes": "17 tests. Same bug groups, different bugs do not, projects and levels separate, and the NUL separator cannot be spoofed by a message containing a space or a pipe. Stability asserted across key order."
+      "passes": null,
+      "notes": ""
     },
     {
       "id": "F010",
-      "title": "Suite: session timeout clamping and timezone options",
-      "priority": "high",
-      "depends_on": [
-        "F006"
-      ],
-      "description": "E-D2. `resolveSessionTimeoutMinutes` (server) and `timezoneOptions` (client) — one test in each workspace, which also proves both runners actually run.",
+      "title": "The suite proves its worth, and the JSX is deleted",
+      "priority": "critical",
+      "depends_on": ["F006", "F009"],
+      "description": "A test that has never failed has proven nothing. The two failures this sprint is shaped to prevent are the privilege gap on the monitors room and stored XSS on a public page, so those are the two that get reintroduced. content/docs.tsx is deleted only here — once the DB path is proven, not before and not 'later'.",
       "steps": [
-        "resolveSessionTimeoutMinutes clamps a value written directly to the DB below 5 and above 480",
-        "A missing settings row falls back to the default rather than signing a zero-length token",
-        "timezoneOptions keeps an unknown stored value selectable instead of dropping it",
-        "FAILURE CASE: timezoneOptions with null/undefined returns the plain list rather than throwing"
+        "Revert the monitors admit check to authenticated-only: the suite goes red naming the privilege gap",
+        "Revert the HTML escaping: the XSS test goes red",
+        "Both revert clean and the suite goes green",
+        "content/docs.tsx deleted in the same commit that flips /docs to the DB path"
       ],
-      "passes": true,
-      "notes": "resolveSessionTimeoutMinutes clamps 0/-30/100000/NaN and falls back on a missing row (prisma mocked, no DB). timezoneOptions keeps an unknown stored value selectable; every TIMEZONES value parses back to a real IANA zone."
+      "passes": null,
+      "notes": ""
     },
     {
       "id": "F011",
-      "title": "The suite proves its worth: reintroduce a real bug",
-      "priority": "critical",
-      "depends_on": [
-        "F007",
-        "F008",
-        "F009",
-        "F010"
-      ],
-      "description": "Criterion 7, and the feature that stops this sprint from declaring the four-sprint gap closed with a suite that asserts nothing. A test suite that has never caught anything is a hypothesis.",
-      "steps": [
-        "Reintroduce the raw-Date timezone bug: the suite goes red, naming the timezone test",
-        "Revert it: green",
-        "Reintroduce a loosened fingerprint: the suite goes red",
-        "Revert it: green",
-        "FAILURE CASE: the transcript records which test failed and what it said, not just 'tests failed'"
-      ],
-      "passes": true,
-      "notes": "PROVEN, not claimed. Reintroduced resolveTimeZone dropping the display-suffix strip -> red, naming \"parses the display format actually stored in User.timezone\", exit 1. Reverted -> green. Reintroduced the fingerprint NUL join as a space -> red, naming \"is not fooled by a separator that appears inside the message\". Reverted -> green."
-    },
-    {
-      "id": "F012",
-      "title": "CI on pull requests and pushes to main",
-      "priority": "critical",
-      "depends_on": [
-        "F006"
-      ],
-      "description": "E-D3. Typecheck both workspaces, lint the client, run both suites, build the client. Checks only — no deploy, no publish, no release, and no credentials that would permit one.",
-      "steps": [
-        "The workflow triggers on pull_request and on push to main, and on nothing else",
-        "It runs typecheck (both), lint (client), test (both) and build (client)",
-        "A deliberately broken test fails the workflow",
-        "It needs no secrets, so a fork PR can pass",
-        "FAILURE CASE: grep the workflow for deploy/publish/release/secrets — none present (criterion 9)"
-      ],
-      "passes": true,
-      "notes": ".github/workflows/ci.yml on pull_request and push to main only. Steps: npm ci, prisma generate, typecheck both, lint client, test both, build client, build server. No deploy/publish/release step and no secrets, so fork PRs run the same checks."
-    },
-    {
-      "id": "F013",
-      "title": "CI passes from a clean checkout",
+      "title": "Clean build, green suite, sidebar rows live, docs written",
       "priority": "high",
-      "depends_on": [
-        "F012"
-      ],
-      "description": "Criterion 10. A workflow verified only against this working tree — with its node_modules, its generated Prisma client and its .env — is the one that goes red on the first real PR and gets disabled.",
+      "depends_on": ["F010"],
+      "description": "npm run build catches client errors tsc --noEmit misses here — the erasableSyntaxOnly gap. Both rows flip to ready: true only when the routes behind them refuse a non-admin server-side, not merely hide.",
       "steps": [
-        "Every step is run locally against a clean checkout with `npm ci`",
-        "`prisma generate` is handled (the server imports @prisma/client at module load)",
-        "No step depends on a .env file, a database, or a running server",
-        "FAILURE CASE: the exact commands and their output are recorded in progress.md, per step"
+        "tsc --noEmit, eslint src and npm run build clean in BOTH workspaces",
+        "npm test green in CI from a clean checkout",
+        "Both Sidebar.tsx rows are ready: true; a non-admin sees neither the rows nor a working route",
+        "admin-docs-and-console.md gains its exit notes; sprint-plan.md updated with what actually shipped"
       ],
-      "passes": true,
-      "notes": "Every step run against a genuinely clean checkout (tracked files only, no node_modules, no .env, no generated client): npm ci -> 938 packages, prisma generate, typecheck both, lint, 59 tests, client build 24.9s, server build. All green. The lint step FOUND A REAL PRE-EXISTING ERROR on its first run."
-    },
-    {
-      "id": "F019",
-      "title": "BLOCKER: package-lock.json was gitignored",
-      "priority": "critical",
-      "depends_on": [],
-      "description": "Found while verifying F013 against a clean checkout: `npm ci` failed because there was no lockfile — `.gitignore` line 5 excluded it. This blocks CI outright (criterion 10 and E-D3 both name `npm ci`), and it means no install in this repo's history has been reproducible. It is also the direct cause of a bug already paid for: Sprint 4's npm silently deduped `source-map` to a hoisted 0.5.7 with a different, synchronous API than the pinned 0.7.4. Ignoring a lockfile suits a published library; this is an application.",
-      "steps": [
-        "package-lock.json is no longer matched by .gitignore",
-        "`git check-ignore package-lock.json` reports nothing",
-        "`npm ci` succeeds in a checkout containing only tracked files",
-        "The .gitignore records WHY it is tracked, so it is not re-ignored as tidying",
-        "FAILURE CASE: no .env, no node_modules and no generated Prisma client are needed for `npm ci` to work"
-      ],
-      "passes": true,
-      "notes": "package-lock.json un-ignored, with the reason recorded in .gitignore. npm ci now succeeds in a checkout containing only tracked files (938 packages). This blocked CI outright and is the same class of problem that gave Sprint 4 a deduped source-map 0.5.7."
-    },
-    {
-      "id": "F014",
-      "title": "Mail transport behind a driver, with an honest not-configured state",
-      "priority": "critical",
-      "depends_on": [],
-      "description": "E-D4. `console` (default), `smtp`, `noop`. The effective driver is reported the way /api/ai/status reports the key. Nothing anywhere claims a message was sent unless one was.",
-      "steps": [
-        "With no mail env, the app boots and the status reports driver `console`",
-        "The console driver renders the message to the log and reports NOT sent",
-        "Switching MAIL_DRIVER to smtp changes the reported driver with no code change",
-        "SMTP_USER/SMTP_PASS unset are omitted from the transport config, not sent as empty strings",
-        "FAILURE CASE: no log line, status body or API response ever contains SMTP_PASS"
-      ],
-      "passes": true,
-      "notes": "console/smtp/noop, driver read per call. console reports sent:FALSE and renders the message; noop sends nothing; an unrecognised MAIL_DRIVER degrades to console rather than failing boot. SMTP_USER/PASS omitted entirely when unset. /api/mail/status is authenticated and contains no credentials."
-    },
-    {
-      "id": "F015",
-      "title": "Mailpit in docker-compose, and a message read back off the wire",
-      "priority": "critical",
-      "depends_on": [
-        "F014"
-      ],
-      "description": "E-D5. This is the feature that makes email real rather than plausible: the acceptance test retrieves the delivered message from Mailpit's API rather than trusting that sendMail resolved.",
-      "steps": [
-        "`docker compose up` starts Mailpit with SMTP on 1025 and its API on 8025",
-        "A send with MAIL_DRIVER=smtp appears in Mailpit",
-        "The retrieved message has the right recipient, a readable subject, and both a text and an HTML part",
-        "FAILURE CASE: the assertion reads the message from the mail server's API — a resolved sendMail promise is explicitly not accepted as evidence"
-      ],
-      "passes": true,
-      "notes": "A message read back OFF THE WIRE, not a resolved promise. Mailpit is in docker-compose; Docker Desktop's engine was down on this machine, so verification used a real in-process SMTP server (full EHLO/MAIL/RCPT/DATA session over TCP). Asserted: envelope recipient, Subject header, and both text/plain and text/html parts."
-    },
-    {
-      "id": "F016",
-      "title": "Invite emails — the delivery mechanism invites have never had",
-      "priority": "critical",
-      "depends_on": [
-        "F015"
-      ],
-      "description": "E-D6. Today `api/team.ts` returns an inviteUrl and a human copies it out of band. Criterion 12: the invite URL must arrive in the message AND still accept the invite.",
-      "steps": [
-        "Inviting an address produces a message in Mailpit addressed to it",
-        "The body contains the invite URL, and that URL still accepts the invite",
-        "Inviting an address with no account still sends — that is what an invite is for",
-        "The response still returns inviteUrl, so copy-paste keeps working when mail is not configured",
-        "FAILURE CASE: with SMTP down, the invite is still created, the URL is still returned, and the request neither fails nor hangs (criterion 13)"
-      ],
-      "passes": true,
-      "notes": "The whole path. Inviting emails the invitee; the token was extracted FROM THE DELIVERED MESSAGE (after decoding quoted-printable soft line breaks) and used to accept the invite successfully. The URL also appears as copyable plain text, not only inside an anchor. inviteUrl is still returned so copy-paste works when mail is off. With SMTP down the invite is still created, its URL still returned, and the request does not hang."
-    },
-    {
-      "id": "F017",
-      "title": "Regression alert emails, without ever failing ingest",
-      "priority": "high",
-      "depends_on": [
-        "F015"
-      ],
-      "description": "E-D6. A third channel beside the in-app feed and the webhook, inheriting the existing rule: this runs inside the ingest request, so an alerting failure must never turn someone's error report into a 500. Criterion 14.",
-      "steps": [
-        "A regression on a project with alerting on emails the project's members",
-        "A project with alertOnRegression:false sends nothing and does no work",
-        "In-app notification rows are still written first and unconditionally",
-        "FAILURE CASE: with SMTP unreachable, ingest still answers normally and within its usual time (criterion 13)"
-      ],
-      "passes": true,
-      "notes": "Positive and negative both verified against the running API. With a reachable server a regression emails the project member with a Regression subject. With SMTP unreachable, ingest still succeeds, is not slowed, and the in-app rows are still written first. alertOnRegression:false does no work at all."
-    },
-    {
-      "id": "F018",
-      "title": "Remove the broken validateQuery",
-      "priority": "medium",
-      "depends_on": [
-        "F006",
-        "F012"
-      ],
-      "description": "Sprint 5 gap 4. `middleware/validate.ts` exports a `validateQuery` that cannot work under Express 5 — it assigns to `req.query`, which is getter-only. Three routers already work around it inline. It is dead code that will mislead the next caller, and it is now safe to remove because the suite and CI will catch it if it was not dead.",
-      "steps": [
-        "No module imports validateQuery",
-        "It is removed, and `validate` is untouched",
-        "Both workspaces typecheck and both suites pass",
-        "FAILURE CASE: the routes that parse query params inline still behave — asserted, not assumed"
-      ],
-      "passes": true,
-      "notes": "Removed. No importers; three routers already parsed inline. A comment in its place explains the Express 5 getter problem so it is not reintroduced. Both workspaces typecheck, 59 tests pass."
+      "passes": null,
+      "notes": ""
     }
   ]
 }
