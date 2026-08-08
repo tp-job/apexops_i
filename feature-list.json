@@ -107,8 +107,8 @@
         "FAILURE CASE: that non-admin receives ZERO console-logs frames, asserted on the wire, not by an empty UI",
         "FAILURE CASE: the anonymous target-app path still registers and still relays — io.use is NOT tightened as a side effect"
       ],
-      "passes": null,
-      "notes": ""
+      "passes": true,
+      "notes": "2026-08-08. Policy extracted to lib/monitorAccess.ts as a pure predicate because vitest.config.ts holds the server suite to pure functions — a rule inside an io.on('connection') closure cannot be covered at all. 8 unit tests. Wire steps 3 and 4 cannot be unit-tested, so src/scripts/verify-monitor-access.ts asserts them against a live server + DB: 5/5 PASS — admin admitted; non-admin refused with 'Insufficient permissions'; anonymous target-app still registered AND relayed; non-admin received ZERO console-logs frames; sentinel log not persisted. Reintroduced-bug proof run early (F010 step 1): reverting the role check to authenticated-only turned 4 tests red naming the privilege gap, reverted clean. Known gap appended as F012 rather than fixed silently."
     },
     {
       "id": "F008",
@@ -169,6 +169,21 @@
       ],
       "passes": null,
       "notes": ""
+    },
+    {
+      "id": "F012",
+      "title": "A demoted admin keeps monitoring until the socket reconnects",
+      "priority": "medium",
+      "depends_on": ["F007"],
+      "description": "Found while implementing F007, appended rather than fixed silently. authorize() re-reads the role on EVERY request, so an HTTP demotion lands on the next call. A socket joins the monitors room once and stays, so the equivalent demotion does not land until that socket drops — a long-lived tab keeps streaming every target app's console output after the admin bit is removed. Not a regression: the room previously admitted any signed-in user, so this is strictly narrower than what shipped before. It is the residual window, not a new hole.",
+      "steps": [
+        "Decide the mechanism: periodic re-check sweep over connectedClients.monitors vs. re-check before fan-out vs. accept-and-document",
+        "Demote an admin with a live monitor socket; the socket stops receiving console-logs within the chosen window",
+        "The evicted socket is removed from connectedClients.monitors, not merely muted",
+        "FAILURE CASE: the sweep does not add a database read per relayed log batch — that path is hot"
+      ],
+      "passes": null,
+      "notes": "Deliberately NOT built inside F007: F007's steps do not ask for it, and widening a feature mid-loop is how a ledger stops matching what was verified. Sized as medium because the window closes on any reconnect, deploy or token refresh."
     }
   ]
 }
