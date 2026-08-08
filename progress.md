@@ -47,6 +47,30 @@ Three calls worth stating here because the sprint is shaped around them:
    — the SDK snippet lives there. Admin-authored Markdown reaching `dangerouslySetInnerHTML` turns one
    compromised admin account into stored XSS on the most public page in the product.
 
+## 2026-08-08 — console slice built (G5, G6)
+
+Scope call from the user: **build the Console Monitor half first.** The docs half (F001–F006)
+stays queued exactly as specced; nothing about it changed.
+
+G5 landed before G6 deliberately. Gate-after would have meant the insecure version was the one that
+existed longest and the one most likely to get demoed.
+
+**What the verification actually cost, and why it was worth it.** Three things were found by running
+the checks rather than by reading the code:
+
+1. **`source` was not rendered.** Criterion 11 names it explicitly. Caught by reading the live panel
+   against the criterion rather than against my memory of what I had built. Added as its own column
+   and to the copy output.
+2. **`@types/socket.io-client@1.4.36`** was declared in the client — v1 types shadowing the v4 types
+   that ship with the package. Invisible until the server typechecked a file importing the client.
+   Removed; both workspaces are clean.
+3. **The naive dead-feed test was a confound.** Killing the backend also kills the session check, so
+   the page unmounts to "Checking your session…" and the badge cannot be observed at all. The honest
+   test is a *live API with a dead socket* — done by pointing `VITE_WS_URL` at a closed port.
+
+The suite proved its worth before being trusted: reverting the role check to authenticated-only
+turned 4 tests red naming the privilege gap, then reverted clean.
+
 ## Status
 
 | G | Scope | State |
@@ -55,13 +79,23 @@ Three calls worth stating here because the sprint is shaped around them:
 | G2 | Markdown + directive renderer over `DocsPrimitives` | not started |
 | G3 | `/docs` served from the DB, published-only, still anonymous | not started |
 | G4 | Admin CRUD API + `/admin/docs` editor, preview, reorder | not started |
-| G5 | `monitors` admits admins only | not started |
-| G6 | `/admin/console` page: targets, stream, filter, pause, buffer | not started |
-| G7 | Tests, the two reintroduced-bug proofs, sidebar `ready`, docs | not started |
+| G5 | `monitors` admits admins only | **done** — F007, wire-verified 5/5 |
+| G6 | `/admin/console` page: targets, stream, filter, pause, buffer | **done** — F008, F009 |
+| G7 | Tests, the two reintroduced-bug proofs, sidebar `ready`, docs | partial — console half done |
 
-**Nothing is implemented yet. No criterion has been observed.**
+**Observed, not claimed:** criteria 10, 11, 12, 13, 14, 15, 16, 17, 18, and the console half of 19
+and 21. Criteria 1–9 (docs) and the docs half of 19–21 remain unbuilt and unobserved.
+
+Suites: server 61 passed, client 22 passed. `tsc` clean in both workspaces, `eslint src` clean,
+`npm run build` clean.
 
 ## Carried risk
+
+**F012 is the residual on the console half.** A socket joins the `monitors` room once and stays, so a
+demoted admin keeps streaming until that socket drops. `authorize()` re-reads the role on every HTTP
+request; there is no equivalent tick on a long-lived socket. It is strictly narrower than what shipped
+before — the room used to admit any signed-in user at all — so this is a window, not a hole. It is on
+the ledger rather than in a comment.
 
 **G1 is the item most likely to run long, and the easiest to underestimate.** Converting 929 lines of
 JSX across eleven distinct primitives is a task with judgment in it, not a regex — the SDK page in

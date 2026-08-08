@@ -122,8 +122,8 @@
         "Level filter, copy, clear and auto-scroll behave as the archived doc describes",
         "The connection badge never reads connected over a dead feed; restart reconnects and the target list is correct"
       ],
-      "passes": null,
-      "notes": ""
+      "passes": true,
+      "notes": "2026-08-08. Observed in the browser against a live server, DB and simulated target apps. Connect 0->1->2 with no reload; disconnect removed the chip in ~2ms (criterion 10). Logs arrived within 2s carrying level, timestamp, source, app name and stack; 'warn' normalised to WARNING (criterion 11). Level filter: All 13 -> Errors 3 (only ERROR rows) -> Warnings 4 (only WARNING) -> All 14; clear emptied both the list and the counter (criterion 12). Dead-feed proven with the API alive and the socket URL pointed at a closed port: badge read Offline, never Live, with the disconnect warning and 'Not connected to the feed' copy; pointing it back produced Live + the app list again (criterion 17). Non-admin at this URL saw the refusal panel, zero log rows and no leaked output. GAP FOUND AND FIXED DURING VERIFICATION: `source` was not rendered, which criterion 11 names explicitly - added as its own column and to formatLogLine. Replaced useBugTrackerSocket (zero call sites, orphaned by the 2026-07-24 UI reset) with useConsoleMonitor."
     },
     {
       "id": "F009",
@@ -137,8 +137,8 @@
         "The panel does not degrade after 5 000 logs in a session",
         "FAILURE CASE: after a session with hundreds of logs, SELECT count(*) FROM logs is unchanged"
       ],
-      "passes": null,
-      "notes": ""
+      "passes": true,
+      "notes": "2026-08-08. Buffer rules live in lib/consoleBuffer.ts as pure functions - 16 unit tests - because a dropped burst and a bounded buffer are both invisible on screen and neither can be verified by looking at the page. Observed in the browser: paused with 9 visible, pending climbed 7->13->29 while the visible list stayed frozen at 9, and resume produced exactly 38 = 9 + 29, nothing dropped (criterion 13). Burst of 5000 logs from a second app left the buffer at exactly 500 with 500 DOM rows and a 0.1ms layout read, so the panel did not degrade (criterion 14). After ~5200 relayed logs the logs table held 22 rows, 0 of them from the monitor feed (criterion 18, S9-D6)."
     },
     {
       "id": "F010",

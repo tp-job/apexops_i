@@ -14,6 +14,7 @@ import ProjectOverview from '@/pages/ProjectOverview';
 import ProjectBoard from '@/pages/ProjectBoard';
 import Settings from '@/pages/Settings';
 import AdminUsers from '@/pages/AdminUsers';
+import AdminConsole from '@/pages/AdminConsole';
 import ProjectSettings from '@/pages/ProjectSettings';
 import ProjectMembers from '@/pages/ProjectMembers';
 import InviteAccept from '@/pages/InviteAccept';
@@ -90,6 +91,10 @@ const AppRoutes: FC = () => (
                         sign in to this instance is not. The page refuses a
                         non-admin, and so does every route it calls. */}
                     <Route path="/admin/users" element={<AdminUsers />} />
+                    {/* Live console feed. The room itself admits admins only
+                        (S9-D5), so a non-admin who types this URL gets a refusal
+                        on the wire rather than an empty panel that looks broken. */}
+                    <Route path="/admin/console" element={<AdminConsole />} />
                     <Route path="/p/:slug/settings" element={<ProjectSettings />} />
                     <Route path="/p/:slug/members" element={<ProjectMembers />} />
                 </Route>
