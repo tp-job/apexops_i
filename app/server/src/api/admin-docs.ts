@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import prisma from '../lib/prisma';
 import { authenticate, authorize } from '../middleware/auth';
 import { validate } from '../middleware/validate';
+import { parseRouteId } from '../lib/routeParams';
 import {
     createDocPageSchema,
     reorderDocPagesSchema,
@@ -44,11 +45,6 @@ const pageSelect = {
     updatedBy: { select: { id: true, firstName: true, lastName: true, email: true } },
 } as const;
 
-function parseId(raw: unknown): number | null {
-    const id = Number.parseInt(String(raw), 10);
-    return Number.isSafeInteger(id) && id > 0 ? id : null;
-}
-
 /**
  * A slug collision is a field error, not a 500.
  *
@@ -88,7 +84,7 @@ router.get('/', async (_req: Request, res: Response): Promise<void> => {
 
 // ── GET /:id ─────────────────────────────────────────────────
 router.get('/:id', async (req: Request, res: Response): Promise<void> => {
-    const id = parseId(req.params.id);
+    const id = parseRouteId(req.params.id);
     if (id === null) { res.status(404).json({ error: 'Page not found' }); return; }
 
     try {
@@ -127,7 +123,7 @@ router.post('/', validate(createDocPageSchema), async (req: Request, res: Respon
  * intentional rename from an accidental one.
  */
 router.patch('/:id', validate(updateDocPageSchema), async (req: Request, res: Response): Promise<void> => {
-    const id = parseId(req.params.id);
+    const id = parseRouteId(req.params.id);
     if (id === null) { res.status(404).json({ error: 'Page not found' }); return; }
 
     try {
@@ -180,7 +176,7 @@ router.post('/reorder', validate(reorderDocPagesSchema), async (req: Request, re
 
 // ── DELETE /:id ──────────────────────────────────────────────
 router.delete('/:id', async (req: Request, res: Response): Promise<void> => {
-    const id = parseId(req.params.id);
+    const id = parseRouteId(req.params.id);
     if (id === null) { res.status(404).json({ error: 'Page not found' }); return; }
 
     try {

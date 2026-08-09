@@ -207,6 +207,57 @@
       ],
       "passes": null,
       "notes": "Deliberately NOT built inside F007: F007's steps do not ask for it, and widening a feature mid-loop is how a ledger stops matching what was verified. Sized as medium because the window closes on any reconnect, deploy or token refresh."
+    },
+    {
+      "id": "F013",
+      "title": "One docs article renderer, shared by /docs and the admin preview",
+      "priority": "high",
+      "depends_on": [
+        "F006"
+      ],
+      "description": "S9-D3 says preview is a guarantee rather than an approximation, but the guarantee currently rests on two copies of the same 25-line heading-plus-body loop — one in pages/Docs.tsx, one in the AdminDocs preview pane. Two copies of the thing whose whole point is that it cannot differ. Extracting it makes the property structural instead of maintained.",
+      "steps": [
+        "A single DocsArticle component renders lead, headings and blocks; both call sites use it",
+        "The rendered HTML of a public page is byte-identical before and after the extraction",
+        "Preview and public still produce byte-identical section HTML, re-measured in the browser",
+        "FAILURE CASE: no heading id, scroll-mt or level-3 nesting changes — the TOC anchors still resolve"
+      ],
+      "passes": true,
+      "notes": "2026-08-09. components/docs/DocsArticle.tsx now owns lead + headings + blocks; pages/Docs.tsx and the AdminDocs preview both call it. Proven behaviour-preserving rather than assumed: the public /docs/sdk <main> innerHTML was captured before the extraction and compared after — 29901 characters, identical, first difference at index -1. Preview vs public re-measured after the change: still byte-identical (7317 chars). Every TOC href still resolves to a heading id and scroll-margin-top is still 96px. One intentional difference: the admin preview picked up the public spacing (mt-4/mt-10 rather than mt-3/mt-8), which moves it closer to what it is previewing."
+    },
+    {
+      "id": "F014",
+      "title": "One route-id parser on the server",
+      "priority": "medium",
+      "depends_on": [
+        "F005"
+      ],
+      "description": "api/users.ts and api/admin-docs.ts each carry their own parseId, and both exist because Number.parseInt(\"3abc\") is 3 — an id parser that is wrong returns SOMEONE ELSE'S ROW rather than an error. A second copy is how one of them gets a fix the other does not.",
+      "steps": [
+        "A single exported helper in lib/, used by both routers",
+        "Unit tests: rejects 0, negative, float, \"3abc\", empty, undefined, and beyond MAX_SAFE_INTEGER",
+        "GET /api/admin/docs/3abc and /api/users/3abc still 404 rather than reading row 3",
+        "FAILURE CASE: the suite is red if the helper falls back to a truthy parse"
+      ],
+      "passes": true,
+      "notes": "2026-08-09. lib/routeParams.ts holds the one parser; api/users.ts and api/admin-docs.ts import it and their private copies are gone. Stricter than what it replaced: full-string /^d+$/ rather than Number.parseInt, so \"3abc\", \"3.9\", \"0x10\", \"1e3\" and \"3 OR 1=1\" are refused rather than silently reading row 3. 4 unit tests (12 assertions incl. MAX_SAFE_INTEGER and beyond). On the wire: /api/admin/docs/3abc and /api/users/3abc both 404, /api/admin/docs/3 still 200."
+    },
+    {
+      "id": "F015",
+      "title": "One admin refusal panel across the three admin pages",
+      "priority": "medium",
+      "depends_on": [
+        "F006"
+      ],
+      "description": "AdminUsers, AdminDocs and AdminConsole each hand-roll the same PageHeader + Surface + EmptyState refusal. It is presentation, not access control — every route behind them refuses independently — but three copies is three chances for one of them to say something reassuring while the API is refusing.",
+      "steps": [
+        "One component takes the page title and the refusal copy; all three pages use it",
+        "A signed-in non-admin still sees the refusal on /admin/docs and /admin/users, with the page-specific wording intact",
+        "AdminConsole keeps its two distinct reasons (not signed in vs. not an admin)",
+        "FAILURE CASE: the extraction does not turn any of the three client checks into the ONLY check — the server still 403s, re-asserted"
+      ],
+      "passes": true,
+      "notes": "2026-08-09. components/common/AdminRefusal.tsx; AdminUsers, AdminDocs and AdminConsole all use it, each keeping its own description. AdminConsole keeps both reasons (not signed in vs. not an admin) because they call for different actions. Observed as a signed-in non-admin: /admin/users and /admin/docs both show the refusal with their own copy, no account emails and no editor in the DOM. Step 4 re-asserted with a fresh token — 403 on all six /api/admin/docs routes and on /api/users, so the shared panel is still only the fast path."
     }
   ]
 }

@@ -7,11 +7,11 @@ import {
     FiMonitor,
     FiPause,
     FiPlay,
-    FiShield,
     FiTrash2,
 } from 'react-icons/fi';
 import { AccentButton, Badge, EmptyState, Surface } from '@/components/design-system';
 import { PageHeader } from '@/components/common/layout';
+import AdminRefusal from '@/components/common/AdminRefusal';
 import { useConsoleMonitor, type MonitorStatus } from '@/hooks/useConsoleMonitor';
 import { formatLogLine, type LogLevel } from '@/lib/consoleBuffer';
 
@@ -117,21 +117,19 @@ const AdminConsole: FC = () => {
     };
 
     if (status === 'refused') {
+        // Two distinct reasons, kept distinct: "sign in again" and "you are not
+        // an admin" call for different actions from the reader. The refusal
+        // itself comes from the SOCKET, not from a role check on this page —
+        // which is why the panel is driven by `status` rather than by `user`.
         return (
-            <div className="flex flex-col gap-6">
-                <PageHeader title="Console Monitor" subtitle="Live output from connected applications" />
-                <Surface className="p-10">
-                    <EmptyState
-                        icon={<FiShield size={22} />}
-                        title="You do not have access to the console feed"
-                        description={
-                            refusedReason === 'Authentication required to monitor'
-                                ? 'Your session is not signed in. Sign in again to continue.'
-                                : 'This feed carries console output from every connected application, so it is limited to administrators.'
-                        }
-                    />
-                </Surface>
-            </div>
+            <AdminRefusal
+                title="Console Monitor"
+                description={
+                    refusedReason === 'Authentication required to monitor'
+                        ? 'Your session is not signed in. Sign in again to continue.'
+                        : 'This feed carries console output from every connected application, so it is limited to administrators.'
+                }
+            />
         );
     }
 

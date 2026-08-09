@@ -16,7 +16,7 @@ import { useTheme } from '@/context/theme-context';
 import { useAuth } from '@/context/auth-context';
 import DocsSidebar from '@/components/docs/DocsSidebar';
 import DocsToc from '@/components/docs/DocsToc';
-import DocsMarkdown from '@/components/docs/DocsMarkdown';
+import DocsArticle from '@/components/docs/DocsArticle';
 import { useDocs } from '@/hooks/useDocs';
 
 /**
@@ -207,36 +207,7 @@ const Docs: FC = () => {
                         </button>
                     </div>
 
-                    {parsed && parsed.intro.length > 0 && (
-                        <div className="mt-4 max-w-3xl">
-                            <DocsMarkdown blocks={parsed.intro} lead />
-                        </div>
-                    )}
-
-                    <div className="mt-10 flex max-w-3xl flex-col gap-12">
-                        {(parsed?.sections ?? []).map((section) => (
-                            <section key={section.id} className="flex flex-col gap-4">
-                                {/* `scroll-mt` clears the sticky header — without it an
-                                    anchor jump puts the heading underneath the top bar. */}
-                                {section.level === 3 ? (
-                                    <h3
-                                        id={section.id}
-                                        className="scroll-mt-24 font-heading text-lg font-bold tracking-tight"
-                                    >
-                                        {section.title}
-                                    </h3>
-                                ) : (
-                                    <h2
-                                        id={section.id}
-                                        className="scroll-mt-24 border-b border-gray-200 pb-2 font-heading text-2xl font-bold tracking-tight dark:border-white/10"
-                                    >
-                                        {section.title}
-                                    </h2>
-                                )}
-                                <DocsMarkdown blocks={section.blocks} />
-                            </section>
-                        ))}
-                    </div>
+                    {parsed && <DocsArticle doc={parsed} />}
 
                     {/* ── Prev / next ─────────────────────────── */}
                     <nav

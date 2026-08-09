@@ -4,6 +4,7 @@ import prisma from '../lib/prisma';
 import { authenticate, authorize } from '../middleware/auth';
 import { validate } from '../middleware/validate';
 import { revokeAllSessions } from '../lib/sessions';
+import { parseRouteId } from '../lib/routeParams';
 import {
     listUsersQuerySchema,
     updateUserActiveSchema,
@@ -60,11 +61,6 @@ async function otherActiveAdmins(tx: Prisma.TransactionClient, excludingUserId: 
     return tx.user.count({
         where: { role: 'admin', isActive: true, id: { not: excludingUserId } },
     });
-}
-
-function parseId(raw: unknown): number | null {
-    const id = Number.parseInt(String(raw), 10);
-    return Number.isSafeInteger(id) && id > 0 ? id : null;
 }
 
 // ── GET / ────────────────────────────────────────────────────
@@ -124,7 +120,7 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
 
 // ── PATCH /:id/role ──────────────────────────────────────────
 router.patch('/:id/role', validate(updateUserRoleSchema), async (req: Request, res: Response): Promise<void> => {
-    const id = parseId(req.params.id);
+    const id = parseRouteId(req.params.id);
     if (id === null) { res.status(404).json({ error: 'User not found' }); return; }
 
     const { role } = req.body as { role: 'admin' | 'user' };
@@ -173,7 +169,7 @@ router.patch('/:id/role', validate(updateUserRoleSchema), async (req: Request, r
 
 // ── PATCH /:id/active ────────────────────────────────────────
 router.patch('/:id/active', validate(updateUserActiveSchema), async (req: Request, res: Response): Promise<void> => {
-    const id = parseId(req.params.id);
+    const id = parseRouteId(req.params.id);
     if (id === null) { res.status(404).json({ error: 'User not found' }); return; }
 
     const { isActive } = req.body as { isActive: boolean };

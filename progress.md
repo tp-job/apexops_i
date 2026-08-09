@@ -148,3 +148,25 @@ is a floor and not a backup. Editing the live pages is now `/admin/docs`, not th
 Two environment gotchas that have already cost time: `prisma generate` EPERMs on Windows unless the
 :3000 dev server is stopped first, and `npm run build` catches client errors that `tsc --noEmit`
 misses here (the `erasableSyntaxOnly` gap). Both are in the criteria rather than in anyone's memory.
+
+## 2026-08-09 — refactor pass (F013–F015)
+
+Scoped from what the sprint actually left behind, not from a general tidy-up. Three duplications, each
+appended to the ledger with its own verification steps before any code moved, so the refactor is
+recorded the same way a feature is.
+
+- **F013 — one docs article renderer.** S9-D3's promise is that preview and public cannot disagree,
+  and that promise was resting on two copies of the same 25-line loop. Now structural.
+- **F014 — one route-id parser.** Both copies existed because `Number.parseInt('3abc')` is `3`: a
+  permissive id parser does not fail, it returns *someone else's row*. The shared one is stricter than
+  either copy was.
+- **F015 — one admin refusal panel.** Three hand-rolled copies of a refusal is three chances for one
+  of them to reassure someone the API is about to turn away.
+
+**Refactors were proven, not asserted.** The public page's rendered HTML was captured before the
+extraction and compared after: 29 901 characters, identical, no first difference. Preview vs public
+re-measured: still byte-identical. The malformed-id and per-route 403 checks were re-run on the wire
+with a fresh token rather than assumed to still hold.
+
+Suites after: server 65 passed, client 44 passed. `tsc`, `eslint src`, `npm run build` clean in both
+workspaces.

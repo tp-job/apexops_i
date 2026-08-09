@@ -1,6 +1,6 @@
 import type { FC } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FiAlertTriangle, FiSearch, FiShield, FiUsers } from 'react-icons/fi';
+import { FiAlertTriangle, FiSearch, FiUsers } from 'react-icons/fi';
 import {
     AccentButton,
     Badge,
@@ -14,6 +14,7 @@ import {
     type Column,
 } from '@/components/design-system';
 import { PageHeader } from '@/components/common/layout';
+import AdminRefusal from '@/components/common/AdminRefusal';
 import { useAuth } from '@/context/auth-context';
 import { useToast } from '@/context/toast-context';
 import { ApiError } from '@/api/request';
@@ -209,16 +210,10 @@ const AdminUsers: FC = () => {
     // The fast path only. The server refuses regardless — see the header comment.
     if (user && user.role !== 'admin') {
         return (
-            <div className="flex flex-col gap-6">
-                <PageHeader title="Users" subtitle="Administrator access is required." />
-                <Surface variant="panel" padding="md">
-                    <EmptyState
-                        icon={<FiShield size={22} />}
-                        title="Not available"
-                        description="Managing accounts requires an administrator role. If you think this is wrong, ask an administrator to check your access."
-                    />
-                </Surface>
-            </div>
+            <AdminRefusal
+                title="Users"
+                description="Managing accounts requires an administrator role. If you think this is wrong, ask an administrator to check your access."
+            />
         );
     }
 

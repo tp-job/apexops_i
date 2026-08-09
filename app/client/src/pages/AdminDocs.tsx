@@ -5,7 +5,6 @@ import {
     FiArrowUp,
     FiFileText,
     FiPlus,
-    FiShield,
     FiTrash2,
 } from 'react-icons/fi';
 import {
@@ -19,7 +18,8 @@ import {
     Surface,
 } from '@/components/design-system';
 import { PageHeader } from '@/components/common/layout';
-import DocsMarkdown from '@/components/docs/DocsMarkdown';
+import AdminRefusal from '@/components/common/AdminRefusal';
+import DocsArticle from '@/components/docs/DocsArticle';
 import DocsToc from '@/components/docs/DocsToc';
 import { useAuth } from '@/context/auth-context';
 import { useToast } from '@/context/toast-context';
@@ -210,16 +210,10 @@ const AdminDocs: FC = () => {
     // The fast path only. Every route this page calls refuses a non-admin too.
     if (user && user.role !== 'admin') {
         return (
-            <div className="flex flex-col gap-6">
-                <PageHeader title="Documentation" subtitle="Administrator access is required." />
-                <Surface variant="panel" padding="md">
-                    <EmptyState
-                        icon={<FiShield size={22} />}
-                        title="Not available"
-                        description="Editing the public documentation requires an administrator role."
-                    />
-                </Surface>
-            </div>
+            <AdminRefusal
+                title="Documentation"
+                description="Editing the public documentation requires an administrator role. The pages themselves stay readable at /docs, signed in or not."
+            />
         );
     }
 
@@ -410,33 +404,7 @@ const AdminDocs: FC = () => {
                                         <h1 className="font-heading text-[2rem] font-bold leading-tight tracking-tight">
                                             {draft.title || 'Untitled'}
                                         </h1>
-                                        {parsed.intro.length > 0 && (
-                                            <div className="mt-3 max-w-3xl">
-                                                <DocsMarkdown blocks={parsed.intro} lead />
-                                            </div>
-                                        )}
-                                        <div className="mt-8 flex max-w-3xl flex-col gap-12">
-                                            {parsed.sections.map((section) => (
-                                                <section key={section.id} className="flex flex-col gap-4">
-                                                    {section.level === 3 ? (
-                                                        <h3
-                                                            id={section.id}
-                                                            className="scroll-mt-24 font-heading text-lg font-bold tracking-tight"
-                                                        >
-                                                            {section.title}
-                                                        </h3>
-                                                    ) : (
-                                                        <h2
-                                                            id={section.id}
-                                                            className="scroll-mt-24 border-b border-gray-200 pb-2 font-heading text-2xl font-bold tracking-tight dark:border-white/10"
-                                                        >
-                                                            {section.title}
-                                                        </h2>
-                                                    )}
-                                                    <DocsMarkdown blocks={section.blocks} />
-                                                </section>
-                                            ))}
-                                        </div>
+                                        <DocsArticle doc={parsed} />
                                     </div>
                                     <aside className="hidden w-52 shrink-0 xl:block">
                                         <DocsToc sections={parsed.sections} />
