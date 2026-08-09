@@ -16,7 +16,8 @@ import { useTheme } from '@/context/theme-context';
 import { useAuth } from '@/context/auth-context';
 import DocsSidebar from '@/components/docs/DocsSidebar';
 import DocsToc from '@/components/docs/DocsToc';
-import { DEFAULT_DOC, DOCS, findDoc } from '@/content/docs';
+import DocsMarkdown from '@/components/docs/DocsMarkdown';
+import { useDocs } from '@/hooks/useDocs';
 
 /**
  * `/docs` — the developer documentation surface.
@@ -34,6 +35,11 @@ import { DEFAULT_DOC, DOCS, findDoc } from '@/content/docs';
  * Chrome is deliberately its own, not `AppLayout` — the docs are read by people
  * who may not have an account, so a workspace sidebar with Dashboard and Chat
  * links would be pointing at doors they cannot open.
+ *
+ * **Content comes from the database as of Sprint 9** (S9-D1). The six pages used
+ * to be JSX in `content/docs.tsx`, which meant editing a typo took a developer,
+ * a commit and a deploy. What did *not* change is this route's audience: it is
+ * still anonymous, and it renders `published` pages only (S9-D3).
  */
 const Docs: FC = () => {
     const { slug } = useParams<{ slug: string }>();
@@ -42,10 +48,12 @@ const Docs: FC = () => {
     const [navOpen, setNavOpen] = useState(false);
     const [copied, setCopied] = useState(false);
 
-    const page = findDoc(slug);
-    const index = page ? DOCS.findIndex((d) => d.slug === page.slug) : -1;
-    const prev = index > 0 ? DOCS[index - 1] : null;
-    const next = index >= 0 && index < DOCS.length - 1 ? DOCS[index + 1] : null;
+    const { pages, page, parsed, loading, notFound, error } = useDocs(slug);
+
+    const index = page ? pages.findIndex((d) => d.slug === page.slug) : -1;
+    const prev = index > 0 ? pages[index - 1] : null;
+    const next = index >= 0 && index < pages.length - 1 ? pages[index + 1] : null;
+    const defaultSlug = pages[0]?.slug;
 
     // A new page must start at the top. Without this, navigating from halfway
     // down a long page lands halfway down the next one.
@@ -54,7 +62,22 @@ const Docs: FC = () => {
         setNavOpen(false);
     }, [slug]);
 
-    if (!page) return <Navigate to={`/docs/${DEFAULT_DOC}`} replace />;
+    // An unknown or unpublished slug goes to the first page rather than to an
+    // error: a draft is a normal thing for a stale link to point at, and the
+    // reader's problem is "show me the docs", not "explain your workflow".
+    if (!loading && (notFound || !slug) && defaultSlug) {
+        return <Navigate to={`/docs/${defaultSlug}`} replace />;
+    }
+
+    if (!page) {
+        return (
+            <div className="grid min-h-screen place-items-center bg-light-bg px-6 text-center dark:bg-dark-bg">
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                    {error ?? (loading ? 'Loading documentation…' : 'No documentation has been published yet.')}
+                </p>
+            </div>
+        );
+    }
 
     const copyLink = async () => {
         try {
@@ -117,7 +140,7 @@ const Docs: FC = () => {
             <div className="mx-auto flex w-full max-w-[100rem] items-start">
                 {/* ── Left rail ───────────────────────────────── */}
                 <aside className="sticky top-16 hidden h-[calc(100vh-4rem)] w-64 shrink-0 overflow-y-auto border-r border-black/5 px-4 py-6 dark:border-white/10 lg:block">
-                    <DocsSidebar />
+                    <DocsSidebar pages={pages} />
                 </aside>
 
                 {/* Mobile drawer */}
@@ -140,7 +163,7 @@ const Docs: FC = () => {
                                     <FiX size={18} />
                                 </button>
                             </div>
-                            <DocsSidebar onNavigate={() => setNavOpen(false)} />
+                            <DocsSidebar pages={pages} onNavigate={() => setNavOpen(false)} />
                         </div>
                     </div>
                 )}
@@ -157,7 +180,7 @@ const Docs: FC = () => {
                             <FiChevronRight size={13} aria-hidden className="text-gray-300 dark:text-gray-600" />
                             <li>
                                 <Link
-                                    to={`/docs/${DEFAULT_DOC}`}
+                                    to={`/docs/${defaultSlug ?? page.slug}`}
                                     className="transition-colors hover:text-brand-dark dark:hover:text-white"
                                 >
                                     Docs
@@ -184,10 +207,14 @@ const Docs: FC = () => {
                         </button>
                     </div>
 
-                    {page.intro && <div className="mt-4 max-w-3xl">{page.intro}</div>}
+                    {parsed && parsed.intro.length > 0 && (
+                        <div className="mt-4 max-w-3xl">
+                            <DocsMarkdown blocks={parsed.intro} lead />
+                        </div>
+                    )}
 
                     <div className="mt-10 flex max-w-3xl flex-col gap-12">
-                        {page.sections.map((section) => (
+                        {(parsed?.sections ?? []).map((section) => (
                             <section key={section.id} className="flex flex-col gap-4">
                                 {/* `scroll-mt` clears the sticky header — without it an
                                     anchor jump puts the heading underneath the top bar. */}
@@ -206,7 +233,7 @@ const Docs: FC = () => {
                                         {section.title}
                                     </h2>
                                 )}
-                                {section.body}
+                                <DocsMarkdown blocks={section.blocks} />
                             </section>
                         ))}
                     </div>
@@ -246,7 +273,7 @@ const Docs: FC = () => {
 
                 {/* ── Right rail ──────────────────────────────── */}
                 <aside className="sticky top-16 hidden h-[calc(100vh-4rem)] w-60 shrink-0 overflow-y-auto px-4 py-8 xl:block">
-                    <DocsToc sections={page.sections} />
+                    <DocsToc sections={parsed?.sections ?? []} />
                 </aside>
             </div>
         </div>

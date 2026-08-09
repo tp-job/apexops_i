@@ -71,23 +71,65 @@ the checks rather than by reading the code:
 The suite proved its worth before being trusted: reverting the role check to authenticated-only
 turned 4 tests red naming the privilege gap, then reverted clean.
 
+## 2026-08-09 — docs CMS built (G1–G4), G7 closed
+
+The other half. Storage format first, UI second, exactly as the sprint was shaped.
+
+**What the migration actually cost.** The conversion was hand-written into six `.md` files and
+seeded by `scripts/seed-docs.ts` — the estimate said "a conversion with judgment in it, not a regex",
+and that was right. Two calls made during it, recorded rather than buried:
+
+1. **The dialect gained two things the decisions did not name.** An inline `:endpoint[GET /path]`
+   form, because the REST API page puts endpoint chips *inside table cells* where a block directive
+   cannot go; and a `{w-44}` width suffix on table header cells, because `DocsPrimitives.Table` takes
+   per-column widths and dropping them would have visibly reflowed four tables. Both are additions to
+   S9-D1's syntax, not departures from it.
+2. **The lead is the content before the first `##`**, rather than a stored `intro` column. One less
+   field to keep in sync, and it reads the way the file looks.
+
+**Criterion 1 was verified by diff, not by screenshot.** The Browser pane could not composite frames
+in this session, so no screenshot could be taken — and a screenshot was the weaker instrument anyway.
+Instead the pre-migration JSX was restored from git and rendered through the same primitives, and its
+text was compared with the migrated Markdown rendered through the new path. **Five of six pages came
+back byte-identical.** The sixth, `sdk`, differs by 16 characters in exactly one place: the old file's
+template literal treated `\` + newline as a line continuation, so the shipped source-map `curl` snippet
+had its backslashes and line breaks silently eaten. The migration restores the intended multi-line
+command. That is a fix, and it is written here rather than left for someone to find as a regression.
+
+**Three things were found by running the checks rather than by reading the code:**
+
+1. **A backup filename collision destroyed a file mid-proof.** `DocsMarkdown.tsx` and
+   `docsMarkdown.ts` backed up to `/tmp/DocsMarkdown.bak` and `/tmp/docsMarkdown.bak` — the same file
+   on Windows. The restore put the parser's contents into the renderer, and five tests stayed red
+   after a "clean" revert. Case-insensitive filesystems do not respect a naming convention that only
+   differs by case.
+2. **`eslint` refuses the control-character class** in `sanitizeHref`, which is the part doing the
+   security work. Suppressed with the reason inline rather than by weakening the regex.
+3. **A 404 on a draft slug had to be the same 404 as a missing slug.** Anything else — a 403, a
+   distinct message — tells an anonymous visitor which unpublished pages exist.
+
+The suite proved its worth before being trusted, on both halves: the monitors gate reverted to
+authenticated-only turned 4 server tests red, and the two docs defences reverted turned 8 client
+tests red. Both reverted clean.
+
 ## Status
 
 | G | Scope | State |
 |---|---|---|
-| G1 | `DocPage` model, migration, six pages converted to Markdown | not started |
-| G2 | Markdown + directive renderer over `DocsPrimitives` | not started |
-| G3 | `/docs` served from the DB, published-only, still anonymous | not started |
-| G4 | Admin CRUD API + `/admin/docs` editor, preview, reorder | not started |
+| G1 | `DocPage` model, migration, six pages converted to Markdown | **done** — F001 |
+| G2 | Markdown + directive renderer over `DocsPrimitives` | **done** — F002, F003 |
+| G3 | `/docs` served from the DB, published-only, still anonymous | **done** — F004 |
+| G4 | Admin CRUD API + `/admin/docs` editor, preview, reorder | **done** — F005, F006 |
 | G5 | `monitors` admits admins only | **done** — F007, wire-verified 5/5 |
 | G6 | `/admin/console` page: targets, stream, filter, pause, buffer | **done** — F008, F009 |
-| G7 | Tests, the two reintroduced-bug proofs, sidebar `ready`, docs | partial — console half done |
+| G7 | Tests, the two reintroduced-bug proofs, sidebar `ready`, docs | **done** — F010, F011 |
 
-**Observed, not claimed:** criteria 10, 11, 12, 13, 14, 15, 16, 17, 18, and the console half of 19
-and 21. Criteria 1–9 (docs) and the docs half of 19–21 remain unbuilt and unobserved.
+**Observed, not claimed: all 21 criteria.** 10–18 on 2026-08-08 (console); 1–9 and 19–21 on
+2026-08-09 (docs), with criterion 1 verified by rendering diff rather than by screenshot — see above
+for why, and for the one intentional 16-character difference.
 
-Suites: server 61 passed, client 22 passed. `tsc` clean in both workspaces, `eslint src` clean,
-`npm run build` clean.
+Suites: server 61 passed, client 44 passed. `tsc`, `eslint src` and `npm run build` clean in both
+workspaces.
 
 ## Carried risk
 
@@ -97,11 +139,11 @@ request; there is no equivalent tick on a long-lived socket. It is strictly narr
 before — the room used to admit any signed-in user at all — so this is a window, not a hole. It is on
 the ledger rather than in a comment.
 
-**G1 is the item most likely to run long, and the easiest to underestimate.** Converting 929 lines of
-JSX across eleven distinct primitives is a task with judgment in it, not a regex — the SDK page in
-particular should be expected to need hand-finishing. It is also the gate that makes
-`content/docs.tsx` dead code, so the JSX becomes recoverable only from git. The file stays in the tree
-until F010 passes and is deleted in the same commit that flips the switch.
+**The JSX is now only in git.** `content/docs.tsx` was deleted in the commit that flipped `/docs` to
+the database — the risk named at scoping, now realized deliberately rather than by accident. The six
+Markdown sources live on at `app/server/src/scripts/docs-content/`, and `npm run seed:docs` rebuilds
+the rows from them; note that it re-seeds the SEED text, not whatever an admin has since edited, so it
+is a floor and not a backup. Editing the live pages is now `/admin/docs`, not the repository.
 
 Two environment gotchas that have already cost time: `prisma generate` EPERMs on Windows unless the
 :3000 dev server is stopped first, and `npm run build` catches client errors that `tsc --noEmit`

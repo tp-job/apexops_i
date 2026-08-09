@@ -48,6 +48,7 @@ model User {
   sentInvites        ProjectInvite[]     @relation("inviteSender")
   issueStatusChanges IssueStatusChange[]
   notifications      Notification[]
+  editedDocPages     DocPage[]           @relation("docPageEditor")
 
   @@map("users")
 }
@@ -574,4 +575,56 @@ model RefreshToken {
   @@index([userId])
   @@index([token])
   @@map("refresh_tokens")
+}
+
+// ── Documentation ────────────────────────────────────────────
+
+/// A page of the public `/docs` surface (spec S9-D1).
+///
+/// The six pages used to be 929 lines of hand-authored JSX in
+/// `content/docs.tsx`, which is why an admin editor was never possible: JSX
+/// cannot round-trip through a textarea. The stored format is Markdown plus
+/// container directives (`:::callout`, `:::endpoint`) that render through the
+/// SAME `DocsPrimitives` the JSX used — one rendering path, not two.
+///
+/// **This table is served to anonymous visitors.** `/docs` is public on purpose
+/// (the SDK snippet lives there), so nothing here is trusted: the renderer
+/// escapes raw HTML and drops non-allowlisted link schemes rather than relying
+/// on the author being an admin (S9-D4).
+model DocPage {
+  id      Int    @id @default(autoincrement())
+  /// The URL segment: `/docs/:slug`. Editable (S9-D8) — renaming breaks existing
+  /// links and there is deliberately no redirect table in v1.
+  slug    String @unique
+  title   String
+  /// Sidebar grouping, e.g. `Get started`. Plain text rather than a foreign key:
+  /// a group with no pages has no meaning, so it has no independent lifetime.
+  group   String
+  /// Order of the GROUP in the rail. Denormalized onto every page in the group;
+  /// the read path takes the minimum, so one row disagreeing cannot hide a group.
+  groupOrder Int @default(0) @map("group_order")
+  /// Order of this page WITHIN its group.
+  order   Int    @default(0)
+  /// One line, shown under the title and matched by the sidebar's search box.
+  summary String
+  /// Markdown + directives. The table of contents is NOT stored: it is derived
+  /// from the `##`/`###` headings at read time (S9-D2), so there is one editable
+  /// structure instead of two that can disagree.
+  body    String
+  /// `draft` | `published`. The public route filters to published, so an
+  /// in-progress edit is never live (S9-D3).
+  status  String @default("draft")
+
+  /// Null once the editor's account is deleted — attribution is history, and a
+  /// page must not disappear with the person who last touched it.
+  updatedById Int?     @map("updated_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at")
+
+  updatedBy User? @relation("docPageEditor", fields: [updatedById], references: [id], onDelete: SetNull)
+
+  /// The public list reads published pages in rail order; both columns are in
+  /// the sort, so the index covers it.
+  @@index([status, groupOrder, order])
+  @@map("doc_pages")
 }

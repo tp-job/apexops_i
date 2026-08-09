@@ -17,14 +17,16 @@
         "The conversion diff is reviewed page by page; the SDK page is expected to need hand-finishing",
         "content/docs.tsx STAYS in the tree until F010 passes — the JSX is otherwise only in git"
       ],
-      "passes": null,
-      "notes": ""
+      "passes": true,
+      "notes": "2026-08-09. DocPage model + `prisma db push` (no migrations dir in this repo — db push is the convention). The six bodies were converted BY HAND into src/scripts/docs-content/*.md and seeded by scripts/seed-docs.ts (npm run seed:docs), idempotent by slug and refusing to clobber an admin edit without --force. Conversion reviewed page by page against the JSX block sequence: section counts 3/4/6/6/4/4 and every table shape (3c5r, 2c5r, 2c3r, 3c9r, 2c4r+2c6r, 2c7r, 2c5r) match the originals. content/docs.tsx stayed in the tree until F010, as the spec required."
     },
     {
       "id": "F002",
       "title": "Markdown + directive renderer over the existing DocsPrimitives",
       "priority": "critical",
-      "depends_on": ["F001"],
+      "depends_on": [
+        "F001"
+      ],
       "description": "S9-D1. Plain Markdown was rejected: Callout, Endpoint and Table carry most of what makes the SDK and Quickstart pages readable. Directives map onto the eleven primitives that already exist, so there is one rendering path rather than a second look-alike.",
       "steps": [
         ":::callout{tone title}, :::endpoint{method path}, tables, fenced code with lang all render through DocsPrimitives",
@@ -32,14 +34,16 @@
         "An unknown directive degrades to plain text rather than throwing — one bad edit must not blank a public page",
         "FAILURE CASE: a malformed directive does not take down the whole page render"
       ],
-      "passes": null,
-      "notes": ""
+      "passes": true,
+      "notes": "2026-08-09. lib/docsMarkdown.ts (pure parser) + components/docs/DocsMarkdown.tsx (renderer over the existing DocsPrimitives). No Markdown library: every mainstream one emits an HTML string, and the only way to mount one is dangerouslySetInnerHTML — see F003. Directives: :::callout{tone,title}, :::endpoint{method,path} and inline :endpoint[GET /path] for table cells, plus a {w-44} width suffix on header cells so migrated tables keep their proportions. 19 unit tests + 5 rendered-output tests. Unknown directive degrades to a paragraph and an unterminated callout leaves the following sections intact — both asserted."
     },
     {
       "id": "F003",
       "title": "The escaping allowlist — raw HTML never reaches the DOM",
       "priority": "critical",
-      "depends_on": ["F002"],
+      "depends_on": [
+        "F002"
+      ],
       "description": "S9-D4. /docs is public and unauthenticated on purpose; the SDK snippet lives there. Piping admin-authored Markdown into dangerouslySetInnerHTML turns one compromised admin account into stored XSS on the most public page in the product.",
       "steps": [
         "Raw HTML in source is escaped and rendered as text",
@@ -47,14 +51,17 @@
         "javascript: hrefs are dropped, not rendered",
         "FAILURE CASE: a body containing <img src=x onerror=alert(1)> renders inert, asserted on rendered output in a test"
       ],
-      "passes": null,
-      "notes": ""
+      "passes": true,
+      "notes": "2026-08-09. Escaping is STRUCTURAL, not a step: the parser produces a typed tree and the renderer emits React children, so there is no HTML-string path to forget. Asserted on renderToStaticMarkup output (real rendered markup, no jsdom): <img src=x onerror=alert(1)> and <script> come back entity-escaped with no tag; javascript: href dropped with the link text kept; http/https/mailto/relative kept navigable. sanitizeHref is an allowlist and strips control characters BEFORE reading the scheme, so java\tscript: and java\nscript: are refused too. Client vitest include widened to .tsx for this — reason written into vitest.config.ts."
     },
     {
       "id": "F004",
       "title": "/docs reads from the database, published-only, still anonymous",
       "priority": "critical",
-      "depends_on": ["F002", "F003"],
+      "depends_on": [
+        "F002",
+        "F003"
+      ],
       "description": "S9-D3. The public route filters to published so an editor's in-progress keystrokes are not live. The route staying anonymous is not incidental — gating install instructions behind a login is how a one-line integration turns into a support conversation.",
       "steps": [
         "All six pages render at /docs/* from the DB, signed out",
@@ -62,14 +69,16 @@
         "The TOC lists the same headings the JSX version did and anchors clear the sticky header",
         "FAILURE CASE: an unauthenticated request for a draft slug leaks neither body nor title"
       ],
-      "passes": null,
-      "notes": ""
+      "passes": true,
+      "notes": "2026-08-09. GET /api/docs and /api/docs/:slug, no authenticate, status published in the WHERE clause rather than filtered after the read. Observed signed out in the browser: all six pages render from the DB, rail groups in the original order (Get started/SDK/Concepts/API reference), TOC ids match the h2 ids exactly, scroll-margin-top computes to 96px so anchors clear the 64px sticky header. Draft check: flipped grouping to draft — it left the list, /docs/grouping redirected to /docs/overview with neither title nor body in the DOM, and the API returned 404 (not 403, which would confirm it exists)."
     },
     {
       "id": "F005",
       "title": "Admin docs CRUD API, authorize('admin') on every route",
       "priority": "critical",
-      "depends_on": ["F001"],
+      "depends_on": [
+        "F001"
+      ],
       "description": "Hiding a sidebar link is presentation, not access control — Sidebar.tsx:26 says so about this exact group. Every route gates server-side, and it is asserted per route because a gate applied to four of five routes is the shape this codebase has already been bitten by.",
       "steps": [
         "List, read, create, update, publish/unpublish, delete, reorder",
@@ -77,14 +86,17 @@
         "Slug edits are permitted behind a confirmation naming the broken-link consequence (S9-D8)",
         "FAILURE CASE: a non-admin gets 403 on EVERY route, asserted per route, not on one representative"
       ],
-      "passes": null,
-      "notes": ""
+      "passes": true,
+      "notes": "2026-08-09. /api/admin/docs — list, read, create, update (status included, so publish/unpublish is not a second way to write one column), reorder in a transaction, delete. authenticate + authorize(admin) on the ROUTER, not per route. Slug collision caught from the unique index as P2002 and returned as a 409 with field:slug, not pre-checked (two admins racing would lose that check). Criterion 9 asserted PER ROUTE on the wire: GET/ GET/:id POST PATCH POST/reorder DELETE all 403 for a signed-in non-admin, all 401 anonymous, 200 for the admin."
     },
     {
       "id": "F006",
       "title": "/admin/docs — editor, preview, reorder",
       "priority": "high",
-      "depends_on": ["F005", "F004"],
+      "depends_on": [
+        "F005",
+        "F004"
+      ],
       "description": "S9-D3. Preview renders through the same renderer as the public page, which makes preview a guarantee rather than an approximation. Built on the AdminUsers page pattern so the admin surfaces read as one thing.",
       "steps": [
         "Edit Quickstart's body, publish, reload /docs/quickstart — the change is there, no rebuild, no restart",
@@ -92,8 +104,8 @@
         "Reordering within a group changes the public sidebar order on reload",
         "Route is admin-gated client-side AND server-side; the row is ready: true"
       ],
-      "passes": null,
-      "notes": ""
+      "passes": true,
+      "notes": "2026-08-09. /admin/docs — rail with drafts badged, editor, preview, reorder, delete, slug-rename confirmation naming the broken-link consequence (S9-D8). Criterion 3: edited Quickstart in the editor, saved, reloaded /docs/quickstart — the new section was live with no rebuild and no restart, and the derived TOC picked up its heading. Criterion 5 PROVEN BY DIFF, not by eye: the preview pane and the public page produced byte-identical section HTML (7317 chars, first difference at index -1). Criterion 6: Move up on Quickstart reordered the public rail on reload (quickstart > overview > …), then seed --force restored it. Reorder renumbers the whole group rather than swapping two values, because the seeded rows share positions."
     },
     {
       "id": "F007",
@@ -114,7 +126,9 @@
       "id": "F008",
       "title": "/admin/console — target list and live stream",
       "priority": "high",
-      "depends_on": ["F007"],
+      "depends_on": [
+        "F007"
+      ],
       "description": "A port of the standalone page documented in archive/console-monitor.md into the app shell, driven by the orphaned useBugTrackerSocket hook. Empty state says the feed is live-only, so a blank panel is never read as 'no errors ever happened'.",
       "steps": [
         "Every connected target app is listed; connect/disconnect updates within 2s without a reload",
@@ -129,7 +143,9 @@
       "id": "F009",
       "title": "Pause buffers, the ring buffer holds 500, nothing is persisted",
       "priority": "high",
-      "depends_on": ["F008"],
+      "depends_on": [
+        "F008"
+      ],
       "description": "S9-D6 + S9-D7. A pause that unsubscribes drops exactly the burst you paused to read. And server.ts:249-255 is explicit that persistence has one supported path — POST /api/ingest, keyed and rate limited. This sprint does not reopen that.",
       "steps": [
         "Pause, generate 20 logs, resume — all 20 are there; a pending count showed while paused",
@@ -144,7 +160,10 @@
       "id": "F010",
       "title": "The suite proves its worth, and the JSX is deleted",
       "priority": "critical",
-      "depends_on": ["F006", "F009"],
+      "depends_on": [
+        "F006",
+        "F009"
+      ],
       "description": "A test that has never failed has proven nothing. The two failures this sprint is shaped to prevent are the privilege gap on the monitors room and stored XSS on a public page, so those are the two that get reintroduced. content/docs.tsx is deleted only here — once the DB path is proven, not before and not 'later'.",
       "steps": [
         "Revert the monitors admit check to authenticated-only: the suite goes red naming the privilege gap",
@@ -152,14 +171,16 @@
         "Both revert clean and the suite goes green",
         "content/docs.tsx deleted in the same commit that flips /docs to the DB path"
       ],
-      "passes": null,
-      "notes": ""
+      "passes": true,
+      "notes": "2026-08-09. Both reintroduced-bug proofs run, both reverted clean. (1) monitors admit reverted to authenticated-only: 4 server tests red naming the privilege gap. (2) The two docs defences reverted — paragraphs through dangerouslySetInnerHTML and the href allowlist removed: 8 client tests red, including all four rendered-output XSS assertions. Restored: server 61/61, client 44/44. content/docs.tsx deleted in the same commit that flips /docs to the DB path, as the spec required — and the JSX was rendered from git one last time first, to diff it against the migration (see progress.md)."
     },
     {
       "id": "F011",
       "title": "Clean build, green suite, sidebar rows live, docs written",
       "priority": "high",
-      "depends_on": ["F010"],
+      "depends_on": [
+        "F010"
+      ],
       "description": "npm run build catches client errors tsc --noEmit misses here — the erasableSyntaxOnly gap. Both rows flip to ready: true only when the routes behind them refuse a non-admin server-side, not merely hide.",
       "steps": [
         "tsc --noEmit, eslint src and npm run build clean in BOTH workspaces",
@@ -167,14 +188,16 @@
         "Both Sidebar.tsx rows are ready: true; a non-admin sees neither the rows nor a working route",
         "admin-docs-and-console.md gains its exit notes; sprint-plan.md updated with what actually shipped"
       ],
-      "passes": null,
-      "notes": ""
+      "passes": true,
+      "notes": "2026-08-09. tsc, eslint src, npm run build and vitest all clean in BOTH workspaces (server 61, client 44). One eslint suppression added with its reason: no-control-regex on the deliberate control-character strip in sanitizeHref. Sidebar Documentation row is ready: true; a signed-in non-admin sees no Administration group, gets the refusal panel at /admin/docs with no page data in the DOM, and 403s on every API route behind it."
     },
     {
       "id": "F012",
       "title": "A demoted admin keeps monitoring until the socket reconnects",
       "priority": "medium",
-      "depends_on": ["F007"],
+      "depends_on": [
+        "F007"
+      ],
       "description": "Found while implementing F007, appended rather than fixed silently. authorize() re-reads the role on EVERY request, so an HTTP demotion lands on the next call. A socket joins the monitors room once and stays, so the equivalent demotion does not land until that socket drops — a long-lived tab keeps streaming every target app's console output after the admin bit is removed. Not a regression: the room previously admitted any signed-in user, so this is strictly narrower than what shipped before. It is the residual window, not a new hole.",
       "steps": [
         "Decide the mechanism: periodic re-check sweep over connectedClients.monitors vs. re-check before fan-out vs. accept-and-document",

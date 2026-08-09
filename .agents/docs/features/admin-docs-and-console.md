@@ -109,8 +109,66 @@ a debugging tool can have: it loses exactly the burst you paused to read. Pause 
 list still while incoming logs continue to fill the buffer, and the resume control shows the count
 waiting.
 
-## S9-D8 — Slug edits are allowed and leave no redirect
+## S9-D8 — Slug edits are allowed and leave no redirect (exit notes below)
 
 Renaming a slug breaks any existing link to it. v1 permits the edit behind a confirmation that names
 the consequence. A redirect table is a real feature with its own semantics and is **out of scope**,
 recorded here so it is a decision rather than an oversight.
+
+---
+
+# Exit notes — 2026-08-09
+
+Both halves shipped. The console half landed 2026-08-08 (F007–F009); the documentation CMS landed
+2026-08-09 (F001–F006, F010, F011). All 21 acceptance criteria were observed. What follows is what
+the decisions above turned into, and where implementation refined them.
+
+## Where the implementation refined a decision
+
+**S9-D1 gained two pieces of syntax.** The decision named `:::callout{…}` and `:::endpoint{…}`. Two
+additions were needed by the content itself:
+
+- **Inline `:endpoint[GET /api/projects]`** — the REST API page puts endpoint chips *inside table
+  cells*, where a block-level directive cannot go. The block form still works and is used on the SDK
+  page.
+- **A `{w-44}` width suffix on table header cells** — `DocsPrimitives.Table` takes per-column widths,
+  and four tables visibly reflow without them.
+
+**The page lead is the content before the first `##`**, not a stored column. S9-D2's argument against
+storing the TOC applies identically to storing an intro: it is a second structure that can disagree
+with the first.
+
+## Where the escaping ended up (S9-D4)
+
+Stronger than the decision required. There is no escaping *step* — the parser returns a typed tree and
+the renderer emits React children, so no HTML string exists anywhere in the path. `dangerouslySetInnerHTML`
+appears in the codebase's docs path exactly zero times, and the file that would host it says so.
+
+The proof is on **rendered output** via `renderToStaticMarkup`, not on the parse tree, because the tree
+proves what the parser decided and the renderer is where the hole would be reintroduced.
+
+`sanitizeHref` is an allowlist (`http`, `https`, `mailto`, same-origin relative) and strips control
+characters *before* reading the scheme — `java\tscript:` and `java\nscript:` are live links in parsers
+that check the raw string.
+
+## The one deliberate visual change
+
+Criterion 1 was verified by restoring the deleted JSX from git, rendering it through the same
+primitives, and diffing its text against the migrated Markdown. **Five of six pages: byte-identical.**
+The SDK page differs by 16 characters, and the migration is the correct one: the old template literal
+treated `\` + newline as a JavaScript line continuation, so the shipped source-map `curl` snippet had
+its backslashes and line breaks eaten. A reader copying it got a broken command.
+
+## What is now true that was not
+
+- Editing the public documentation is `/admin/docs`, not a commit and a deploy.
+- `/docs` is still anonymous. That was a criterion precisely because migrations quietly break it.
+- Both Administration rows are `ready: true`, and both routes refuse a non-admin server-side —
+  asserted per route, not on one representative.
+
+## Still open
+
+- **F012** — a demoted admin keeps the `monitors` stream until that socket drops. Sized medium; the
+  window closes on any reconnect, deploy or token refresh.
+- **No redirect table** for renamed slugs (S9-D8). The rename is confirmed with its consequence named;
+  the redirect remains out of scope and a decision rather than an oversight.

@@ -15,12 +15,12 @@ import ProjectBoard from '@/pages/ProjectBoard';
 import Settings from '@/pages/Settings';
 import AdminUsers from '@/pages/AdminUsers';
 import AdminConsole from '@/pages/AdminConsole';
+import AdminDocs from '@/pages/AdminDocs';
 import ProjectSettings from '@/pages/ProjectSettings';
 import ProjectMembers from '@/pages/ProjectMembers';
 import InviteAccept from '@/pages/InviteAccept';
 import DesignSystem from '@/pages/DesignSystem';
 import Docs from '@/pages/Docs';
-import { DEFAULT_DOC } from '@/content/docs';
 import AppLayout from '@/layouts/AppLayout';
 import ProtectedRoute from '@/routes/ProtectedRoute';
 
@@ -48,7 +48,10 @@ const AppRoutes: FC = () => (
             {/* Docs are public: whoever is pasting the SDK snippet into another
                 app needs the install instructions, and gating them turns a
                 one-line integration into a support conversation. */}
-            <Route path="/docs" element={<Navigate to={`/docs/${DEFAULT_DOC}`} replace />} />
+            {/* `/docs` renders the page rather than redirecting at config time:
+                the default page is now the first row the server returns, so
+                nothing here knows the slug until the list has loaded. */}
+            <Route path="/docs" element={<Docs />} />
             <Route path="/docs/:slug" element={<Docs />} />
 
             {/* Auth */}
@@ -91,6 +94,9 @@ const AppRoutes: FC = () => (
                         sign in to this instance is not. The page refuses a
                         non-admin, and so does every route it calls. */}
                     <Route path="/admin/users" element={<AdminUsers />} />
+                    {/* The docs CMS. Every route it calls is admin-gated
+                        server-side; the page's own check is the fast path. */}
+                    <Route path="/admin/docs" element={<AdminDocs />} />
                     {/* Live console feed. The room itself admits admins only
                         (S9-D5), so a non-admin who types this URL gets a refusal
                         on the wire rather than an empty panel that looks broken. */}

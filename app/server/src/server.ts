@@ -394,6 +394,8 @@ import notificationsRoutes from './api/notifications';
 import projectsRoutes from './api/projects';
 import invitesRoutes from './api/invites';
 import ingestRoutes from './api/ingest';
+import docsRoutes from './api/docs';
+import adminDocsRoutes from './api/admin-docs';
 
 // Mounted before the JSON-body and CORS defaults matter to it: `api/ingest` sets
 // its own permissive CORS and 1MB body cap, because it is the only route that
@@ -417,6 +419,14 @@ app.use('/api/ai', aiRoutes);
 app.use('/api/console-monitor', consoleMonitorRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/notifications', notificationsRoutes);
+
+// Public documentation read path — no `authenticate`, on purpose (S9-D3). The
+// admin CMS is a SEPARATE router at a separate prefix rather than a flag on
+// these routes: the two differ in whether drafts are visible, and that is
+// exactly the kind of difference that should be a mount point rather than an
+// `if` somebody can get wrong.
+app.use('/api/docs', docsRoutes);
+app.use('/api/admin/docs', adminDocsRoutes);
 
 // ── Legacy Redirects ─────────────────────────────────────────
 app.post('/register', (req: Request, res: Response) => res.redirect(307, '/api/auth/register'));
