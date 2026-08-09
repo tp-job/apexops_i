@@ -189,7 +189,7 @@
         "admin-docs-and-console.md gains its exit notes; sprint-plan.md updated with what actually shipped"
       ],
       "passes": true,
-      "notes": "2026-08-09. tsc, eslint src, npm run build and vitest all clean in BOTH workspaces (server 61, client 44). One eslint suppression added with its reason: no-control-regex on the deliberate control-character strip in sanitizeHref. Sidebar Documentation row is ready: true; a signed-in non-admin sees no Administration group, gets the refusal panel at /admin/docs with no page data in the DOM, and 403s on every API route behind it."
+      "notes": "2026-08-09. tsc, eslint src, npm run build and vitest all clean in BOTH workspaces (server 61, client 44). One eslint suppression added with its reason: no-control-regex on the deliberate control-character strip in sanitizeHref. Sidebar Documentation row is ready: true; a signed-in non-admin sees no Administration group, gets the refusal panel at /admin/docs with no page data in the DOM, and 403s on every API route behind it. Docs: admin-docs-and-console.md gained exit notes (where implementation refined S9-D1/D2, where the escaping landed, the one deliberate visual change) and sprint-plan.md gained Sprint 8 (scoped, never started) and Sprint 9 status sections — it had stopped at Sprint 7."
     },
     {
       "id": "F012",

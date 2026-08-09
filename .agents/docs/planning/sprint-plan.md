@@ -392,6 +392,37 @@ SPF/DKIM.** That is operator work. Everything up to it is built and asserted.
 Deferred to v1.1 by the workspaces spec and still deferred: npm package, server-side/Node SDK,
 breadcrumbs, session replay, per-issue assignment rules.
 
+### Sprint 8 — Real-time issue stream — **scoped, never started**
+
+Spec, ledger, progress and decisions are archived intact at
+[`archive/sprint-8-realtime-issue-stream-*`](../archive/) and are re-scopeable as written. Nothing was
+built against them, so nothing about them is stale.
+
+### Sprint 9 — The two admin surfaces — ✅ shipped 2026-08-08 / 08-09
+
+Decisions: [`admin-docs-and-console.md`](../features/admin-docs-and-console.md) (`S9-D1`…`S9-D8`, with
+exit notes). Both Administration rows that had rendered disabled with a `soon` badge are now live
+routes, and both refuse a non-admin server-side rather than only hiding.
+
+| Piece | Detail | Status |
+|---|---|---|
+| `monitors` room gates on `role === 'admin'` | Read from the DB at join time, never from the JWT claim. It previously admitted any signed-in user while carrying every target app's console output | ✅ 08-08, wire-verified 5/5 |
+| `/admin/console` | Target list, live stream, level filter, copy/clear, a pause that keeps buffering, 500-entry ring buffer, nothing persisted | ✅ 08-08 |
+| `DocPage` + Markdown-with-directives storage | The six public pages were 929 lines of hand-authored JSX, which is why a CMS was never possible — a storage-format change first, a UI second | ✅ 08-09 |
+| `/docs` reads from the database | Published-only, still anonymous. The SDK install instructions did not move behind a login | ✅ 08-09 |
+| `/admin/docs` | Editor, preview through the *same* renderer, reorder, publish/unpublish, slug rename behind a confirmation naming the consequence | ✅ 08-09 |
+| The escaping allowlist | No HTML string exists in the render path at all, so `dangerouslySetInnerHTML` has nowhere to be added. Proven on rendered output, not on the parse tree | ✅ 08-09 |
+
+**Carried:** F012 — a demoted admin keeps the `monitors` stream until that socket drops. Narrower than
+what shipped before (the room used to admit any signed-in user), so it is a window, not a hole. On the
+ledger, not in a comment.
+
+**Followed by a scoped refactor pass** (F013–F015): one docs article renderer shared by the public page
+and the admin preview, one route-id parser, one admin refusal panel. Each went on the ledger with
+verification steps before any code moved, and the docs one was proven behaviour-preserving by diffing
+rendered HTML rather than by reading it.
+
+
 ---
 
 ## Risks
@@ -431,7 +462,10 @@ breadcrumbs, session replay, per-issue assignment rules.
 
 ---
 
-**Last updated:** 2026-07-31 — Sprint 6 scoped and estimated against
+**Last updated:** 2026-08-09 — Sprint 9 shipped (both admin surfaces) plus a scoped refactor pass;
+Sprint 8 recorded as scoped-never-started.
+
+*Previously: 2026-07-31* — Sprint 6 scoped and estimated against
 [`team-and-roles.md`](../features/team-and-roles.md); Sprints 5 and 7 re-cut to reflect the
 account-settings and alerting work that shipped early.
 
