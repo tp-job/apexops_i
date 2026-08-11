@@ -2,7 +2,8 @@ import type { FC } from 'react';
 import { useMemo, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { FiSearch, FiX } from 'react-icons/fi';
-import { DOCS, DOC_GROUPS } from '@/content/docs';
+import type { DocPageSummary } from '@/services/docs';
+import { groupDocPages } from '@/services/docs';
 
 /**
  * Left navigation for `/docs`.
@@ -15,22 +16,20 @@ import { DOCS, DOC_GROUPS } from '@/content/docs';
  * Matching runs over title, group and summary, so searching "grouping" finds the
  * Concepts page and searching "curl" finds the API pages through their summaries.
  */
-const DocsSidebar: FC<{ onNavigate?: () => void }> = ({ onNavigate }) => {
+const DocsSidebar: FC<{ pages: DocPageSummary[]; onNavigate?: () => void }> = ({ pages, onNavigate }) => {
     const [query, setQuery] = useState('');
 
     const groups = useMemo(() => {
         const q = query.trim().toLowerCase();
         const matches = q
-            ? DOCS.filter((d) =>
-                  `${d.title} ${d.group} ${d.summary}`.toLowerCase().includes(q)
-              )
-            : DOCS;
+            ? pages.filter((d) => `${d.title} ${d.group} ${d.summary}`.toLowerCase().includes(q))
+            : pages;
 
-        return DOC_GROUPS.map((group) => ({
-            group,
-            pages: matches.filter((d) => d.group === group),
-        })).filter((g) => g.pages.length > 0);
-    }, [query]);
+        // Grouping follows the order the server sent, which is the admin's
+        // arrangement (`groupOrder`, `order`) — so what an admin drags in
+        // /admin/docs is what a visitor sees, with no second ordering rule here.
+        return groupDocPages(matches);
+    }, [pages, query]);
 
     return (
         <div className="flex h-full flex-col gap-5">

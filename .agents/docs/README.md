@@ -41,6 +41,7 @@ The shape of the system. Reference material, not narrative.
 - [`frontend.md`](architecture/frontend.md) · [`frontend-process.md`](architecture/frontend-process.md) · [`data-fetching.md`](architecture/data-fetching.md)
 - [`api-reference.md`](architecture/api-reference.md) — **the** endpoint reference
 - [`database.md`](architecture/database.md) — schema and setup
+- [`er-and-dfd.md`](architecture/er-and-dfd.md) — ER diagram (MySQL DDL) and DFD level 0–1
 - [`security-auth.md`](architecture/security-auth.md) — auth model and security posture
 - [`ai-model.md`](architecture/ai-model.md) — AI provider configuration
 

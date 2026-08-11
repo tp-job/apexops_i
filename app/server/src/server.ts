@@ -26,6 +26,11 @@ import {
 } from './utils/chatRoom';
 import prisma from './lib/prisma';
 import { SECRET_KEY, JWT_ALGORITHM } from './lib/jwtSecrets';
+import {
+    decideMonitorAdmit,
+    MONITOR_ERR_FORBIDDEN,
+    type MonitorAdmit,
+} from './lib/monitorAccess';
 import { scheduleRetentionPrune } from './lib/retention';
 
 // ── Express App ──────────────────────────────────────────────
@@ -126,18 +131,54 @@ io.use(async (socket, next) => {
 io.on('connection', (socket) => {
     console.log('👤 User connected via WebSocket:', socket.id);
 
-    socket.on('register', (data: { clientType: string; appName?: string; url?: string; userId?: string }) => {
+    socket.on('register', async (data: { clientType: string; appName?: string; url?: string; userId?: string }) => {
         if (data.clientType === 'monitor') {
-            // AUTHENTICATED ONLY. This room receives every target app's console
+            // ADMINS ONLY (S9-D5). This room receives every target app's console
             // output, so an anonymous socket joining it is a cross-project leak —
             // the exact defect that got the :8082 native relay deleted (spec D6).
             // It survived here in socket.io form because the handshake auth is
             // optional for the SDK's benefit; the room has to gate itself.
+            //
+            // Authenticated was not enough. The surface is `/admin/console`, filed
+            // under Administration, and the transport has to agree with the label
+            // on the door — otherwise hiding the sidebar row is the only control.
             const user = socketUsers.get(socket.id);
+
+            // Read role and isActive FRESH, exactly as `authorize()` does. The
+            // token's role claim is display only; trusting it here would leave a
+            // demoted admin monitoring until their token happened to expire.
+            let admit: MonitorAdmit;
             if (!user) {
-                socket.emit('monitor-error', { error: 'Authentication required to monitor' });
+                admit = decideMonitorAdmit(null);
+            } else {
+                try {
+                    const current = await prisma.user.findUnique({
+                        where: { id: user.id },
+                        select: { role: true, isActive: true },
+                    });
+                    admit = decideMonitorAdmit({
+                        exists: current !== null,
+                        role: current?.role ?? null,
+                        isActive: current?.isActive ?? null,
+                    });
+                } catch (err) {
+                    // Fail CLOSED. If the role cannot be read the answer is "no",
+                    // never "assume the handshake was good enough".
+                    console.error('monitor admit lookup failed:', err);
+                    admit = { ok: false, error: MONITOR_ERR_FORBIDDEN };
+                }
+            }
+
+            if (!admit.ok) {
+                socket.emit('monitor-error', { error: admit.error });
                 return;
             }
+
+            // Re-checked after the await: the socket may have disconnected while
+            // the lookup was in flight, and joining a dead socket to the room
+            // leaves a stale id in `connectedClients.monitors`.
+            if (!socket.connected) return;
+
             connectedClients.monitors.add(socket.id);
             socket.join('monitors');
             socket.emit('target-apps-list', Array.from(connectedClients.targetApps.values()));
@@ -353,6 +394,8 @@ import notificationsRoutes from './api/notifications';
 import projectsRoutes from './api/projects';
 import invitesRoutes from './api/invites';
 import ingestRoutes from './api/ingest';
+import docsRoutes from './api/docs';
+import adminDocsRoutes from './api/admin-docs';
 
 // Mounted before the JSON-body and CORS defaults matter to it: `api/ingest` sets
 // its own permissive CORS and 1MB body cap, because it is the only route that
@@ -376,6 +419,14 @@ app.use('/api/ai', aiRoutes);
 app.use('/api/console-monitor', consoleMonitorRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/notifications', notificationsRoutes);
+
+// Public documentation read path — no `authenticate`, on purpose (S9-D3). The
+// admin CMS is a SEPARATE router at a separate prefix rather than a flag on
+// these routes: the two differ in whether drafts are visible, and that is
+// exactly the kind of difference that should be a mount point rather than an
+// `if` somebody can get wrong.
+app.use('/api/docs', docsRoutes);
+app.use('/api/admin/docs', adminDocsRoutes);
 
 // ── Legacy Redirects ─────────────────────────────────────────
 app.post('/register', (req: Request, res: Response) => res.redirect(307, '/api/auth/register'));

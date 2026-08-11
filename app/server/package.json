@@ -13,13 +13,15 @@
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
     "seed:dev": "ts-node -T src/scripts/seed-dev-users.ts",
+    "seed:docs": "ts-node -T src/scripts/seed-docs.ts",
     "backfill:projects": "ts-node -T src/scripts/backfill-default-project.ts",
     "prune:events": "ts-node -T src/scripts/prune-events.ts",
     "migrate:session-timeout": "ts-node -T src/scripts/migrate-session-timeout.ts",
     "postinstall": "prisma generate",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "verify:monitor": "ts-node -T src/scripts/verify-monitor-access.ts"
   },
   "keywords": [],
   "author": "",
@@ -57,6 +59,7 @@
     "axios": "^1.13.2",
     "nodemon": "^3.1.10",
     "prisma": "^6.19.2",
+    "socket.io-client": "^4.8.3",
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.9.3",
     "vitest": "^3.2.7"

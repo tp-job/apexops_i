@@ -1,6 +1,6 @@
 import type { FC } from 'react';
 import { useEffect, useState } from 'react';
-import type { DocSection } from '@/content/docs';
+import type { DocHeading } from '@/lib/docsMarkdown';
 
 /**
  * The "On this page" rail.
@@ -13,8 +13,13 @@ import type { DocSection } from '@/content/docs';
  * The margin (`-88px 0px -70% 0px`) narrows the observed band to a strip near the
  * top of the viewport, so the highlighted entry is the heading you are reading
  * rather than whichever section happens to be tallest on screen.
+ *
+ * The headings arrive **derived from the body** (S9-D2) rather than stored, so
+ * the rail and the page cannot disagree about what sections exist — the same
+ * property the hand-authored `sections` array used to buy, now without a second
+ * structure to keep in sync.
  */
-const DocsToc: FC<{ sections: DocSection[] }> = ({ sections }) => {
+const DocsToc: FC<{ sections: DocHeading[] }> = ({ sections }) => {
     const [activeId, setActiveId] = useState<string | null>(null);
 
     useEffect(() => {

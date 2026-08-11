@@ -1,148 +1,172 @@
-# Progress — Sprint 7: platform hardening
+# Progress — Sprint 9: the two admin surfaces
 
-Spec: [`build-spec.md`](build-spec.md) · Decisions:
-[`platform-hardening.md`](.agents/docs/features/platform-hardening.md) · Ledger:
-[`feature-list.json`](feature-list.json)
+Spec: [`build-spec.md`](build-spec.md) · Ledger: [`feature-list.json`](feature-list.json)
+Decisions: [`admin-docs-and-console.md`](.agents/docs/features/admin-docs-and-console.md)
 
-## 2026-08-04 — complete. 19/19 features, 77 verification assertions, criteria 1–14 met.
+Sprint 8 was scoped on 2026-08-07 and never started. Its spec, ledger, progress and decisions are
+archived **intact** at
+[`.agents/docs/archive/sprint-8-realtime-issue-stream-*`](.agents/docs/archive/) and are re-scopeable
+as written — nothing was built against them, so nothing about them is stale.
 
-Scoping the last unscoped row in the plan changed its shape. Two of the three planned items were
-smaller than assumed, and **the most urgent work in the sprint was not on the plan at all.**
+---
 
-## The thing that was not on the plan
+## 2026-08-08 — scoping
 
-**`POST /api/ai/chat` had no authentication, no rate limit and no input cap.** Verified live before
-touching anything:
+Scoped from *"make Documentation, console monitor of feature admin"* — the two disabled `soon` rows in
+the Administration group, the only unfinished entries in the app shell.
 
-```
-POST /api/ai/chat        (no Authorization header)
-→ 400 {"details":"API key not valid. Please pass a valid API key."}
-```
+**Both were verified against the tree before anything was written.** The two features turned out to be
+unfinished for opposite reasons, and that shaped the whole sprint:
 
-That error came **from Google**. The request left the building. The only thing between that and a
-bill was a placeholder key on this machine — in any deployment with a working key, anyone who could
-reach the host had free, unattributed use of the account's Gemini quota at 8192 output tokens a call.
+| Checked | Result |
+|---|---|
+| `routes/AppRoutes.tsx` | `/admin/users` is the **only** admin route. Neither new row has one |
+| `content/docs.tsx` | 929 lines of hand-authored **JSX**, six pages, eleven primitives |
+| `pages/Docs.tsx` | Public surface fully shipped — three-column shell, TOC, prev/next |
+| `server.ts:130-151, 234-267` | `monitors` room, `target-app` registry, capped `console-logs` relay — **all live** |
+| `hooks/useBugTrackerSocket.ts` | Consumes all four events with a JWT handshake — and has **zero call sites** |
+| `server.ts:136-140` | The `monitors` room admits **any signed-in user**, not just admins |
 
-Four controls, because each closes a different door, and authentication alone would have looked like
-a fix while leaving the cost ceiling at infinity:
+So Documentation is a storage-format change first and a UI second — a CMS cannot store JSX, which is
+why it was never built. Console Monitor is nearly complete plumbing missing a page, plus one
+authorization level.
 
-| Control | Closes |
-| --- | --- |
-| `authenticate` | the internet |
-| per-user quota (keyed on user id, not IP) | the signed-in loop |
-| prompt + history caps | the single enormous request |
-| `maxOutputTokens` 8192 → 2048 | the cost of every call |
+**Gates and decisions written before any code.** Eight decisions locked (`S9-D1`…`S9-D8`), 21
+acceptance criteria, 11 ledger features, all `passes: null`.
 
-Ordering matters as much as presence: **every refusal happens before the outbound call.** A cap that
-runs after the spend is a log message, not a cost control.
+Three calls worth stating here because the sprint is shaped around them:
 
-## And a second one, found while resolving a "known gap"
+1. **All six pages migrate; the DB becomes the only source.** The cheaper option — DB pages appended
+   alongside six hardcoded ones — produces a sidebar with two invisible classes of page, where an
+   admin can add a page but cannot fix a typo in Quickstart. That is a CMS that does not do the thing
+   a CMS is for.
+2. **G5 (the admin gate on `monitors`) lands before G6 (the page).** Gate-after means the insecure
+   version is the one that exists longest and the one most likely to get demoed. The hook has no call
+   sites, so tightening it now regresses nothing.
+3. **Escaping is not optional and not deferrable.** `/docs` is public and unauthenticated on purpose
+   — the SDK snippet lives there. Admin-authored Markdown reaching `dangerouslySetInnerHTML` turns one
+   compromised admin account into stored XSS on the most public page in the product.
 
-`POST /api/console-logs` was flagged in the build spec as *"possibly an ingest endpoint, establish
-which"*. It was a hole, and a bigger one than missing auth: it took an **arbitrary URL from an
-unauthenticated request and drove a headless Chrome to it.** That is server-side request forgery by
-construction — the caller picks any address the *server* can reach, including
-`http://169.254.169.254/`, which on most cloud providers hands out instance credentials to anything
-asking from inside the instance.
+## 2026-08-08 — console slice built (G5, G6)
 
-Now `authenticate` + `authorize('admin')` + a rate limit + [`lib/urlGuard.ts`](app/server/src/lib/urlGuard.ts),
-which resolves the hostname and refuses private, loopback, link-local and reserved addresses. It
-**resolves DNS rather than pattern-matching**, because blocking the string "localhost" stops nothing —
-`127.0.0.1.nip.io` resolves to loopback and so does any attacker's own domain.
+Scope call from the user: **build the Console Monitor half first.** The docs half (F001–F006)
+stays queued exactly as specced; nothing about it changed.
 
-Gated rather than retired: a hardening sprint should not delete a feature, and nothing in the client
-called it, so the gate broke nothing.
+G5 landed before G6 deliberately. Gate-after would have meant the insecure version was the one that
+existed longest and the one most likely to get demoed.
 
-## The four-sprint gap, closed and proven
+**What the verification actually cost, and why it was worth it.** Three things were found by running
+the checks rather than by reading the code:
 
-There was no test runner. `app/server`'s script was `echo "Error: no test specified" && exit 1`, and
-**four consecutive sprints closed with "no automated tests" as their first known gap.**
+1. **`source` was not rendered.** Criterion 11 names it explicitly. Caught by reading the live panel
+   against the criterion rather than against my memory of what I had built. Added as its own column
+   and to the copy output.
+2. **`@types/socket.io-client@1.4.36`** was declared in the client — v1 types shadowing the v4 types
+   that ship with the package. Invisible until the server typechecked a file importing the client.
+   Removed; both workspaces are clean.
+3. **The naive dead-feed test was a confound.** Killing the backend also kills the session check, so
+   the page unmounts to "Checking your session…" and the badge cannot be observed at all. The honest
+   test is a *live API with a dead socket* — done by pointing `VITE_WS_URL` at a closed port.
 
-59 tests now run from `npm test` at the repo root, covering exactly the functions those gap lists kept
-naming — chosen for consequence, not for ease:
+The suite proved its worth before being trusted: reverting the role check to authenticated-only
+turned 4 tests red naming the privilege gap, then reverted clean.
 
-- **`fingerprint`** decides whether two errors are one issue. Too loose and unrelated bugs merge
-  invisibly; too tight and one render loop becomes 100,000 rows.
-- **`resolveTimeZone`** has already gone wrong once here. A regression moves every date on every
-  calendar.
-- **`parseStack`**, whose quiet promise is that a line it cannot read is kept verbatim rather than
-  dropped from an incident stack.
+## 2026-08-09 — docs CMS built (G1–G4), G7 closed
 
-**A suite that has never caught anything is a hypothesis, so it was tested by breaking things:**
+The other half. Storage format first, UI second, exactly as the sprint was shaped.
 
-| Reintroduced | Result |
-| --- | --- |
-| `resolveTimeZone` no longer stripping the `(GMT+7)` display suffix | RED — *"parses the display format actually stored in User.timezone"*, exit 1 |
-| Fingerprint's NUL separator "tidied" into a space | RED — *"is not fooled by a separator that appears inside the message"* |
+**What the migration actually cost.** The conversion was hand-written into six `.md` files and
+seeded by `scripts/seed-docs.ts` — the estimate said "a conversion with judgment in it, not a regex",
+and that was right. Two calls made during it, recorded rather than buried:
 
-Both reverted, both green.
+1. **The dialect gained two things the decisions did not name.** An inline `:endpoint[GET /path]`
+   form, because the REST API page puts endpoint chips *inside table cells* where a block directive
+   cannot go; and a `{w-44}` width suffix on table header cells, because `DocsPrimitives.Table` takes
+   per-column widths and dropping them would have visibly reflowed four tables. Both are additions to
+   S9-D1's syntax, not departures from it.
+2. **The lead is the content before the first `##`**, rather than a stored `intro` column. One less
+   field to keep in sync, and it reads the way the file looks.
 
-**It also caught a bug in my own code on its first run.** `urlGuard` used
-`addSubnet('::ffff:0:0', 96)` to cover IPv4-mapped addresses — Node normalises an IPv4 argument into
-that range before comparing, so that one line made the guard **block the entire public internet**
-while reading as correct.
+**Criterion 1 was verified by diff, not by screenshot.** The Browser pane could not composite frames
+in this session, so no screenshot could be taken — and a screenshot was the weaker instrument anyway.
+Instead the pre-migration JSX was restored from git and rendered through the same primitives, and its
+text was compared with the migrated Markdown rendered through the new path. **Five of six pages came
+back byte-identical.** The sixth, `sdk`, differs by 16 characters in exactly one place: the old file's
+template literal treated `\` + newline as a line continuation, so the shipped source-map `curl` snippet
+had its backslashes and line breaks silently eaten. The migration restores the intended multi-line
+command. That is a fix, and it is written here rather than left for someone to find as a regression.
 
-## CI, and what it found on day one
+**Three things were found by running the checks rather than by reading the code:**
 
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on pull requests and pushes to `main`:
-`npm ci`, prisma generate, typecheck both workspaces, lint, both suites, both builds.
+1. **A backup filename collision destroyed a file mid-proof.** `DocsMarkdown.tsx` and
+   `docsMarkdown.ts` backed up to `/tmp/DocsMarkdown.bak` and `/tmp/docsMarkdown.bak` — the same file
+   on Windows. The restore put the parser's contents into the renderer, and five tests stayed red
+   after a "clean" revert. Case-insensitive filesystems do not respect a naming convention that only
+   differs by case.
+2. **`eslint` refuses the control-character class** in `sanitizeHref`, which is the part doing the
+   security work. Suppressed with the reason inline rather than by weakening the regex.
+3. **A 404 on a draft slug had to be the same 404 as a missing slug.** Anything else — a 403, a
+   distinct message — tells an anonymous visitor which unpublished pages exist.
 
-**Checks only — no deploy, no publish, no release, and no secrets.** This repo had no pipeline at
-all; the first one must not be something that ships code as a side effect of a merge. Needing no
-secrets also means a fork PR runs the same checks rather than silently skipping them and reporting
-green.
+The suite proved its worth before being trusted, on both halves: the monitors gate reverted to
+authenticated-only turned 4 server tests red, and the two docs defences reverted turned 8 client
+tests red. Both reverted clean.
 
-Two real problems surfaced from verifying it against a genuinely clean checkout rather than this
-working tree:
+## Status
 
-1. **`package-lock.json` was gitignored.** `npm ci` cannot run without it, so CI was impossible — and
-   no install in this repo's history has been reproducible. That is the direct cause of a bug already
-   paid for: Sprint 4's npm silently deduped `source-map` to a hoisted 0.5.7 with a different,
-   synchronous API than the pinned 0.7.4. Now tracked, with the reason recorded in `.gitignore`.
-2. **A pre-existing lint error** in [`api/client.ts`](app/client/src/api/client.ts) that would have
-   made the very first pull request red. The `_skip` rest-destructure is the one honest way to omit a
-   property, and the default rule flags it; the config now honours the `_` convention.
+| G | Scope | State |
+|---|---|---|
+| G1 | `DocPage` model, migration, six pages converted to Markdown | **done** — F001 |
+| G2 | Markdown + directive renderer over `DocsPrimitives` | **done** — F002, F003 |
+| G3 | `/docs` served from the DB, published-only, still anonymous | **done** — F004 |
+| G4 | Admin CRUD API + `/admin/docs` editor, preview, reorder | **done** — F005, F006 |
+| G5 | `monitors` admits admins only | **done** — F007, wire-verified 5/5 |
+| G6 | `/admin/console` page: targets, stream, filter, pause, buffer | **done** — F008, F009 |
+| G7 | Tests, the two reintroduced-bug proofs, sidebar `ready`, docs | **done** — F010, F011 |
 
-## Email, and the part that was genuinely blocked
+**Observed, not claimed: all 21 criteria.** 10–18 on 2026-08-08 (console); 1–9 and 19–21 on
+2026-08-09 (docs), with criterion 1 verified by rendering diff rather than by screenshot — see above
+for why, and for the one intentional 16-character difference.
 
-The plan named the blocking question as *mail infrastructure — a sending domain and SPF/DKIM, not an
-afternoon.* That is true, and it blocks **delivery to real inboxes**. It does not block the feature.
+Suites: server 61 passed, client 44 passed. `tsc`, `eslint src` and `npm run build` clean in both
+workspaces.
 
-Three drivers behind one interface — `console` (default), `smtp`, `noop` — with the effective driver
-reported at `/api/mail/status`. **`SendResult.sent` is false for the console driver**, deliberately:
-nothing claims a message was sent unless one was. That is the line between this and the ten inert
-toggles Sprint 5 removed.
+## Carried risk
 
-**Verified by reading messages back off the wire, never by a resolved `sendMail` promise.** Mailpit is
-in `docker-compose.yml` for this; Docker Desktop's engine was down on this machine, so verification
-used a real in-process SMTP server — a full `EHLO`/`MAIL FROM`/`RCPT TO`/`DATA` session over TCP, with
-nodemailer as an unmodified client.
+**F012 is the residual on the console half.** A socket joins the `monitors` room once and stays, so a
+demoted admin keeps streaming until that socket drops. `authorize()` re-reads the role on every HTTP
+request; there is no equivalent tick on a long-lived socket. It is strictly narrower than what shipped
+before — the room used to admit any signed-in user at all — so this is a window, not a hole. It is on
+the ledger rather than in a comment.
 
-The invite assertion is the one that matters, and it is criterion 12 exactly: the token was extracted
-**from the delivered message** — after decoding quoted-printable soft line breaks, which split a
-71-character invite URL across two lines — and used to accept the invite successfully.
+**The JSX is now only in git.** `content/docs.tsx` was deleted in the commit that flipped `/docs` to
+the database — the risk named at scoping, now realized deliberately rather than by accident. The six
+Markdown sources live on at `app/server/src/scripts/docs-content/`, and `npm run seed:docs` rebuilds
+the rows from them; note that it re-seeds the SEED text, not whatever an admin has since edited, so it
+is a floor and not a backup. Editing the live pages is now `/admin/docs`, not the repository.
 
-Both channels inherit the existing alerting rule: **sends are detached and bounded by a timeout, never
-awaited on the request path.** Regression alerting runs inside ingest, so this was asserted directly:
-with SMTP unreachable, ingest still succeeds, is not slowed, and the in-app rows are still written
-first.
+Two environment gotchas that have already cost time: `prisma generate` EPERMs on Windows unless the
+:3000 dev server is stopped first, and `npm run build` catches client errors that `tsc --noEmit`
+misses here (the `erasableSyntaxOnly` gap). Both are in the criteria rather than in anyone's memory.
 
-## Known gaps
+## 2026-08-09 — refactor pass (F013–F015)
 
-1. **DNS rebinding is not solved** by `urlGuard`. The name can resolve to a public address at check
-   time and a private one when Puppeteer fetches it moments later; closing that needs the fetch pinned
-   to the checked address, which `page.goto` does not expose. This is why the route is *also*
-   admin-gated and rate-limited rather than relying on the guard alone.
-2. **Every test is a unit test.** Nothing covers a route end to end, so the API-level assertions in
-   this sprint were scripted by hand and are not in CI. The next honest step is a small integration
-   project with a Postgres service container — a deliberate change, not something to let accrete.
-3. **The AI quota is in-memory and per process.** Same limitation as the auth limiters, and it now
-   matters slightly more because this one guards a bill. Horizontal scaling multiplies every limit by
-   the instance count.
-4. **No bounce, complaint, or unsubscribe handling**, and no production sending domain. Transactional
-   invites are fine; anything resembling bulk sending is not, and needs a deliberate deliverability
-   posture first.
-5. **`consoleLogsAPI.fetchFromUrl`** in the client has no caller and now points at an admin-only
-   endpoint. Dead code; left in place rather than widening this sprint's diff.
-6. **Retiring `POST /api/console-logs`** in favour of `api/console-monitor.ts` is worth deciding. It
-   is now safe, but it spawns a browser with `--no-sandbox` for a feature nothing calls.
+Scoped from what the sprint actually left behind, not from a general tidy-up. Three duplications, each
+appended to the ledger with its own verification steps before any code moved, so the refactor is
+recorded the same way a feature is.
+
+- **F013 — one docs article renderer.** S9-D3's promise is that preview and public cannot disagree,
+  and that promise was resting on two copies of the same 25-line loop. Now structural.
+- **F014 — one route-id parser.** Both copies existed because `Number.parseInt('3abc')` is `3`: a
+  permissive id parser does not fail, it returns *someone else's row*. The shared one is stricter than
+  either copy was.
+- **F015 — one admin refusal panel.** Three hand-rolled copies of a refusal is three chances for one
+  of them to reassure someone the API is about to turn away.
+
+**Refactors were proven, not asserted.** The public page's rendered HTML was captured before the
+extraction and compared after: 29 901 characters, identical, no first difference. Preview vs public
+re-measured: still byte-identical. The malformed-id and per-route 403 checks were re-run on the wire
+with a fresh token rather than assumed to still hold.
+
+Suites after: server 65 passed, client 44 passed. `tsc`, `eslint src`, `npm run build` clean in both
+workspaces.
