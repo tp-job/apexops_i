@@ -1,9 +1,15 @@
-import type { FC, InputHTMLAttributes, ReactNode } from 'react';
+import type { ComponentPropsWithRef, FC, ReactNode } from 'react';
 import { useState } from 'react';
 import { FiEye, FiEyeOff } from 'react-icons/fi';
 import { useFieldWiring } from './field-context';
 
-interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'ref' | 'size'> {
+/**
+ * `ref` is deliberately kept in the prop type. Under React 19 a function
+ * component receives it as an ordinary prop, so it rides `...rest` down to the
+ * real `<input>` — which is what lets a caller move focus (e.g. back into the
+ * add-todo box on `/daily`) without dropping to bespoke markup.
+ */
+interface InputProps extends Omit<ComponentPropsWithRef<'input'>, 'size'> {
     /** Decorative glyph on the left. Not announced — the label carries the meaning. */
     icon?: ReactNode;
     /** Adds a show/hide toggle. Only meaningful with `type="password"`. */

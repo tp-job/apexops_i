@@ -85,6 +85,8 @@ interface CreateNoteParams {
     isPinned?: boolean;
     tags?: string[];
     color?: string;
+    /** Free-form JSON rows; `/daily` writes todos here. Omitted means "empty list". */
+    checklistItems?: unknown[];
     scheduledFor?: string | null;
     dueDate?: string | null;
 }
@@ -110,6 +112,7 @@ export const createNote = async (params: CreateNoteParams): Promise<{ success: b
                 isPinned: params.isPinned || false,
                 tags: params.tags || [],
                 color: params.color,
+                checklistItems: params.checklistItems || [],
                 // Only sent when present — the API treats an explicit `null` as
                 // "unschedule", which is not what an omitted field should mean.
                 ...(params.scheduledFor !== undefined && { scheduledFor: params.scheduledFor }),
@@ -140,7 +143,12 @@ export const createNote = async (params: CreateNoteParams): Promise<{ success: b
 interface UpdateNoteParams {
     title?: string;
     content?: string;
-    checklistItems?: { text: string; checked: boolean }[];
+    /**
+     * Free-form JSON rows. Kept `unknown[]` rather than `{ text, checked }[]`
+     * because `/daily` stores richer todos in the same column — the legacy pair
+     * is a subset of what lives here, not the whole contract.
+     */
+    checklistItems?: unknown[];
     quote?: { text: string; author: string };
     tags?: string[];
     color?: string;
