@@ -52,7 +52,7 @@ that a copy-paste will pass casual review and then quietly ship two accents. If 
 |---|---|---|---|---|
 | `ai.html` | Invoice Management | `/invoices` — **done** | — (already the DS origin) | — |
 | `zb.html` | Financial Dashboard | `/invoices` detail view | Invoice **activity timeline** (Created → Viewed → Reminder sent → Internal note), attachment empty-state, payment-score meter | 61 hex values; its card chrome |
-| `aj.html` | Salesforce Task Mgmt | `/bug-tracker` | Task-schedule board, assignee-avatar rows, "Pending Approval" lane, employees-involved rail | FA icon font; Salesforce blue |
+| `aj.html` (now `daily-note-todo-template.html`) | Salesforce Task Mgmt | `/bug-tracker`; `/daily` — **done** | Task-schedule board, assignee-avatar rows, "Pending Approval" lane, employees-involved rail | FA icon font; Salesforce blue |
 | `ac.html` | Create Task (form) | `/bug-tracker` create/edit modal | **Stepped form IA**: Task Info → Assignment → Subtasks → Schedule → Completion, with a live preview pane; removable tag pills; removable subtask rows | 20 inline styles; its `onclick` handlers |
 | `zc.html` | Timeline Dashboard | `/optimization-calendar`, `/calendar` | Horizontal month-spanning **Gantt/timeline** track, "Show done" filter toggle, cross-month continuity | Its palette |
 | `zd.html` | CRM Dashboard | `/chat`, `/ai-chat` contact rail | Contact card + deal-stage stepper (Discovery → Negotiation → Proposal), pros/cons split panel, tabbed record (Summary/Analytics/Details/Files/History) | FA icon font |
@@ -198,6 +198,45 @@ to `rgb(197, 244, 58)` — `#C5F43A`, brand lime. `tsc` and `eslint` clean on al
 > light shadow in dark mode. It does not — a freshly inserted clone of the same element resolves to
 > the dark shadow, and the compiled CSS is correct. Any property under `transition` needs this
 > caveat when measured headlessly; measure a clone, or a property that isn't transitioned.
+
+---
+
+## 5d. `/daily` — Daily note & todos ✅ built
+
+First screen ported end-to-end under §4. Source: `daily-note-todo-template.html` (the
+`aj.html` row above). Files: `pages/DailyNote.tsx`, `hooks/useDailyTodos.ts`,
+`lib/dailyTodos.ts` (+ 32 tests).
+
+**Harvested:** day header with a stat rail and completion meter, filter pills, a lane board
+of task cards, per-card affordances (reorder, delete), lazy empty states.
+
+**Rejected, per §2:** every hex, the Font Awesome icon set, the `body { overflow: hidden }`
+viewport lock, and the fixed 5-column board.
+
+Two deviations worth recording, both because the mockup's structure outran the data:
+
+- **Two lanes, not five.** The source's five colour columns are the same card repeated —
+  they encode nothing. A todo has one axis (done or not), so three further lanes would be
+  chrome with no data to fill them. This is the "density is a product decision" line in §6
+  being drawn deliberately rather than by copying.
+- **Reorder is buttons, not drag.** Keyboard- and touch-reachable, and no new dependency.
+
+No new primitive was needed — the screen is `Surface` · `Meter` · `Checkbox` · `Input` ·
+`AccentButton` · `Badge` · `SegmentedControl` · `EmptyState` · `PageHeader`. One change went
+back into the system rather than into the page: `Input` now carries `ref` through (React 19
+passes it as an ordinary prop), so focus management no longer requires bespoke markup.
+
+Verified signed in at 1270px and 375px, light and dark: no console errors, no page-level
+horizontal scroll at either width, theme tokens flip, and **exactly one `.ds-glow` element**
+in the rendered tree — the Add button, as §4 step 4 requires. Todos were added, toggled,
+renamed, reordered, deleted and cleared against the real API, and each change was confirmed
+in `GET /api/notes` rather than on screen alone.
+
+> The §5c measuring caveat applies here too, and cost time before it was remembered: the
+> input's colour is under `transition-colors`, so `getComputedStyle` returned the *light*
+> value in dark mode. A freshly inserted clone reports `rgb(255,255,255)` correctly.
+> Separately, the pane never holds real document focus, so `el.focus()`/`el.blur()` are
+> no-ops — dispatch `focusout` directly to exercise an `onBlur` handler.
 
 ---
 

@@ -6,6 +6,7 @@ import {
     FiAlertTriangle,
     FiBookOpen,
     FiCalendar,
+    FiCheckSquare,
     FiFolder,
     FiGrid,
     FiMessageSquare,
@@ -19,9 +20,9 @@ import { SPRING } from '@/lib/motion';
 /**
  * Workspace navigation rail.
  *
- * Primary nav is deliberately 4 items (see `.agents/docs/product/user-flow.md`),
- * with admin-only entries rendered from `user.role` in a separate labelled group
- * so the split is legible rather than hidden.
+ * Primary nav is held short (see `.agents/docs/product/user-flow.md`), with
+ * admin-only entries rendered from `user.role` in a separate labelled group so
+ * the split is legible rather than hidden.
  *
  * Security note: hiding a link is presentation, not access control. Every admin
  * route is gated server-side by `authorize('admin')`; this rail only decides what
@@ -40,6 +41,7 @@ const PRIMARY: NavItem[] = [
     { to: '/dashboard', label: 'Dashboard', icon: <FiGrid size={18} />, ready: true },
     { to: '/projects', label: 'Projects', icon: <FiFolder size={18} />, ready: true },
     { to: '/bug-tracker', label: 'Bug Tracker', icon: <FiAlertTriangle size={18} />, ready: true },
+    { to: '/daily', label: 'Daily Note', icon: <FiCheckSquare size={18} />, ready: true },
     { to: '/notes', label: 'Notes & Calendar', icon: <FiCalendar size={18} />, ready: true },
     { to: '/chat', label: 'Chat', icon: <FiMessageSquare size={18} />, ready: true },
 ];
