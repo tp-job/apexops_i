@@ -1,5 +1,5 @@
 import type { FC } from 'react';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import dayjs, { type Dayjs } from 'dayjs';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -8,20 +8,26 @@ import {
     FiChevronLeft,
     FiChevronRight,
     FiClock,
+    FiEdit2,
     FiFileText,
     FiGrid,
     FiPlus,
     FiRefreshCw,
+    FiSearch,
     FiStar,
+    FiTag,
     FiTrash2,
 } from 'react-icons/fi';
 import {
     Surface,
     AccentButton,
     Badge,
+    ConfirmDialog,
     EmptyState,
+    Modal,
     SegmentedControl,
     Input,
+    Textarea,
     Field,
     PageHeader,
 } from '@/components/design-system';
@@ -58,6 +64,21 @@ const NOTE_ACCENT: Record<string, string> = {
     link: 'bg-amber-500',
 };
 
+/** Case-insensitive match across the fields a person would expect to search. */
+const matchesQuery = (note: Note, q: string): boolean => {
+    if (!q) return true;
+    const hay = [note.title, note.content, ...(note.tags ?? [])].join(' ').toLowerCase();
+    return hay.includes(q);
+};
+
+/** Tags are the note "categories". Deduplicated across the set, alphabetical. */
+const collectTags = (notes: Note[]): string[] =>
+    [...new Set(notes.flatMap((n) => n.tags ?? []).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+
+/** `a, b , ,c` → `['a','b','c']`. Used by the editor's tag field. */
+const parseTags = (raw: string): string[] =>
+    [...new Set(raw.split(',').map((t) => t.trim()).filter(Boolean))];
+
 /** `YYYY-MM-DD` for the day a note belongs on: its schedule, else when it was written. */
 const noteDayKey = (note: Note): string | null => {
     const raw = note.scheduledFor ?? note.createdAt;
@@ -66,15 +87,23 @@ const noteDayKey = (note: Note): string | null => {
     return d.isValid() ? d.format('YYYY-MM-DD') : null;
 };
 
+/** Shared chrome for the small square buttons on a card's action row. */
+const cardAction =
+    'shrink-0 rounded-lg p-1.5 text-gray-400 transition-colors disabled:opacity-40 ' +
+    'hover:bg-black/5 hover:text-brand-dark dark:hover:bg-white/10 dark:hover:text-white';
+
 // ── Note card ─────────────────────────────────────────────────
 const NoteCard: FC<{
     note: Note;
     readOnly: boolean;
     onPin: () => void;
+    onEdit: () => void;
     onDelete: () => void;
     onSchedule: (iso: string | null) => void;
-}> = ({ note, readOnly, onPin, onDelete, onSchedule }) => {
+    onPickTag: (tag: string) => void;
+}> = ({ note, readOnly, onPin, onEdit, onDelete, onSchedule, onPickTag }) => {
     const scheduled = note.scheduledFor ? dayjs(note.scheduledFor) : null;
+    const label = note.title || 'Untitled';
 
     return (
         <motion.li variants={fadeUp} layout>
@@ -86,13 +115,13 @@ const NoteCard: FC<{
                             aria-hidden
                         />
                         <h3 className="min-w-0 flex-1 truncate text-sm font-semibold text-brand-dark dark:text-white">
-                            {note.title || 'Untitled'}
+                            {label}
                         </h3>
                         <button
                             type="button"
                             onClick={onPin}
                             disabled={readOnly}
-                            aria-label={note.isPinned ? 'Unpin note' : 'Pin note'}
+                            aria-label={note.isPinned ? `Unpin ${label}` : `Pin ${label}`}
                             aria-pressed={note.isPinned}
                             className={[
                                 'shrink-0 rounded-lg p-1 transition-colors disabled:opacity-40',
@@ -106,26 +135,41 @@ const NoteCard: FC<{
                     </div>
 
                     {note.content && (
-                        <p className="line-clamp-3 text-xs leading-relaxed text-gray-600 dark:text-gray-400">
+                        <p className="line-clamp-3 whitespace-pre-wrap text-xs leading-relaxed text-gray-600 dark:text-gray-400">
                             {note.content}
                         </p>
                     )}
 
-                    <div className="mt-auto flex flex-wrap items-center gap-2">
+                    <div className="mt-auto flex flex-wrap items-center gap-1.5">
                         {scheduled ? (
                             <Badge tone="accent">{scheduled.format('D MMM')}</Badge>
                         ) : (
                             <Badge tone="outline">unscheduled</Badge>
                         )}
-                        {note.tags?.slice(0, 2).map((t) => (
-                            <Badge key={t} tone="neutral">{t}</Badge>
+                        {/* Categories are the fastest way into a filtered view, so they
+                            are the control rather than decoration beside one. */}
+                        {note.tags?.slice(0, 3).map((t) => (
+                            <button
+                                key={t}
+                                type="button"
+                                onClick={() => onPickTag(t)}
+                                title={`Filter by ${t}`}
+                                className="rounded-md outline-none focus-visible:ring-2 focus-visible:ring-brand-dark/30 dark:focus-visible:ring-brand-accent/40"
+                            >
+                                <Badge tone="neutral" plainCase icon={<FiTag size={9} />}>
+                                    {t}
+                                </Badge>
+                            </button>
                         ))}
+                        {(note.tags?.length ?? 0) > 3 && (
+                            <span className="text-[10px] text-gray-400">+{note.tags!.length - 3}</span>
+                        )}
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5">
                         <input
                             type="date"
-                            aria-label={`Schedule ${note.title || 'note'}`}
+                            aria-label={`Schedule ${label}`}
                             disabled={readOnly}
                             value={scheduled ? scheduled.format('YYYY-MM-DD') : ''}
                             onChange={(e) => onSchedule(e.target.value ? e.target.value : null)}
@@ -133,10 +177,19 @@ const NoteCard: FC<{
                         />
                         <button
                             type="button"
+                            onClick={onEdit}
+                            disabled={readOnly}
+                            aria-label={`Edit ${label}`}
+                            className={cardAction}
+                        >
+                            <FiEdit2 size={14} />
+                        </button>
+                        <button
+                            type="button"
                             onClick={onDelete}
                             disabled={readOnly}
-                            aria-label={`Delete ${note.title || 'note'}`}
-                            className="shrink-0 rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-red-500/10 hover:text-red-500 disabled:opacity-40"
+                            aria-label={`Delete ${label}`}
+                            className="shrink-0 rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-global-red/10 hover:text-global-red disabled:opacity-40"
                         >
                             <FiTrash2 size={14} />
                         </button>
@@ -144,6 +197,85 @@ const NoteCard: FC<{
                 </div>
             </Surface>
         </motion.li>
+    );
+};
+
+// ── Edit dialog ───────────────────────────────────────────────
+/**
+ * Editing was the one thing the Notes screen could not do: a note could be
+ * pinned, scheduled and deleted, but never corrected. `Modal` gives focus
+ * trapping and restore for free, which a click-to-edit-in-place card would have
+ * had to earn.
+ */
+const EditNoteDialog: FC<{
+    note: Note | null;
+    busy: boolean;
+    onClose: () => void;
+    onSave: (patch: { title: string; content: string; tags: string[] }) => void;
+}> = ({ note, busy, onClose, onSave }) => {
+    const [title, setTitle] = useState('');
+    const [content, setContent] = useState('');
+    const [tags, setTags] = useState('');
+
+    // Reset from the note each time a different one is opened, so the dialog
+    // never shows the previous note's text for a frame.
+    useEffect(() => {
+        setTitle(note?.title ?? '');
+        setContent(note?.content ?? '');
+        setTags((note?.tags ?? []).join(', '));
+    }, [note]);
+
+    const valid = title.trim() || content.trim();
+
+    return (
+        <Modal
+            open={!!note}
+            onOpenChange={(o) => !o && onClose()}
+            title="Edit note"
+            description="Changes save to this note only."
+            dismissible={!busy}
+            footer={
+                <>
+                    <AccentButton variant="ghost" size="sm" onClick={onClose} disabled={busy}>
+                        Cancel
+                    </AccentButton>
+                    <AccentButton
+                        size="sm"
+                        disabled={busy || !valid}
+                        onClick={() =>
+                            onSave({ title: title.trim(), content: content.trim(), tags: parseTags(tags) })
+                        }
+                    >
+                        {busy ? 'Saving…' : 'Save changes'}
+                    </AccentButton>
+                </>
+            }
+        >
+            <div className="flex flex-col gap-4">
+                <Field label="Title" id="edit-note-title">
+                    <Input value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
+                </Field>
+                <Field
+                    label="Content"
+                    hint={
+                        note?.contentRich
+                            ? 'This note was written with formatting. Saving here keeps the text and drops the formatting.'
+                            : 'Title or content — one of them is required.'
+                    }
+                    id="edit-note-content"
+                >
+                    <Textarea rows={6} value={content} onChange={(e) => setContent(e.target.value)} />
+                </Field>
+                <Field label="Categories" hint="Comma separated. These are the tags you can filter by." id="edit-note-tags">
+                    <Input
+                        value={tags}
+                        onChange={(e) => setTags(e.target.value)}
+                        placeholder="research, roadmap"
+                        icon={<FiTag size={14} />}
+                    />
+                </Field>
+            </div>
+        </Modal>
     );
 };
 
@@ -247,6 +379,10 @@ const NotesCalendar: FC = () => {
     const [notice, setNotice] = useState<string | null>(null);
     const [title, setTitle] = useState('');
     const [content, setContent] = useState('');
+    const [query, setQuery] = useState('');
+    const [activeTag, setActiveTag] = useState<string | null>(null);
+    const [editing, setEditing] = useState<Note | null>(null);
+    const [pendingDelete, setPendingDelete] = useState<Note | null>(null);
 
     // `useCalendarEvents` is kept mounted in calendar mode so its request (and the
     // server's timezone resolution) stays the source of truth for `totalNotes`,
@@ -264,17 +400,23 @@ const NotesCalendar: FC = () => {
         return map;
     }, [notesList]);
 
-    const sortedNotes = useMemo(
-        () =>
-            notesList
-                .slice()
-                .sort(
-                    (a, b) =>
-                        Number(b.isPinned) - Number(a.isPinned) ||
-                        dayjs(b.updatedAt ?? 0).valueOf() - dayjs(a.updatedAt ?? 0).valueOf(),
-                ),
-        [notesList],
-    );
+    const allTags = useMemo(() => collectTags(notesList), [notesList]);
+
+    // Search and category narrow the list; pin-then-recency orders whatever survives.
+    const sortedNotes = useMemo(() => {
+        const q = query.trim().toLowerCase();
+        return notesList
+            .filter((n) => matchesQuery(n, q))
+            .filter((n) => (activeTag ? (n.tags ?? []).includes(activeTag) : true))
+            .sort(
+                (a, b) =>
+                    Number(b.isPinned) - Number(a.isPinned) ||
+                    dayjs(b.updatedAt ?? 0).valueOf() - dayjs(a.updatedAt ?? 0).valueOf(),
+            );
+    }, [notesList, query, activeTag]);
+
+    const filtered = !!query.trim() || !!activeTag;
+    const clearFilters = () => { setQuery(''); setActiveTag(null); };
 
     const dayNotes = selectedDay ? (notesByDay[selectedDay] ?? []) : [];
 
@@ -403,7 +545,8 @@ const NotesCalendar: FC = () => {
                                     />
                                 </Field>
                                 <Field label="Content" hint="Title or content — one of them is required.">
-                                    <Input
+                                    <Textarea
+                                        rows={4}
                                         value={content}
                                         onChange={(e) => setContent(e.target.value)}
                                         placeholder="Optional"
@@ -436,6 +579,63 @@ const NotesCalendar: FC = () => {
             {/* ── Notes mode ─────────────────────────────────── */}
             {mode === 'notes' && (
                 <Surface variant="panel" radius="3xl" padding="lg">
+                    {/* Search + categories. Above the grid rather than in the page
+                        header: they act on this view only, and the calendar mode
+                        has no use for them. */}
+                    <div className="mb-5 flex flex-col gap-3">
+                        <Input
+                            aria-label="Search notes"
+                            icon={<FiSearch size={15} />}
+                            placeholder="Search title, content or category…"
+                            value={query}
+                            onChange={(e) => setQuery(e.target.value)}
+                        />
+
+                        {allTags.length > 0 && (
+                            <div className="flex flex-wrap items-center gap-1.5">
+                                <span className="mr-0.5 text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+                                    Categories
+                                </span>
+                                {allTags.map((t) => {
+                                    const on = activeTag === t;
+                                    return (
+                                        <button
+                                            key={t}
+                                            type="button"
+                                            aria-pressed={on}
+                                            onClick={() => setActiveTag(on ? null : t)}
+                                            className={[
+                                                'rounded-full px-2.5 py-1 text-xs font-medium transition-colors outline-none',
+                                                'focus-visible:ring-2 focus-visible:ring-brand-dark/30 dark:focus-visible:ring-brand-accent/40',
+                                                on
+                                                    ? 'bg-brand-dark text-white dark:bg-brand-accent dark:text-brand-dark'
+                                                    : 'bg-black/5 text-gray-600 hover:bg-black/10 dark:bg-white/10 dark:text-gray-300 dark:hover:bg-white/20',
+                                            ].join(' ')}
+                                        >
+                                            {t}
+                                        </button>
+                                    );
+                                })}
+                                {filtered && (
+                                    <button
+                                        type="button"
+                                        onClick={clearFilters}
+                                        className="ml-1 text-xs font-medium text-gray-400 underline-offset-2 hover:text-brand-dark hover:underline dark:hover:text-white"
+                                    >
+                                        Clear
+                                    </button>
+                                )}
+                            </div>
+                        )}
+
+                        {filtered && !loading && (
+                            <p className="text-xs text-gray-400 dark:text-gray-500">
+                                {sortedNotes.length} of {notesList.length} note
+                                {notesList.length === 1 ? '' : 's'}
+                            </p>
+                        )}
+                    </div>
+
                     {loading ? (
                         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3" aria-hidden>
                             {Array.from({ length: 6 }).map((_, i) => (
@@ -458,6 +658,24 @@ const NotesCalendar: FC = () => {
                                 </AccentButton>
                             }
                         />
+                    ) : sortedNotes.length === 0 ? (
+                        /* Filtered to nothing is a different problem from having no
+                           notes, and needs a different action. */
+                        <EmptyState
+                            size="sm"
+                            icon={<FiSearch size={20} />}
+                            title="Nothing matches"
+                            description={
+                                activeTag
+                                    ? `No note in "${activeTag}" matches that search.`
+                                    : 'No note matches that search.'
+                            }
+                            action={
+                                <AccentButton variant="ghost" size="sm" onClick={clearFilters}>
+                                    Clear filters
+                                </AccentButton>
+                            }
+                        />
                     ) : (
                         <motion.ul
                             variants={stagger(0.04)}
@@ -476,13 +694,15 @@ const NotesCalendar: FC = () => {
                                             'Could not change the pin.',
                                         )
                                     }
-                                    onDelete={() => run(() => deleteNote(note.id), 'Could not delete that note.')}
+                                    onEdit={() => setEditing(note)}
+                                    onDelete={() => setPendingDelete(note)}
                                     onSchedule={(iso) =>
                                         run(
                                             () => updateNote(note.id, { scheduledFor: iso }),
                                             'Could not reschedule that note.',
                                         )
                                     }
+                                    onPickTag={(t) => setActiveTag((cur) => (cur === t ? null : t))}
                                 />
                             ))}
                         </motion.ul>
@@ -607,6 +827,42 @@ const NotesCalendar: FC = () => {
                     </motion.div>
                 </div>
             )}
+
+            <EditNoteDialog
+                note={editing}
+                busy={busy}
+                onClose={() => setEditing(null)}
+                onSave={(patch) => {
+                    const target = editing;
+                    if (!target) return;
+                    // This dialog edits plain text. On a note that carries a rich
+                    // document, saving here has to *drop* it — leaving it would make
+                    // `content` and `contentRich` disagree, and the editor on
+                    // `/daily` would keep showing text this dialog just replaced.
+                    // The dialog warns before it comes to this.
+                    const withRich = target.contentRich ? { ...patch, contentRich: null } : patch;
+                    run(() => updateNote(target.id, withRich), 'Could not save that note.').then(() =>
+                        setEditing(null),
+                    );
+                }}
+            />
+
+            {/* Delete is destructive and was previously a single unguarded click on a
+                card — exactly what ConfirmDialog exists to prevent. */}
+            <ConfirmDialog
+                open={!!pendingDelete}
+                onOpenChange={(o) => !o && setPendingDelete(null)}
+                title="Delete this note?"
+                description={`"${pendingDelete?.title || 'Untitled'}" will be removed permanently. This cannot be undone.`}
+                confirmLabel="Delete note"
+                destructive
+                onConfirm={async () => {
+                    const target = pendingDelete;
+                    if (!target) return;
+                    await run(() => deleteNote(target.id), 'Could not delete that note.');
+                    setPendingDelete(null);
+                }}
+            />
         </div>
     );
 };

@@ -27,7 +27,18 @@ export type NoteBlock = ParagraphBlock | RichTextBlock;
 export interface Note {
     id: string;
     title: string;
+    /**
+     * Always plain text. A rich note keeps its formatting in `contentRich` and
+     * projects a plain rendering here, so card previews and search keep working
+     * on notes they know nothing about.
+     */
     content: string;
+    /**
+     * A TipTap/ProseMirror document, or null for a note written as plain text.
+     * Typed `unknown` on purpose — only `components/editor` knows its shape, and
+     * spreading a node type through the app is how the two drift apart.
+     */
+    contentRich?: unknown | null;
     type: 'text' | 'image' | 'list' | 'link';
     isPinned: boolean;
     color?: string;

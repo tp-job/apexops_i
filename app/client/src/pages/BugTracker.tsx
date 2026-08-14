@@ -19,12 +19,16 @@ import {
     Surface,
     StatTile,
     AccentButton,
+    AvatarStack,
     Badge,
     EmptyState,
     SegmentedControl,
     Input,
+    Textarea,
     Field,
     PageHeader,
+    type BadgeTone,
+    type Person,
 } from '@/components/design-system';
 import { useBugTrackerData } from '@/hooks/useBugTrackerData';
 import { ticketsAPI } from '@/services/api';
@@ -58,18 +62,31 @@ const STATUS_LABEL: Record<TicketStatus, string> = {
     closed: 'Closed',
 };
 
-const STATUS_TONE: Record<TicketStatus, string> = {
+/**
+ * Status and priority now resolve to `Badge` semantic tones rather than to
+ * hand-written class strings. Two local colour maps used to live here; the
+ * meaning-to-colour decision belongs in the primitive, where an audit can see it.
+ */
+const STATUS_TONE: Record<TicketStatus, BadgeTone> = {
+    open: 'warning',
+    'in-progress': 'info',
+    resolved: 'success',
+    closed: 'neutral',
+};
+
+const PRIORITY_TONE: Record<TicketPriority, BadgeTone> = {
+    critical: 'danger',
+    high: 'warning',
+    medium: 'info',
+    low: 'neutral',
+};
+
+/** The status dot on a row — same hue as the badge, at 2px. */
+const STATUS_DOT: Record<TicketStatus, string> = {
     open: 'bg-amber-500',
     'in-progress': 'bg-sky-500',
     resolved: 'bg-emerald-500',
     closed: 'bg-gray-400 dark:bg-white/25',
-};
-
-const PRIORITY_STYLE: Record<TicketPriority, string> = {
-    critical: 'bg-red-500/10 text-red-600 dark:text-red-400',
-    high: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
-    medium: 'bg-sky-500/10 text-sky-600 dark:text-sky-400',
-    low: 'bg-black/5 text-gray-500 dark:bg-white/10 dark:text-gray-400',
 };
 
 const STATUS_ORDER: TicketStatus[] = ['open', 'in-progress', 'resolved', 'closed'];
@@ -91,50 +108,123 @@ const relativeTime = (iso: string): string => {
     return new Date(iso).toLocaleDateString();
 };
 
+/** Full date for the `title` attribute — "3d ago" is not enough to act on. */
+const absoluteTime = (iso: string): string => {
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime()) ? '' : d.toLocaleString();
+};
+
+/** `AvatarStack` takes a list; an assignee is a list of one, or none. */
+const assigneeAsPeople = (ticket: Ticket): Person[] =>
+    ticket.assignee
+        ? [{ id: String(ticket.assigneeId ?? ticket.assignee), name: ticket.assignee, src: ticket.assigneeUser?.avatarUrl ?? undefined }]
+        : [];
+
 // ── Ticket row ────────────────────────────────────────────────
-const TicketRow: FC<{ ticket: Ticket; active: boolean; onSelect: () => void }> = ({
-    ticket,
-    active,
-    onSelect,
-}) => (
-    <motion.li variants={fadeUp} layout>
-        <button
-            type="button"
-            onClick={onSelect}
-            aria-current={active}
-            className={[
-                'flex w-full flex-col gap-2 rounded-2xl px-4 py-3.5 text-left transition-colors',
-                active
-                    ? 'bg-brand-accent/20 ring-1 ring-brand-accent'
-                    : 'bg-black/[0.03] hover:bg-black/[0.06] dark:bg-white/5 dark:hover:bg-white/10',
-            ].join(' ')}
-        >
-            <div className="flex items-center gap-2.5">
-                <span className={`h-2 w-2 shrink-0 rounded-full ${STATUS_TONE[ticket.status]}`} aria-hidden />
-                <span className="truncate text-sm font-semibold text-brand-dark dark:text-white">
-                    {ticket.title}
-                </span>
-                <span
-                    className={`ml-auto shrink-0 rounded-md px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${PRIORITY_STYLE[ticket.priority]}`}
-                >
-                    {ticket.priority}
-                </span>
-            </div>
-            <div className="flex items-center gap-2.5 text-xs text-gray-500 dark:text-gray-400">
-                <span className="font-numbers">{ticket.id}</span>
-                <span aria-hidden>·</span>
-                <span className="truncate">{ticket.assignee ?? 'Unassigned'}</span>
-                <span aria-hidden>·</span>
-                <span className="shrink-0">{relativeTime(ticket.updatedAt)}</span>
-                {(ticket.commentCount ?? 0) > 0 && (
-                    <span className="ml-auto flex shrink-0 items-center gap-1">
-                        <FiMessageSquare size={12} />
-                        {ticket.commentCount}
+/**
+ * One issue in the list.
+ *
+ * `showStatus` is off inside a grouped lane — the lane header already says
+ * "In progress", and repeating it on all six rows underneath is noise. It goes
+ * back on in the flat view, where the row has to carry its own status.
+ */
+const TicketRow: FC<{
+    ticket: Ticket;
+    active: boolean;
+    showStatus: boolean;
+    onSelect: () => void;
+}> = ({ ticket, active, showStatus, onSelect }) => {
+    const people = assigneeAsPeople(ticket);
+
+    return (
+        <motion.li variants={fadeUp} layout>
+            <button
+                type="button"
+                onClick={onSelect}
+                aria-current={active}
+                className={[
+                    'flex w-full flex-col gap-2 rounded-2xl px-4 py-3.5 text-left transition-colors',
+                    active
+                        ? 'bg-brand-accent/20 ring-1 ring-brand-accent'
+                        : 'bg-black/[0.03] hover:bg-black/[0.06] dark:bg-white/5 dark:hover:bg-white/10',
+                ].join(' ')}
+            >
+                <div className="flex items-center gap-2.5">
+                    <span className={`h-2 w-2 shrink-0 rounded-full ${STATUS_DOT[ticket.status]}`} aria-hidden />
+                    <span className="min-w-0 flex-1 truncate text-sm font-semibold text-brand-dark dark:text-white">
+                        {ticket.title}
                     </span>
-                )}
-            </div>
-        </button>
-    </motion.li>
+                    {showStatus && (
+                        <Badge tone={STATUS_TONE[ticket.status]} className="shrink-0">
+                            {STATUS_LABEL[ticket.status]}
+                        </Badge>
+                    )}
+                    <Badge tone={PRIORITY_TONE[ticket.priority]} className="shrink-0">
+                        {ticket.priority}
+                    </Badge>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-gray-500 dark:text-gray-400">
+                    <span className="font-numbers">{ticket.id}</span>
+                    <span aria-hidden>·</span>
+
+                    {/* Responsible person. The avatar carries recognition at a glance;
+                        the name still renders for anyone who does not know the face. */}
+                    {people.length > 0 ? (
+                        <span className="flex min-w-0 items-center gap-1.5">
+                            <AvatarStack people={people} size="sm" />
+                            <span className="truncate">{ticket.assignee}</span>
+                        </span>
+                    ) : (
+                        <span className="italic">Unassigned</span>
+                    )}
+
+                    <span aria-hidden>·</span>
+                    <span className="shrink-0" title={`Created ${absoluteTime(ticket.createdAt)}`}>
+                        opened {relativeTime(ticket.createdAt)}
+                    </span>
+                    <span aria-hidden>·</span>
+                    <span className="shrink-0" title={`Last updated ${absoluteTime(ticket.updatedAt)}`}>
+                        updated {relativeTime(ticket.updatedAt)}
+                    </span>
+
+                    {(ticket.commentCount ?? 0) > 0 && (
+                        <span className="ml-auto flex shrink-0 items-center gap-1">
+                            <FiMessageSquare size={12} />
+                            {ticket.commentCount}
+                        </span>
+                    )}
+                </div>
+            </button>
+        </motion.li>
+    );
+};
+
+/**
+ * A status group with a sticky header — the one structural idea worth taking
+ * from `.agents/template/zg.html`.
+ *
+ * A flat, priority-sorted list answers "what is most urgent" and nothing else.
+ * Grouping by status answers the question triage actually starts with — how much
+ * is open, how much is moving, how much is finished — before a single row is
+ * read. The header sticks so that answer survives scrolling past twenty rows.
+ */
+const StatusLane: FC<{ status: TicketStatus; count: number; children: React.ReactNode }> = ({
+    status,
+    count,
+    children,
+}) => (
+    <section className="flex flex-col gap-2">
+        <div className="sticky top-0 z-10 -mx-1 flex items-center gap-2 bg-light-surface/85 px-1 py-2 backdrop-blur-sm dark:bg-dark-surface/85">
+            <Badge tone={STATUS_TONE[status]}>{STATUS_LABEL[status]}</Badge>
+            <span className="font-numbers rounded-md bg-black/5 px-1.5 py-0.5 text-[11px] font-semibold text-gray-500 dark:bg-white/10 dark:text-gray-400">
+                {count}
+            </span>
+        </div>
+        <motion.ul variants={stagger(0.03)} initial="hidden" animate="show" className="flex flex-col gap-2">
+            {children}
+        </motion.ul>
+    </section>
 );
 
 // ── Detail thread ─────────────────────────────────────────────
@@ -226,17 +316,44 @@ const DetailThread: FC<{
                 </div>
 
                 <dl className="grid grid-cols-2 gap-3 text-xs">
-                    <div className="flex flex-col gap-0.5">
+                    <div className="flex flex-col gap-1">
                         <dt className="text-gray-400 dark:text-gray-500">Assignee</dt>
-                        <dd className="font-medium text-brand-dark dark:text-white">
-                            {ticket.assignee ?? 'Unassigned'}
+                        <dd className="flex items-center gap-2 font-medium text-brand-dark dark:text-white">
+                            {assigneeAsPeople(ticket).length > 0 ? (
+                                <>
+                                    <AvatarStack people={assigneeAsPeople(ticket)} size="sm" />
+                                    <span className="truncate">{ticket.assignee}</span>
+                                </>
+                            ) : (
+                                <span className="italic text-gray-500 dark:text-gray-400">Unassigned</span>
+                            )}
                         </dd>
                     </div>
-                    <div className="flex flex-col gap-0.5">
+                    <div className="flex flex-col gap-1">
                         <dt className="text-gray-400 dark:text-gray-500">Reporter</dt>
                         <dd className="font-medium text-brand-dark dark:text-white">{ticket.reporter}</dd>
                     </div>
+                    <div className="flex flex-col gap-1">
+                        <dt className="text-gray-400 dark:text-gray-500">Opened</dt>
+                        <dd className="font-medium text-brand-dark dark:text-white" title={absoluteTime(ticket.createdAt)}>
+                            {relativeTime(ticket.createdAt)}
+                        </dd>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                        <dt className="text-gray-400 dark:text-gray-500">Last updated</dt>
+                        <dd className="font-medium text-brand-dark dark:text-white" title={absoluteTime(ticket.updatedAt)}>
+                            {relativeTime(ticket.updatedAt)}
+                        </dd>
+                    </div>
                 </dl>
+
+                {ticket.tags.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-1.5">
+                        {ticket.tags.map((t) => (
+                            <Badge key={t} tone="neutral" plainCase>{t}</Badge>
+                        ))}
+                    </div>
+                )}
 
                 {/* ── Thread ─────────────────────────────────── */}
                 <div className="flex min-h-0 flex-1 flex-col gap-3">
@@ -355,7 +472,8 @@ const CreateTicket: FC<{
                 </Field>
 
                 <Field label="Description" hint="Steps to reproduce, expected vs actual.">
-                    <Input
+                    <Textarea
+                        rows={4}
                         value={description}
                         onChange={(e) => setDescription(e.target.value)}
                         placeholder="Optional"
@@ -436,6 +554,17 @@ const BugTracker: FC<BugTrackerProps> = ({ projectId }) => {
         tickets.forEach((t) => { base[t.status] += 1; });
         return base;
     }, [tickets]);
+
+    // Group only when showing everything: filtering to one status and then
+    // rendering a single group is a header that tells you what you just asked for.
+    const grouped = statusFilter === 'all';
+
+    const lanes = useMemo(
+        () =>
+            STATUS_ORDER.map((status) => ({ status, items: visible.filter((t) => t.status === status) }))
+                .filter((lane) => lane.items.length > 0),
+        [visible],
+    );
 
     const loadComments = useCallback(async (ticketId: string) => {
         setLoadingComments(true);
@@ -644,23 +773,34 @@ const BugTracker: FC<BugTrackerProps> = ({ projectId }) => {
                     variants={fadeUp}
                     initial="hidden"
                     animate="show"
-                    className={selected ? 'lg:col-span-3' : 'lg:col-span-5'}
+                    // `min-w-0`: a grid item defaults to min-width:auto and refuses to
+                    // shrink below its content, which is how one wide child blows the
+                    // page out sideways instead of scrolling inside itself.
+                    className={`min-w-0 ${selected ? 'lg:col-span-3' : 'lg:col-span-5'}`}
                 >
                     <Surface variant="panel" radius="3xl" padding="lg" className="h-full">
                         <div className="flex h-full flex-col gap-5">
-                            <div className="flex flex-col gap-3">
-                                <SegmentedControl
-                                    size="sm"
-                                    segments={[
-                                        { value: 'all', label: `All (${tickets.length})` },
-                                        ...STATUS_ORDER.map((s) => ({
-                                            value: s,
-                                            label: `${STATUS_LABEL[s]} (${counts[s]})`,
-                                        })),
-                                    ]}
-                                    value={statusFilter}
-                                    onChange={(v) => setStatusFilter(v as 'all' | TicketStatus)}
-                                />
+                            <div className="flex min-w-0 flex-col gap-3">
+                                {/* Five segments do not fit 375px and the control cannot
+                                    wrap, so it scrolls inside its own track. Without
+                                    this it sets the width of the whole board column and
+                                    the *page* scrolls sideways instead — measured at
+                                    506px against a 375px viewport. */}
+                                <div className="-mx-1 overflow-x-auto px-1 pb-1">
+                                    <SegmentedControl
+                                        size="sm"
+                                        className="w-max"
+                                        segments={[
+                                            { value: 'all', label: `All (${tickets.length})` },
+                                            ...STATUS_ORDER.map((s) => ({
+                                                value: s,
+                                                label: `${STATUS_LABEL[s]} (${counts[s]})`,
+                                            })),
+                                        ]}
+                                        value={statusFilter}
+                                        onChange={(v) => setStatusFilter(v as 'all' | TicketStatus)}
+                                    />
+                                </div>
                                 <Input
                                     aria-label="Search tickets"
                                     icon={<FiSearch size={15} />}
@@ -724,6 +864,28 @@ const BugTracker: FC<BugTrackerProps> = ({ projectId }) => {
                                         </AccentButton>
                                     }
                                 />
+                            ) : grouped ? (
+                                <div className="flex flex-col gap-5">
+                                    {lanes.map((lane) => (
+                                        <StatusLane
+                                            key={lane.status}
+                                            status={lane.status}
+                                            count={lane.items.length}
+                                        >
+                                            {lane.items.map((t) => (
+                                                <TicketRow
+                                                    key={t.id}
+                                                    ticket={t}
+                                                    active={t.id === selectedId}
+                                                    showStatus={false}
+                                                    onSelect={() =>
+                                                        setSelectedId(t.id === selectedId ? null : t.id)
+                                                    }
+                                                />
+                                            ))}
+                                        </StatusLane>
+                                    ))}
+                                </div>
                             ) : (
                                 <motion.ul
                                     variants={stagger(0.03)}
@@ -736,6 +898,7 @@ const BugTracker: FC<BugTrackerProps> = ({ projectId }) => {
                                             key={t.id}
                                             ticket={t}
                                             active={t.id === selectedId}
+                                            showStatus
                                             onSelect={() => setSelectedId(t.id === selectedId ? null : t.id)}
                                         />
                                     ))}

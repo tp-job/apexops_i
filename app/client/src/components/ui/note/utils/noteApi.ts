@@ -81,6 +81,8 @@ export const fetchNoteById = async (noteId: string): Promise<{ success: boolean;
 interface CreateNoteParams {
     title: string;
     content: string;
+    /** TipTap document. Send it *with* the plain projection in `content`, never instead of it. */
+    contentRich?: unknown | null;
     type?: 'text' | 'image' | 'list' | 'link';
     isPinned?: boolean;
     tags?: string[];
@@ -108,6 +110,7 @@ export const createNote = async (params: CreateNoteParams): Promise<{ success: b
             body: JSON.stringify({
                 title: params.title,
                 content: params.content,
+                ...(params.contentRich !== undefined && { contentRich: params.contentRich }),
                 type: params.type || 'text',
                 isPinned: params.isPinned || false,
                 tags: params.tags || [],
@@ -143,6 +146,8 @@ export const createNote = async (params: CreateNoteParams): Promise<{ success: b
 interface UpdateNoteParams {
     title?: string;
     content?: string;
+    /** Explicit `null` clears the rich document back to plain text; omit to leave it. */
+    contentRich?: unknown | null;
     /**
      * Free-form JSON rows. Kept `unknown[]` rather than `{ text, checked }[]`
      * because `/daily` stores richer todos in the same column — the legacy pair

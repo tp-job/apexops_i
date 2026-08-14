@@ -59,6 +59,8 @@ that a copy-paste will pass casual review and then quietly ship two accents. If 
 | `af.html` | HubSpot Productivity | `/dashboard` | **Chart-type switcher** (Column/Scatter/Heatmap/Boxplot/Waterfall) with "max 2 overlaps" constraint, optional-parameters drawer, division filters | HubSpot orange |
 | `za.html` | Luminar Docs | `/about/docs`, `/about/docs/:docId` | 3-pane docs shell: section nav → page nav → on-page ToC; Get Started / Products / Tools grouping | Its typography |
 | `aa.html` | Neon Dark Dashboard | `/dashboard` (KPI band only) | KPI-card + sparkline density, "Top performing" leaderboard, channel-breakdown list with totals | **Everything visual** — esp. `#ccff33` |
+| `zg.html` | Issue Tracking (Linear/Tegon) | `/bug-tracker` — **done** | Status-grouped lanes with sticky headers + count pills; status as a named badge; assignee avatars on the row | FA icon font; its greys; the absolutely-positioned dropdowns |
+| `zi.html` | Book Editor | `/notes` — **done** | Collection search; category chips as the filter control; explicit per-card action row; a real multi-line editor | Its palette; the fixed 1200×800 artboard; the rich-text toolbar |
 
 ---
 
@@ -237,6 +239,57 @@ in `GET /api/notes` rather than on screen alone.
 > value in dark mode. A freshly inserted clone reports `rgb(255,255,255)` correctly.
 > Separately, the pane never holds real document focus, so `el.focus()`/`el.blur()` are
 > no-ops — dispatch `focusout` directly to exercise an `onBlur` handler.
+
+## 5e. Notes & Issues — `zi.html` + `zg.html` ✅ built
+
+Two more sources ported into screens that already existed, so this round was mostly
+**gap-closing rather than new construction**. Files: `pages/NotesCalendar.tsx`,
+`pages/BugTracker.tsx`, plus two design-system additions.
+
+| Source | Target | Harvested | Rejected |
+|---|---|---|---|
+| `zg.html` (Linear/Tegon issue tracker) | `/bug-tracker` | Status-grouped lanes with sticky headers + count pills; status as a *named* badge, not a bare dot; assignee avatars | FA icon font; its greys; the floating filter/assignee dropdowns |
+| `zi.html` (book editor) | `/notes` | Search over the collection; category chips as the filter control; an explicit per-card action row; a real multi-line editor | Its palette; the 1200×800 fixed artboard; the rich-text toolbar |
+
+**Two primitives were missing and got built first** (§4 step 2), not inlined into the pages:
+
+- **`Textarea`** — `Input`'s twin. It had been an open gap for six sprints, and the cost
+  was visible: `AdminDocs` shipped a raw `<textarea>` with a hand-written class string,
+  and `NotesCalendar`'s content field was a single-line `Input` that silently could not
+  hold a paragraph. Now used by both screens and the `/daily` note body.
+- **`Badge` semantic tones** (`success` `warning` `info` `danger`) — `BugTracker` alone
+  carried two private colour maps (`STATUS_TONE`, `PRIORITY_STYLE`) with their own greens
+  and ambers, invisible to any audit of the system. Both are now one lookup to a tone.
+  Tones are tinted rather than solid so several can appear in a list without competing
+  with the view's single accent.
+
+Gaps closed on `/notes`, each of which was simply absent: **search**, **category filter**
+(tags were rendered but not actionable), **edit** (a note could be pinned, scheduled and
+deleted — never corrected), and a **delete confirmation**. That last one was a live
+violation of this system's own rule that `ConfirmDialog` is required before any
+destructive action ships.
+
+**One pre-existing bug found and fixed while measuring.** The 5-segment status filter
+cannot wrap, so at 375px it set the width of the whole board column and the *page* scrolled
+sideways — measured at 506px against a 375px viewport. It now scrolls inside its own track,
+and the grid item carries `min-w-0`. This is the §5b lesson repeating: a flex or grid child
+without `min-w-0` refuses to shrink below its content, and one wide element takes the page
+with it.
+
+Verified signed in, light and dark, at 1280px and 375px: no page-level horizontal scroll on
+either screen at either width, theme tokens flip, and **exactly one `.ds-glow` per view**
+(`New note` / `New ticket`). On Notes: search narrowed 4→1 by content, a category chip
+narrowed 4→2, edit round-tripped a multi-line body and a new tag to the API, and delete was
+confirmed to be a no-op on Cancel and a real delete on confirm. On Issues: all four lanes
+rendered with live counts, and filtering to one status correctly dropped the lanes and put
+the status badge back on each row.
+
+> Add to the §5c/§5d measuring caveats: **`getComputedStyle` is meaningless while the pane
+> is hidden.** `innerWidth` and `clientWidth` report `0`, so every element "overflows" and
+> `scrollWidth > clientWidth` is trivially true. Call `resize_window` to force a real
+> viewport before believing any layout measurement. Radix also holds a closed dialog in the
+> DOM indefinitely here, so assert on `data-state="closed"` rather than on the node being
+> gone.
 
 ---
 
