@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Note } from '@/components/ui/note/utils/noteTypes';
-import { createNote, fetchNotes, updateNote } from '@/components/ui/note/utils/noteApi';
+import type { Note } from '@/types/notes';
+import { createNote, fetchNotes, updateNote } from '@/services/notes';
 import {
     DAILY_TAG,
     dailyNoteTitle,

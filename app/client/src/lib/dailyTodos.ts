@@ -16,7 +16,7 @@
  */
 
 import dayjs from 'dayjs';
-import type { Note } from '@/components/ui/note/utils/noteTypes';
+import type { Note } from '@/types/notes';
 
 /** Tag that marks a note as *the* todo note for its day. */
 export const DAILY_TAG = 'daily';

@@ -13,11 +13,8 @@ import {
     FiGrid,
     FiPlus,
     FiRefreshCw,
-<<<<<<< HEAD
-    FiSlash,
-=======
     FiSearch,
->>>>>>> 195341cd9772ee5c9bcf47d4ebb0d90b51a9c8cd
+    FiSlash,
     FiStar,
     FiTag,
     FiTrash2,
@@ -27,18 +24,14 @@ import {
     AccentButton,
     Badge,
     ConfirmDialog,
-<<<<<<< HEAD
     ContextMenu,
-=======
->>>>>>> 195341cd9772ee5c9bcf47d4ebb0d90b51a9c8cd
     EmptyState,
-    Modal,
-    SegmentedControl,
-    Input,
-    Textarea,
     Field,
+    Input,
     Modal,
     PageHeader,
+    SegmentedControl,
+    Textarea,
     useContextMenu,
     type ContextMenuItem,
 } from '@/components/design-system';
@@ -75,7 +68,6 @@ const NOTE_ACCENT: Record<string, string> = {
     link: 'bg-amber-500',
 };
 
-<<<<<<< HEAD
 /**
  * The colour palette a note can be tagged with.
  *
@@ -138,7 +130,7 @@ const NOTE_COLORS: NoteColor[] = [
 /** Unknown colours from older rows fall back to the default rather than vanishing. */
 const colorOf = (note: Note): NoteColor =>
     NOTE_COLORS.find((c) => c.id === (note.color ?? null)) ?? NOTE_COLORS[0];
-=======
+
 /** Case-insensitive match across the fields a person would expect to search. */
 const matchesQuery = (note: Note, q: string): boolean => {
     if (!q) return true;
@@ -153,7 +145,6 @@ const collectTags = (notes: Note[]): string[] =>
 /** `a, b , ,c` → `['a','b','c']`. Used by the editor's tag field. */
 const parseTags = (raw: string): string[] =>
     [...new Set(raw.split(',').map((t) => t.trim()).filter(Boolean))];
->>>>>>> 195341cd9772ee5c9bcf47d4ebb0d90b51a9c8cd
 
 /** `YYYY-MM-DD` for the day a note belongs on: its schedule, else when it was written. */
 const noteDayKey = (note: Note): string | null => {
@@ -485,11 +476,6 @@ const NotesCalendar: FC = () => {
     const noteMenu = useContextMenu<Note>();
     const dayMenu = useContextMenu<string>();
 
-    const [editing, setEditing] = useState<Note | null>(null);
-    const [editTitle, setEditTitle] = useState('');
-    const [editContent, setEditContent] = useState('');
-    const [confirmDelete, setConfirmDelete] = useState<Note | null>(null);
-
     // `useCalendarEvents` is kept mounted in calendar mode so its request (and the
     // server's timezone resolution) stays the source of truth for `totalNotes`,
     // while the grid renders from the note list we already hold.
@@ -570,20 +556,6 @@ const NotesCalendar: FC = () => {
         dayMenu.openAtCursor(event, dayKey);
     };
 
-    const beginEdit = (note: Note) => {
-        setEditing(note);
-        setEditTitle(note.title ?? '');
-        setEditContent(note.content ?? '');
-    };
-
-    const saveEdit = () => {
-        if (!editing) return;
-        run(
-            () => updateNote(editing.id, { title: editTitle.trim(), content: editContent.trim() }),
-            'Could not save that note.',
-        ).then(() => setEditing(null));
-    };
-
     /**
      * Every action routes through `run()` — the same helper the visible buttons
      * already use — so busy state, the error notice and the refetch behave
@@ -596,7 +568,9 @@ const NotesCalendar: FC = () => {
             label: 'Edit note…',
             icon: <FiEdit2 size={14} />,
             disabled: readOnly,
-            onSelect: () => beginEdit(note),
+            // `EditNoteDialog` resets its own fields from this note, so opening it
+            // is just naming the target — no field-copying handler needed.
+            onSelect: () => setEditing(note),
         },
         {
             id: 'pin',
@@ -643,7 +617,7 @@ const NotesCalendar: FC = () => {
             destructive: true,
             separatorBefore: true,
             disabled: readOnly,
-            onSelect: () => setConfirmDelete(note),
+            onSelect: () => setPendingDelete(note),
         },
     ];
 
@@ -1056,7 +1030,6 @@ const NotesCalendar: FC = () => {
                 </div>
             )}
 
-<<<<<<< HEAD
             <ContextMenu
                 open={noteMenu.open}
                 position={noteMenu.position}
@@ -1076,63 +1049,13 @@ const NotesCalendar: FC = () => {
                 }
             />
 
-            <Modal
-                open={editing !== null}
-                onOpenChange={(o) => !o && setEditing(null)}
-                title="Edit note"
-                description="Colour, pin and schedule stay where they are — change those from the note's menu."
-                dismissible={!busy}
-                footer={
-                    <>
-                        <AccentButton
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setEditing(null)}
-                            disabled={busy}
-                        >
-                            Cancel
-                        </AccentButton>
-                        <AccentButton
-                            size="sm"
-                            onClick={saveEdit}
-                            disabled={busy || (!editTitle.trim() && !editContent.trim())}
-                        >
-                            {busy ? 'Saving…' : 'Save note'}
-                        </AccentButton>
-                    </>
-                }
-            >
-                <div className="flex flex-col gap-4">
-                    <Field label="Title">
-                        <Input
-                            value={editTitle}
-                            onChange={(e) => setEditTitle(e.target.value)}
-                            placeholder="What's this about?"
-                            autoFocus
-                        />
-                    </Field>
-                    <Field label="Content" hint="Title or content — one of them is required.">
-                        <Input
-                            value={editContent}
-                            onChange={(e) => setEditContent(e.target.value)}
-                            placeholder="Optional"
-                        />
-                    </Field>
-                </div>
-            </Modal>
-
-            <ConfirmDialog
-                open={confirmDelete !== null}
-                onOpenChange={(o) => !o && setConfirmDelete(null)}
-                title="Delete this note?"
-                description={`"${confirmDelete?.title || 'Untitled'}" will be removed from the calendar and from your notes. This cannot be undone.`}
-                confirmLabel="Delete note"
-                destructive
-                onConfirm={async () => {
-                    if (!confirmDelete) return;
-                    await run(() => deleteNote(confirmDelete.id), 'Could not delete that note.');
-                    setConfirmDelete(null);
-=======
+            {/*
+              * One edit dialog, not two. Both branches of the merge grew one: this
+              * side had an inline Modal over title/content, the daily-note branch
+              * had `EditNoteDialog`. This one wins because it also carries tags and
+              * knows what to do when a note holds a rich document — an inline text
+              * Modal would silently desync `content` from `contentRich`.
+              */}
             <EditNoteDialog
                 note={editing}
                 busy={busy}
@@ -1166,7 +1089,6 @@ const NotesCalendar: FC = () => {
                     if (!target) return;
                     await run(() => deleteNote(target.id), 'Could not delete that note.');
                     setPendingDelete(null);
->>>>>>> 195341cd9772ee5c9bcf47d4ebb0d90b51a9c8cd
                 }}
             />
         </div>

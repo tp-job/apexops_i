@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import dayjs from 'dayjs';
-import type { Note } from '@/components/ui/note/utils/noteTypes';
+import type { Note } from '@/types/notes';
 import {
     DAILY_TAG,
     addTodo,

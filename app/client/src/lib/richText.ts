@@ -3,11 +3,10 @@
  *
  * A rich note stores a TipTap (ProseMirror) document in `Note.contentRich` and a
  * **plain-text projection** of that same document in `Note.content`. That split is
- * the whole design, and it exists because `content` already has four readers that
- * treat it as text — the note-card previews and the search haystacks in
- * `pages/NotesCalendar.tsx` and `components/ui/note/utils/index.ts`. Storing
- * markup in `content` would put `<p>` into search results and card previews on
- * the day it shipped.
+ * the whole design, and it exists because `content` already has readers that treat
+ * it as text — the note-card previews and the search haystack (`matchesQuery`) in
+ * `pages/NotesCalendar.tsx`. Storing markup in `content` would put `<p>` into
+ * search results and card previews on the day it shipped.
  *
  * So: `contentRich` is what the editor loads, `content` is what everything else
  * reads, and `richDocToPlainText` is the one function that keeps them agreeing.
