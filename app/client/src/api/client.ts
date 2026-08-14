@@ -1,8 +1,8 @@
 /**
  * Auth-aware fetch wrapper. Base URL + bearer token + **refresh-and-retry on 401**.
  *
- * Prefer hooks (e.g. useNoteStatsOverview, useCalendarEvents) to hold
- * loading/error state; components stay presentational.
+ * Prefer hooks (e.g. useCalendarEvents, useOverview) to hold loading/error
+ * state; components stay presentational.
  *
  * Sprint 3 (2026-08-03) added the 401 handling. Before it, a token that expired
  * mid-session left the app rendering a signed-in shell in which every request had

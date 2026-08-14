@@ -52,7 +52,13 @@ report, not a red build.
 
 **The migration, if it is ever done:** port the three API objects in `services/api.ts` onto
 `request.ts`, delete the axios instance and both interceptors, then drop `axios` from
-`app/client/package.json` if nothing else claims it (`lib/authSession.ts` and `utils/offlineMock.ts`
-both reference axios types today, so check those first). It is a contained change — three objects,
-two call sites — but it touches live data paths with no tests behind them, which is exactly why it
-was deliberately left out of the 2026-08-15 structural cleanup rather than folded into it.
+`app/client/package.json` — verified 2026-08-15, `services/api.ts` is the **only** file that
+imports it. Three other files mention axios but none depend on it: `lib/authSession.ts` and
+`services/projects.ts` only in comments, and `utils/offlineMock.ts:34` duck-types axios-shaped
+errors deliberately "without importing axios". That last one is the only thing to re-check — its
+detection branch becomes unreachable once nothing throws an axios error, which is harmless but
+should be deleted in the same pass rather than left as a puzzle.
+
+It is a contained change — three objects, two call sites — but it touches live data paths with no
+tests behind them, which is exactly why it was left out of the 2026-08-15 structural cleanup
+rather than folded into it.

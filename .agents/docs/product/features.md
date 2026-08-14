@@ -48,8 +48,9 @@ concurrently. This is a debugging power-tool, not a primary nav item — see `us
 
 That last endpoint is the entire calendar feature — there is no separate `Event`/`CalendarEvent`
 model. The old `Calendar.tsx` and `OptimizationCalendar.tsx` (1,132 lines) both rendered this same
-endpoint's data at different densities. `hooks/useNoteAiChat.ts` also lives here — an AI-assisted
-note-drafting flow distinct from the general AI Chat feature below.
+endpoint's data at different densities. An AI-assisted note-drafting hook (`useNoteAiChat.ts`) used
+to live here too; it was **deleted on 2026-08-15** as dead code — nothing had imported it since the
+UI reset. The endpoint it called is still live (see AI Chat below).
 
 ## 💬 Chat — `api/chat.ts`
 
@@ -61,9 +62,12 @@ not just new UI. See `devrule.md` §8 for the Socket.io pattern to build it on.
 
 ## 🤖 AI Chat — `api/ai.ts`
 
-`POST /chat` (Google Gemini via `@google/genai`, per `devrule.md` §9) and `GET /status`. Separate
-from interpersonal Chat and from the note-AI flow in `useNoteAiChat.ts` — no client hook exists
-for general-purpose AI chat yet.
+`POST /chat` (Google Gemini via `@google/genai`, per `devrule.md` §9) and `GET /status`. Both are
+mounted and working server-side. Separate from interpersonal Chat.
+
+**No client hook consumes either endpoint.** `useNoteAiChat.ts` was the last one and was deleted as
+dead code on 2026-08-15. This is a live backend with no caller — worth knowing before assuming the
+feature is unbuilt, and equally before assuming it is wired up.
 
 ## ❌ Not a real feature: Invoices
 

@@ -35,7 +35,7 @@ shows up later with backend work to match.
 
 ### Finding 2 — Calendar and OptimizationCalendar are the same data, twice
 
-`hooks/useCalendarEvents.ts` calls `utils/calendarApi.ts` → `GET /api/notes/calendar/:year/:month`.
+`hooks/useCalendarEvents.ts` calls `services/calendar.ts` → `GET /api/notes/calendar/:year/:month`.
 `hooks/useOptimizationCalendarEvents.ts` wraps `useCalendarEvents` and runs the result through
 `utils/optimizationCalendar.ts`'s `mapNotesToCalendarEvents`. **Both pages read the exact same
 Notes-backed endpoint** — there is no separate scheduling/events model. `OptimizationCalendar.tsx`
@@ -64,9 +64,9 @@ rebuilding Bug Tracker/Notes/Calendar — that has to factor into sequencing, no
 | **Dashboard** (KPI overview) | Reads Tickets + Logs stats | Rebuilt once already this session (deleted in the reset, pattern proven) | `DashboardShellLayout` + `ProjectAnalyticsLayout` (zb.html/af.html) |
 | **Bug Tracker** | `Ticket` CRUD + stats, `useBugTrackerSocket` for realtime | `hooks/useBugTrackerData.ts`, `useBugTrackerSocket.ts` — intact | `WorkspaceBoardLayout` (aj.html) + `Stepper`/`AvatarStack` (ac.html IA) |
 | **Logs / Console Monitor** | `Log` CRUD + stats + batch; separate multi-session Puppeteer capture (`console-monitor.ts`, session-owner-gated) | no surviving hook — was folded into Dashboard/BugTracker views before | none yet — closest template fit is `zc.html`'s dense record rows |
-| **Notes + Calendar** (merged per Finding 2) | `Note` CRUD, `stats/overview`, `calendar/:year/:month` | `hooks/useNoteList.ts`, `useNoteStatsOverview.ts`, `useCalendarEvents.ts`, `useOptimizationCalendarEvents.ts`, `useNoteAiChat.ts`, plus `components/ui/note/utils/*` — all intact | `TimelineLayout` (zc.html) + `GanttTrack` |
+| **Notes + Calendar** (merged per Finding 2) | `Note` CRUD, `stats/overview`, `calendar/:year/:month` | `hooks/useNoteList.ts`, `hooks/useCalendarEvents.ts`, `services/notes.ts`, `services/calendar.ts`, `types/notes.ts`. *(`useNoteStatsOverview`, `useNoteAiChat` and `useOptimizationCalendarEvents` were deleted as dead code; the note modules moved out of `components/ui/` on 2026-08-15.)* | `TimelineLayout` (zc.html) + `GanttTrack` |
 | **Chat** (interpersonal) | `GET /api/chat/users` only | **gone** — needs a new hook + socket wiring from spec in `devrule.md` §8 | `zd.html`'s contact rail (documented, not scaffolded) |
-| **AI Chat** (Gemini assistant) | `POST /api/ai/chat`, `GET /api/ai/status` | `hooks/useNoteAiChat.ts` covers the note-AI case; a general AI chat hook doesn't exist yet | none yet |
+| **AI Chat** (Gemini assistant) | `POST /api/ai/chat`, `GET /api/ai/status` | **no client hook at all** — `useNoteAiChat.ts` was the last caller and was deleted as dead code 2026-08-15; both endpoints are still live and mounted | none yet |
 | **Account Settings** | `PUT /profile /settings /password` | logic lives directly in `services/auth.ts` + `AuthContext`, no dedicated hook | none yet |
 | **Invoices** | none (Finding 1) | mock-only, was never real | `ai.html` — origin of the design system, not a route |
 
@@ -102,7 +102,7 @@ verified in-browser). Rebuilding it first again gives every other page a working
 instead of a description.
 
 **Primary nav (4 items, not 7).** Bug Tracker, Notes+Calendar, Chat, Account Settings. AI Chat can
-live as an entry point from either Notes (already wired via `useNoteAiChat`) or Dashboard rather
+live as an entry point from either Notes or Dashboard rather
 than needing its own top-level nav slot — it's an assistant, not a destination. Console Monitor is
 a real, working feature (session-scoped Puppeteer capture) but it's a power-tool for debugging a
 running app, not a screen most users open often — surface it from Logs/Bug Tracker context, not
@@ -129,8 +129,9 @@ than a compromise.
    Building it as one page from the start avoids doing the merge as a *second* migration later.
 4. **Account Settings** — no hook to write, `services/auth.ts` already does the work; mostly a
    forms-and-tabs UI exercise once the pattern from steps 1–3 is established.
-5. **AI Chat** — backend trivial (`POST /api/ai/chat`), needs one new hook modeled on
-   `useNoteAiChat.ts`. Cheap once Notes' AI pattern exists to copy.
+5. **AI Chat** — backend trivial (`POST /api/ai/chat`, live and mounted), needs one new hook. The
+   `useNoteAiChat.ts` that this step said to copy was deleted as dead code on 2026-08-15, so the
+   hook now gets written from scratch against the endpoint rather than adapted.
 6. **Chat (interpersonal)** — last, because it's the only feature needing a new hook *and* new
    socket wiring *and* new UI, with the smallest backend surface (`/users` only — presence/message
    history endpoints don't exist yet either). Doing it last means the socket.io client pattern from
@@ -146,7 +147,7 @@ Acted on this doc's own findings:
   and `utils/optimizationCalendar.ts` are gone; `hooks/useCalendarEvents.ts` now returns the
   richer shape itself (`events`, `eventsByDay`, `dispatch`, `totalNotes`) — one hook for the one
   Calendar page this doc recommended, not two.
-- **Finding 3 (Chat logic) addressed.** New `hooks/useChat.ts` + `utils/chatApi.ts` +
+- **Finding 3 (Chat logic) addressed.** New `hooks/useChat.ts` + `services/chat.ts` +
   `types/chat.ts`, built directly against `app/server/src/server.ts`'s actual Socket.IO handlers
   (`register` with `clientType: 'chat'`, `chat-message`, `user-typing` — same server
   `useBugTrackerSocket.ts` already connects to). Still needs a page/UI built on top.

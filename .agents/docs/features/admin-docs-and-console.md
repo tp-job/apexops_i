@@ -10,7 +10,7 @@ The spec does not restate them; it references them by id.
 ## Context, verified against the tree on 2026-08-08
 
 Both features exist today only as disabled rows in
-[`Sidebar.tsx:49-50`](../../../app/client/src/components/layouts/Sidebar.tsx), marked `soon`. Neither
+[`Sidebar.tsx:49-50`](../../../app/client/src/components/layout/Sidebar.tsx), marked `soon`. Neither
 has a route in `routes/AppRoutes.tsx`; `/admin/users` is the only admin route wired.
 
 **Documentation.** A complete public docs surface already ships at `/docs/*`

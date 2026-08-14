@@ -126,8 +126,9 @@ attached, so structure and styling can be reviewed independently.
 | `ProjectAnalyticsLayout` | af.html | `/structural/analytics` | Asymmetric ruler (1/1.5/1/1) + 4:5 panel split |
 | `WorkspaceBoardLayout` | aj.html | `/structural/workspace` | Icon rail + tall header + horizontal status board |
 
-Shared primitives: `components/layouts/structural/primitives.tsx` — `Shell` `Pane` `Fluid` `Band`
-`Grid` `Stack` `Cluster` `Region` `Placeholder`.
+Shared primitives: `components/layout/structural/primitives.tsx` — `Shell` `Pane` `Fluid` `Band`
+`Grid` `Stack` `Cluster` `Region` `Placeholder`. *(Target path, not current state: none of this is
+built. The folder is `components/layout/` singular since the 2026-08-15 cleanup.)*
 
 **Styling contract.** Every primitive emits `data-slot="<name>"` (and `Region` also emits
 `data-region`) and accepts a `className` that is appended last. Attach design-system rules to those
