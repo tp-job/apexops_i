@@ -1,0 +1,911 @@
+<!doctype html>
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>Book Editor Interface</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              "gb-white": "#ffffff",
+            },
+          },
+        },
+      };
+    </script>
+    <style data-purpose="custom-styles">
+      @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap");
+      body {
+        font-family: "Inter", sans-serif;
+        background-color: #f9fafb;
+      }
+      .app-frame {
+        width: 100%;
+        max-width: 1200px;
+        aspect-ratio: 1200 / 800;
+        height: auto;
+        max-height: 90vh;
+      }
+      .custom-scrollbar::-webkit-scrollbar {
+        width: 4px;
+      }
+      .custom-scrollbar::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      .custom-scrollbar::-webkit-scrollbar-thumb {
+        background: #e5e7eb;
+        border-radius: 4px;
+      }
+      .custom-scrollbar:hover::-webkit-scrollbar-thumb {
+        background: #d1d5db;
+      }
+    </style>
+  </head>
+  <body class="min-h-screen p-8 flex items-center justify-center">
+    <!-- BEGIN: Main Container -->
+    <div
+      class="app-frame bg-gb-white rounded-2xl shadow-xl flex overflow-hidden border border-gray-200"
+    >
+      <!-- BEGIN: Left Sidebar -->
+      <aside
+        class="w-64 flex-shrink-0 bg-gray-50 border-r border-gray-200 flex flex-col justify-between py-6 h-full"
+      >
+        <!-- Top Section -->
+        <div>
+          <div class="px-6 mb-8 flex items-center gap-2">
+            <!-- Logo Placeholder -->
+            <div class="w-6 h-6 flex gap-1 items-center">
+              <div class="w-2 h-2 rounded-full bg-red-500"></div>
+              <div class="w-2 h-2 rounded-full bg-yellow-400"></div>
+              <div class="w-2 h-2 rounded-full bg-green-500"></div>
+            </div>
+            <span class="font-semibold text-gray-900 ml-2">Untitled UI</span>
+          </div>
+          <nav class="px-3 space-y-1">
+            <a
+              class="flex items-center gap-3 px-3 py-2 text-sm font-medium text-gray-600 rounded-md hover:bg-gray-100 hover:text-gray-900"
+              href="#"
+            >
+              <svg
+                class="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewbox="0 0 24 24"
+              >
+                <path
+                  d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                ></path>
+              </svg>
+              Dashboard
+            </a>
+            <a
+              class="flex items-center gap-3 px-3 py-2 text-sm font-medium text-gray-600 rounded-md hover:bg-gray-100 hover:text-gray-900"
+              href="#"
+            >
+              <svg
+                class="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewbox="0 0 24 24"
+              >
+                <path
+                  d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                ></path>
+              </svg>
+              Store
+            </a>
+            <a
+              class="flex items-center gap-3 px-3 py-2 text-sm font-medium text-gray-900 bg-gray-200/50 rounded-md"
+              href="#"
+            >
+              <svg
+                class="w-5 h-5 text-gray-500"
+                fill="none"
+                stroke="currentColor"
+                viewbox="0 0 24 24"
+              >
+                <path
+                  d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                ></path>
+              </svg>
+              Books
+            </a>
+            <a
+              class="flex items-center gap-3 px-3 py-2 text-sm font-medium text-gray-600 rounded-md hover:bg-gray-100 hover:text-gray-900"
+              href="#"
+            >
+              <svg
+                class="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewbox="0 0 24 24"
+              >
+                <path
+                  d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                ></path>
+              </svg>
+              Customers
+            </a>
+            <a
+              class="flex items-center gap-3 px-3 py-2 text-sm font-medium text-gray-600 rounded-md hover:bg-gray-100 hover:text-gray-900"
+              href="#"
+            >
+              <svg
+                class="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewbox="0 0 24 24"
+              >
+                <path
+                  d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                ></path>
+              </svg>
+              Customize
+            </a>
+            <a
+              class="flex items-center gap-3 px-3 py-2 text-sm font-medium text-gray-600 rounded-md hover:bg-gray-100 hover:text-gray-900"
+              href="#"
+            >
+              <svg
+                class="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewbox="0 0 24 24"
+              >
+                <path
+                  d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                ></path>
+              </svg>
+              Email
+            </a>
+            <a
+              class="flex items-center gap-3 px-3 py-2 text-sm font-medium text-gray-600 rounded-md hover:bg-gray-100 hover:text-gray-900"
+              href="#"
+            >
+              <svg
+                class="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewbox="0 0 24 24"
+              >
+                <path
+                  d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                ></path>
+              </svg>
+              Scheduling
+            </a>
+            <a
+              class="flex items-center justify-between px-3 py-2 text-sm font-medium text-gray-600 rounded-md hover:bg-gray-100 hover:text-gray-900"
+              href="#"
+            >
+              <div class="flex items-center gap-3">
+                <svg
+                  class="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewbox="0 0 24 24"
+                >
+                  <path
+                    d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                  ></path>
+                </svg>
+                Notifications
+              </div>
+              <span
+                class="bg-gray-100 text-gray-600 py-0.5 px-2 rounded-full text-xs"
+                >8</span
+              >
+            </a>
+          </nav>
+        </div>
+        <!-- Bottom Section -->
+        <div class="px-3 space-y-1">
+          <a
+            class="flex items-center gap-3 px-3 py-2 text-sm font-medium text-gray-600 rounded-md hover:bg-gray-100 hover:text-gray-900"
+            href="#"
+          >
+            <svg
+              class="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewbox="0 0 24 24"
+            >
+              <path
+                d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+              ></path>
+              <path
+                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+              ></path>
+            </svg>
+            Settings
+          </a>
+          <a
+            class="flex items-center gap-3 px-3 py-2 text-sm font-medium text-gray-600 rounded-md hover:bg-gray-100 hover:text-gray-900"
+            href="#"
+          >
+            <svg
+              class="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewbox="0 0 24 24"
+            >
+              <path
+                d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+              ></path>
+            </svg>
+            Support
+          </a>
+          <a
+            class="flex items-center gap-3 px-3 py-2 text-sm font-medium text-gray-600 rounded-md hover:bg-gray-100 hover:text-gray-900"
+            href="#"
+          >
+            <svg
+              class="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewbox="0 0 24 24"
+            >
+              <path
+                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+              ></path>
+            </svg>
+            Documentation
+          </a>
+          <a
+            class="flex items-center justify-between px-3 py-2 text-sm font-medium text-gray-600 rounded-md hover:bg-gray-100 hover:text-gray-900"
+            href="#"
+          >
+            <div class="flex items-center gap-3">
+              <svg
+                class="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewbox="0 0 24 24"
+              >
+                <path
+                  d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                ></path>
+              </svg>
+              Open in browser
+            </div>
+          </a>
+          <div class="mt-4 pt-4 border-t border-gray-200 px-3">
+            <div
+              class="flex items-center justify-between w-full p-2 rounded-md hover:bg-gray-100 cursor-pointer"
+            >
+              <div class="flex items-center gap-3">
+                <img
+                  alt="Amélie Laurent"
+                  class="w-8 h-8 rounded-full"
+                  src="https://lh3.googleusercontent.com/aida-public/AB6AXuDlG5jFRrwoRXejoJQMR3H6MERmGgRgoH7G1ZvaifXoaw5PdtevbfAWYAcxXDrCcc5q5DtAK15kOsWVV9_JTXx61VPakuZgCnhl5ltyYdiKm_S2t1lqsNvFoqAe6OhWWKEcTazzeDtw0vxom4o-vLHsrcEK8hKTERq7Gz-8uhiPIDizkmQaR1MGAM6DbihkVgXIcOgGKU6vGR0JBP-1KOZLtKQZDwyDEFQHPHtFP6MBdYaKYk1j89Q"
+                />
+                <div class="flex flex-col">
+                  <span class="text-sm font-medium text-gray-900"
+                    >Amélie Laurent</span
+                  >
+                  <span class="text-xs text-gray-500">hi@ameliedesign.co</span>
+                </div>
+              </div>
+              <svg
+                class="w-4 h-4 text-gray-400"
+                fill="none"
+                stroke="currentColor"
+                viewbox="0 0 24 24"
+              >
+                <path
+                  d="M8 9l4-4 4 4m0 6l-4 4-4-4"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                ></path>
+              </svg>
+            </div>
+          </div>
+        </div>
+      </aside>
+      <!-- END: Left Sidebar -->
+      <!-- BEGIN: Center Content (Editor) -->
+      <main class="flex-1 flex flex-col min-w-0 bg-white">
+        <!-- Header -->
+        <header
+          class="px-8 py-6 border-b border-gray-200 flex items-center justify-between flex-shrink-0"
+        >
+          <div>
+            <nav class="flex text-sm text-gray-500 mb-1">
+              <a class="hover:text-gray-900" href="#">Books</a>
+              <span class="mx-2">›</span>
+              <a class="hover:text-gray-900" href="#">Chan Ho-Kei</a>
+              <span class="mx-2">›</span>
+              <span class="text-gray-900 font-medium">The Borrowed</span>
+            </nav>
+            <h1 class="text-2xl font-semibold text-gray-900">The Borrowed</h1>
+            <p class="text-sm text-gray-500 mt-1">Chan Ho-Kei (2014)</p>
+          </div>
+          <div class="flex items-center gap-3">
+            <button
+              class="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+            >
+              Save as draft
+            </button>
+            <button
+              class="px-4 py-2 rounded-md text-sm font-medium text-white bg-gray-900 hover:bg-gray-800"
+            >
+              Publish changes
+            </button>
+          </div>
+        </header>
+        <!-- Editor Area -->
+        <div class="p-8 overflow-y-auto custom-scrollbar flex-1">
+          <div class="mb-6 flex items-center justify-between">
+            <div>
+              <h2 class="text-sm font-semibold text-gray-900">
+                Featured excerpt
+              </h2>
+              <p class="text-sm text-gray-500 mt-1">
+                This will be displayed on the both the author's profile and
+                individual book pages.
+              </p>
+            </div>
+            <button class="text-gray-400 hover:text-gray-600">
+              <svg
+                class="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewbox="0 0 24 24"
+              >
+                <path
+                  d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                ></path>
+              </svg>
+            </button>
+          </div>
+          <div
+            class="border border-gray-200 rounded-lg bg-white overflow-hidden flex flex-col h-[500px]"
+          >
+            <!-- Toolbar -->
+            <div
+              class="flex items-center px-4 py-2 border-b border-gray-200 bg-gray-50 gap-2 flex-wrap flex-shrink-0"
+            >
+              <div
+                class="flex items-center gap-1 border border-gray-300 bg-white rounded-md px-2 py-1"
+              >
+                <span class="text-gray-500 text-sm font-serif">T</span>
+                <select
+                  class="border-none text-sm text-gray-700 bg-transparent py-0 pl-1 pr-6 focus:ring-0"
+                >
+                  <option>Inter</option>
+                </select>
+              </div>
+              <div
+                class="flex items-center gap-1 border border-gray-300 bg-white rounded-md px-2 py-1"
+              >
+                <select
+                  class="border-none text-sm text-gray-700 bg-transparent py-0 pl-1 pr-6 focus:ring-0"
+                >
+                  <option>16px</option>
+                </select>
+              </div>
+              <div class="h-6 w-px bg-gray-300 mx-1"></div>
+              <div class="flex items-center gap-1">
+                <button
+                  class="p-1.5 text-gray-500 hover:bg-gray-200 rounded font-bold"
+                >
+                  B
+                </button>
+                <button
+                  class="p-1.5 text-gray-500 hover:bg-gray-200 rounded italic"
+                >
+                  I
+                </button>
+                <button
+                  class="p-1.5 text-gray-500 hover:bg-gray-200 rounded underline"
+                >
+                  U
+                </button>
+              </div>
+              <div class="h-6 w-px bg-gray-300 mx-1"></div>
+              <button class="w-6 h-6 rounded-full bg-black mx-1"></button>
+              <div class="h-6 w-px bg-gray-300 mx-1"></div>
+              <div class="flex items-center gap-1">
+                <button class="p-1.5 text-gray-500 hover:bg-gray-200 rounded">
+                  <svg
+                    class="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewbox="0 0 24 24"
+                  >
+                    <path
+                      d="M4 6h16M4 12h16M4 18h7"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                    ></path>
+                  </svg>
+                </button>
+                <button class="p-1.5 text-gray-500 hover:bg-gray-200 rounded">
+                  <svg
+                    class="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewbox="0 0 24 24"
+                  >
+                    <path
+                      d="M4 6h16M4 12h16m-7 6h7"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                    ></path>
+                  </svg>
+                </button>
+                <button class="p-1.5 text-gray-500 hover:bg-gray-200 rounded">
+                  <svg
+                    class="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewbox="0 0 24 24"
+                  >
+                    <path
+                      d="M4 6h16M4 12h8m-8 6h16"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                    ></path>
+                  </svg>
+                </button>
+              </div>
+              <div class="h-6 w-px bg-gray-300 mx-1"></div>
+              <div class="flex items-center gap-1">
+                <button class="p-1.5 text-gray-500 hover:bg-gray-200 rounded">
+                  <svg
+                    class="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewbox="0 0 24 24"
+                  >
+                    <path
+                      d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                    ></path>
+                  </svg>
+                </button>
+                <button class="p-1.5 text-gray-500 hover:bg-gray-200 rounded">
+                  <svg
+                    class="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewbox="0 0 24 24"
+                  >
+                    <path
+                      d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                    ></path>
+                  </svg>
+                </button>
+              </div>
+              <div class="flex-grow"></div>
+              <button class="p-1.5 text-gray-500 hover:bg-gray-200 rounded">
+                <svg
+                  class="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewbox="0 0 24 24"
+                >
+                  <path
+                    d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                  ></path>
+                </svg>
+              </button>
+            </div>
+            <!-- Text Area -->
+            <div
+              class="p-6 overflow-y-auto flex-1 custom-scrollbar text-sm text-gray-700 leading-relaxed space-y-4"
+            >
+              <p>
+                <em class="font-medium">The Borrowed</em> is a remarkable,
+                brilliantly crafted novel. At nearly 500 pages it may seem
+                daunting, but reading it feels as effortless and addictive as
+                binge-watching a miniseries. Structured as six interconnected
+                novellas, it spans six different crime stories set in Hong Kong,
+                beginning in 2013 and moving back in time to 1967.
+              </p>
+              <p>
+                At the heart of each story is the bond between veteran detective
+                Kwan Chun-dok and his protégé, Sonny Lok. Kwan, a master of
+                observation and deduction, often bends the rules to secure
+                confessions, while the honest and earnest Lok plays his Watson.
+                As the narrative unfolds, we see Lok gradually take up the
+                mantle from his mentor, who faces his own mortality.
+              </p>
+              <p>
+                The stories themselves range widely in style and tone. Some
+                bristle with action—gunfights, ransom drops, and bombings—while
+                others lean into the elegance of classic drawing-room mysteries.
+                Each tale works on its own, but together they create a rich
+                portrait of Hong Kong, tracing its transformation from a British
+                colony to its reintegration with China. Corruption, bureaucracy,
+                and the uneasy balance of power between police, politicians, and
+                gang leaders all shape the world these characters inhabit.
+              </p>
+              <p>
+                What makes
+                <em class="bg-blue-100 text-blue-800 px-1 rounded relative"
+                  >The Borrowed<span
+                    class="absolute -top-1 -right-1 w-2 h-2 bg-blue-500 rounded-full"
+                  ></span
+                ></em>
+                extraordinary is how it blends the best of multiple crime
+                traditions: the procedural grit of Ed McBain, the puzzle-box
+                elegance of Agatha Christie, and the atmospheric cityscapes of
+                Raymond Chandler. Rarely does a novel weave so many styles with
+                such artistic skill—operating on social, psychological, and
+                political levels—while remaining consistently gripping and
+                entertaining.
+              </p>
+            </div>
+          </div>
+        </div>
+      </main>
+      <!-- END: Center Content (Editor) -->
+      <!-- BEGIN: Right Sidebar (Author Profile) -->
+      <aside
+        class="w-80 flex-shrink-0 border-l border-gray-200 bg-white overflow-y-auto custom-scrollbar"
+      >
+        <div class="p-6">
+          <!-- Profile Header -->
+          <div class="relative mb-16">
+            <img
+              alt="Cover Image"
+              class="w-full h-32 object-cover rounded-xl"
+              src="https://lh3.googleusercontent.com/aida-public/AB6AXuB2b4D95i6KvzT6wupyUUc07eIE6b6wxRTpSMp-G6ayknChz7TwBNRfnfnnDPXdayvDME3I9I3C6GuztZvzKpf1ze6Hl1MqzzoxCyBfDjbBnKiS3XfuBUhf6TXNjxH1rafowxFdwjYrcbaoJ0iQgFpMJMll_kCW_HJPx1jF-AWeUjmUpKAX3WDg1PeMbIf0EmlESQJfM01umc35Ml0M0A8a4sPPmYBID_eqaxPedMkliUGUEEcyZVJc8EKqQaTAXoos"
+            />
+            <div class="absolute -bottom-10 left-4">
+              <div class="relative">
+                <img
+                  alt="Chan Ho-Kei"
+                  class="w-20 h-20 rounded-full border-4 border-white shadow-sm object-cover"
+                  src="https://lh3.googleusercontent.com/aida-public/AB6AXuDdyb9nQEOgaFWtWs8tcdXIIiG7dKb8Km0qbo4zhWyz6U_RyuZgebqmRWntQapjI1tsaFO73ITKI6bSRnzU4yspxZoIKWdFpZ1pHl8bSmyCMNmy7WRDRKyqnk-AW2bG19vvk8sDyND52x8yVcFi9ejiD5KJ5PknSRbG-TbcI2lNn2qmaLkJiujBmTRQHhxT74-Q04QOhk8HNmSevSZxi90IWVjgxlgtWxlrnIgGwydkvF7RA93meFo"
+                />
+                <div
+                  class="absolute bottom-0 right-0 bg-blue-500 text-white rounded-full p-0.5 border-2 border-white"
+                >
+                  <svg
+                    class="w-3 h-3"
+                    fill="none"
+                    stroke="currentColor"
+                    viewbox="0 0 24 24"
+                  >
+                    <path
+                      d="M5 13l4 4L19 7"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                    ></path>
+                  </svg>
+                </div>
+              </div>
+            </div>
+            <div class="absolute top-2 right-2 flex gap-1">
+              <button
+                class="p-1.5 bg-white/80 backdrop-blur-sm rounded text-gray-700 hover:bg-white"
+              >
+                <svg
+                  class="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewbox="0 0 24 24"
+                >
+                  <path
+                    d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                  ></path>
+                </svg>
+              </button>
+              <button
+                class="p-1.5 bg-white/80 backdrop-blur-sm rounded text-gray-700 hover:bg-white"
+              >
+                <svg
+                  class="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewbox="0 0 24 24"
+                >
+                  <path
+                    d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                  ></path>
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div class="mb-6">
+            <h2 class="text-xl font-bold text-gray-900 flex items-center gap-1">
+              Chan Ho-Kei <span class="text-yellow-400">★</span>
+            </h2>
+            <p class="text-sm text-gray-500">Author · 1975 -</p>
+          </div>
+          <!-- Stats -->
+          <div class="grid grid-cols-3 gap-4 mb-6">
+            <div>
+              <p class="text-xs text-gray-500 mb-1">Works</p>
+              <p
+                class="text-sm font-semibold text-gray-900 flex items-center gap-1"
+              >
+                <svg
+                  class="w-4 h-4 text-gray-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewbox="0 0 24 24"
+                >
+                  <path
+                    d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                  ></path>
+                </svg>
+                27
+              </p>
+            </div>
+            <div>
+              <p class="text-xs text-gray-500 mb-1">Reviews</p>
+              <p
+                class="text-sm font-semibold text-gray-900 flex items-center gap-1"
+              >
+                <svg
+                  class="w-4 h-4 text-gray-400"
+                  fill="none"
+                  stroke="currentColor"
+                  viewbox="0 0 24 24"
+                >
+                  <path
+                    d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                  ></path>
+                </svg>
+                641
+              </p>
+            </div>
+            <div>
+              <p class="text-xs text-gray-500 mb-1">Favorites</p>
+              <p
+                class="text-sm font-semibold text-gray-900 flex items-center gap-1"
+              >
+                <span class="text-yellow-400 text-base">★</span> 3,261
+              </p>
+            </div>
+          </div>
+          <!-- Action Buttons -->
+          <div class="flex gap-2 mb-8 pb-8 border-b border-gray-100">
+            <button
+              class="flex-1 flex items-center justify-center gap-2 px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+            >
+              <svg
+                class="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewbox="0 0 24 24"
+              >
+                <path
+                  d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                ></path>
+              </svg>
+              Copy link
+            </button>
+            <button
+              class="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+            >
+              Author page
+            </button>
+          </div>
+          <!-- About Section -->
+          <div class="mb-8">
+            <h3 class="text-sm font-semibold text-gray-900 mb-3">About</h3>
+            <p class="text-xs text-gray-500 mb-3 leading-relaxed">
+              Chan Ho-Kei 陳浩基 was born and raised in Hong Kong. He has worked
+              as software engineer, scriptwriter, game designer and editor of
+              comic magazines
+            </p>
+            <p class="text-xs text-gray-500 mb-4 leading-relaxed">
+              His writing career started in 2008 at the age of thirty-three,
+              with the short story 'The Case of Jack and the Beanstalk,' which
+              was shortlisted for the Mystery Writers of Taiwan Award.
+            </p>
+            <div class="space-y-2 text-xs text-gray-500 mb-4">
+              <div class="flex items-center gap-2">
+                <svg
+                  class="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewbox="0 0 24 24"
+                >
+                  <path
+                    d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                  ></path>
+                  <path
+                    d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                  ></path>
+                </svg>
+                Hong Kong
+              </div>
+              <div class="flex items-center gap-2">
+                <svg
+                  class="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewbox="0 0 24 24"
+                >
+                  <path
+                    d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                  ></path>
+                </svg>
+                <a class="text-gray-900 hover:underline" href="#"
+                  >chanhokei.com</a
+                >
+              </div>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <span
+                class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800 border border-gray-200"
+                >Author</span
+              >
+              <span
+                class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800 border border-gray-200"
+                >Software Engineer</span
+              >
+              <span
+                class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800 border border-gray-200"
+                >Fiction</span
+              >
+              <button
+                class="inline-flex items-center justify-center w-5 h-5 rounded bg-gray-100 text-gray-500 hover:bg-gray-200 border border-gray-200 text-xs"
+              >
+                +
+              </button>
+            </div>
+          </div>
+          <!-- Notable Works -->
+          <div>
+            <h3
+              class="text-sm font-semibold text-gray-900 mb-3 pb-2 border-b border-gray-100"
+            >
+              Notable works
+            </h3>
+            <ul class="space-y-4">
+              <li class="flex items-center gap-3 group cursor-pointer">
+                <img
+                  alt="Book Cover"
+                  class="w-8 h-12 object-cover rounded shadow-sm"
+                  src="https://lh3.googleusercontent.com/aida-public/AB6AXuAI1byvN2IH5o7K2DNYUMmlMsC5qQzl_BR_DoqdhlRNLaCQJZGzaOoTXYrt1HXZsOKVo6_WgEFMgz4g2uhq_HMRmbunHu67RO1YDu1K_c3P43e5glXzHpBukn9IWlSpcOSkhVML2ZINGuw2VP-yM78amOQ0rRk3ym07hfyY9i4R002qxR5dO4VE2ucVA9hR02QUyV3Fc3iBlScC5uBBnnyWRkhPX1cC08v6-wtn2X33YAXnRl3FfTM"
+                />
+                <div class="flex-1">
+                  <h4
+                    class="text-sm font-medium text-gray-900 group-hover:text-blue-600 transition-colors"
+                  >
+                    The Borrowed
+                  </h4>
+                  <p class="text-xs text-gray-500">Chan Ho-Kei | 2014</p>
+                </div>
+                <svg
+                  class="w-4 h-4 text-gray-300"
+                  fill="none"
+                  stroke="currentColor"
+                  viewbox="0 0 24 24"
+                >
+                  <path
+                    d="M9 5l7 7-7 7"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                  ></path>
+                </svg>
+              </li>
+              <li
+                class="flex items-center gap-3 group cursor-pointer pt-3 border-t border-gray-50"
+              >
+                <img
+                  alt="Book Cover"
+                  class="w-8 h-12 object-cover rounded shadow-sm"
+                  src="https://lh3.googleusercontent.com/aida-public/AB6AXuBSYjOncjWab3wm0Fe5TvCwxzjMMIw_s5fsiCScMaM98H3RY8vv7jTfmKvfwh0v9ebN5yb8OWamgailw08rOw1MhS4CECYKMO9YdP0mvmuK6ktXb3kEXTqMiRk4dspP09MQNfgMiTJ_H1jH26WfOzOZMhz8oG2_1DA6TKecJ00JvSoMr8MyA-0k5Vxtn32CS8kt1koKMBr6iu-bFIvn7hVETMOPmdEtZbtVyOjfOUnq8aGTcRmbA5E"
+                />
+                <div class="flex-1">
+                  <h4
+                    class="text-sm font-medium text-gray-900 group-hover:text-blue-600 transition-colors"
+                  >
+                    Second Sister
+                  </h4>
+                  <p class="text-xs text-gray-500">Chan Ho-Kei | 2017</p>
+                </div>
+                <svg
+                  class="w-4 h-4 text-gray-300"
+                  fill="none"
+                  stroke="currentColor"
+                  viewbox="0 0 24 24"
+                >
+                  <path
+                    d="M9 5l7 7-7 7"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                  ></path>
+                </svg>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </aside>
+      <!-- END: Right Sidebar (Author Profile) -->
+    </div>
+    <!-- END: Main Container -->
+  </body>
+</html>

@@ -17,6 +17,7 @@ import {
     FiCheckCircle,
     FiPaperclip,
     FiEdit3,
+    FiTag,
     FiMail,
     FiLock,
     FiList,
@@ -38,6 +39,7 @@ import {
     GanttTrack,
     Field,
     Input,
+    Textarea,
     Select,
     Checkbox,
     Switch,
@@ -168,6 +170,7 @@ const DesignSystem: FC = () => {
     const [dsLevels, setDsLevels] = useState<string[]>(['error', 'warn']);
     const [dsAllowlist, setDsAllowlist] = useState(true);
     const [dsRole, setDsRole] = useState('member');
+    const [dsNote, setDsNote] = useState('');
     const [dsSort, setDsSort] = useState<{ key: string; direction: SortDirection }>({
         key: 'lastSeen',
         direction: 'desc',
@@ -293,6 +296,24 @@ const DesignSystem: FC = () => {
                             <Badge tone="neutral">Draft</Badge>
                             <Badge tone="outline">Viewed</Badge>
                         </div>
+                        <p className="text-xs uppercase tracking-wider text-gray-400 font-semibold mt-2">
+                            Semantic tones
+                        </p>
+                        <div className="flex flex-wrap items-center gap-2">
+                            <Badge tone="success">Resolved</Badge>
+                            <Badge tone="info">In progress</Badge>
+                            <Badge tone="warning">Open</Badge>
+                            <Badge tone="danger">Critical</Badge>
+                            <Badge tone="neutral" plainCase icon={<FiTag className="w-2.5 h-2.5" />}>
+                                design-system
+                            </Badge>
+                        </div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 max-w-md">
+                            Pick a semantic tone by what the value <em>means</em>, never by colour.
+                            They are tinted rather than solid so several can sit in one list without
+                            competing with the view&apos;s single accent. <code className="font-mono text-[11px]">plainCase</code>{' '}
+                            is for labels read as words — a tag, a name — rather than as status keys.
+                        </p>
                     </Surface>
 
                     <Surface variant="panel" padding="md" className="flex flex-col justify-between gap-6">
@@ -327,9 +348,9 @@ const DesignSystem: FC = () => {
                         <code className="font-mono text-xs">aria-invalid</code> and{' '}
                         <code className="font-mono text-xs">aria-required</code> onto the control it wraps.
                         Controls read that out of context — never from props — so the accessibility is
-                        solved once here rather than re-remembered per form. Select, Textarea,
-                        RadioGroup and <code className="font-mono text-xs">useFormState</code> are still
-                        unbuilt — price them in before estimating a form-heavy screen.
+                        solved once here rather than re-remembered per form. RadioGroup and{' '}
+                        <code className="font-mono text-xs">useFormState</code> are still unbuilt —
+                        price them in before estimating a form-heavy screen.
                     </p>
 
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-6 gap-y-5">
@@ -389,6 +410,32 @@ const DesignSystem: FC = () => {
                                 options={[{ value: 'a', label: 'Someone else' }]}
                                 value=""
                                 onChange={() => {}}
+                            />
+                        </Field>
+
+                        <Field
+                            label="Note body"
+                            hint="Textarea — Input's twin. Same border, ring and Field wiring."
+                            id="ds-textarea"
+                        >
+                            <Textarea
+                                rows={3}
+                                placeholder="Write something longer than one line…"
+                                value={dsNote}
+                                onChange={(e) => setDsNote(e.target.value)}
+                            />
+                        </Field>
+
+                        <Field
+                            label="Auto-growing body"
+                            hint="autoGrow: fits the content up to maxRows, then scrolls."
+                            id="ds-textarea-grow"
+                        >
+                            <Textarea
+                                autoGrow
+                                maxRows={8}
+                                rows={2}
+                                placeholder="Type a few lines and watch it grow…"
                             />
                         </Field>
                     </div>

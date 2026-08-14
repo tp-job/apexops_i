@@ -81,10 +81,14 @@ export const fetchNoteById = async (noteId: string): Promise<{ success: boolean;
 interface CreateNoteParams {
     title: string;
     content: string;
+    /** TipTap document. Send it *with* the plain projection in `content`, never instead of it. */
+    contentRich?: unknown | null;
     type?: 'text' | 'image' | 'list' | 'link';
     isPinned?: boolean;
     tags?: string[];
     color?: string;
+    /** Free-form JSON rows; `/daily` writes todos here. Omitted means "empty list". */
+    checklistItems?: unknown[];
     scheduledFor?: string | null;
     dueDate?: string | null;
 }
@@ -106,10 +110,12 @@ export const createNote = async (params: CreateNoteParams): Promise<{ success: b
             body: JSON.stringify({
                 title: params.title,
                 content: params.content,
+                ...(params.contentRich !== undefined && { contentRich: params.contentRich }),
                 type: params.type || 'text',
                 isPinned: params.isPinned || false,
                 tags: params.tags || [],
                 color: params.color,
+                checklistItems: params.checklistItems || [],
                 // Only sent when present — the API treats an explicit `null` as
                 // "unschedule", which is not what an omitted field should mean.
                 ...(params.scheduledFor !== undefined && { scheduledFor: params.scheduledFor }),
@@ -140,7 +146,14 @@ export const createNote = async (params: CreateNoteParams): Promise<{ success: b
 interface UpdateNoteParams {
     title?: string;
     content?: string;
-    checklistItems?: { text: string; checked: boolean }[];
+    /** Explicit `null` clears the rich document back to plain text; omit to leave it. */
+    contentRich?: unknown | null;
+    /**
+     * Free-form JSON rows. Kept `unknown[]` rather than `{ text, checked }[]`
+     * because `/daily` stores richer todos in the same column — the legacy pair
+     * is a subset of what lives here, not the whole contract.
+     */
+    checklistItems?: unknown[];
     quote?: { text: string; author: string };
     tags?: string[];
     /** Explicit `null` clears the colour back to the default; omit to leave it. */

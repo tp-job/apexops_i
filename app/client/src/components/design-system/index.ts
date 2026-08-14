@@ -8,14 +8,18 @@ export { default as AnimatedNumber } from './AnimatedNumber';
 export { default as Meter } from './Meter';
 export { default as AccentButton } from './AccentButton';
 export { default as Badge } from './Badge';
+/** Named `BadgeTone` at the barrel: pages map their own status enums onto it. */
+export type { Tone as BadgeTone } from './Badge';
 
 // Form kit — grown in Sprint 2 with the project settings screen (Checkbox,
-// Switch) and in Sprint 6 with the members screen (Select).
-// Textarea, RadioGroup, FormActions and useFormState are STILL UNBUILT —
+// Switch), in Sprint 6 with the members screen (Select), and in Sprint 10 with
+// the Notes editor (Textarea).
+// RadioGroup, FormActions and useFormState are STILL UNBUILT —
 // price them in before estimating any form-heavy screen.
 // Status table: .agents/docs/planning/sprint-plan.md
 export { default as Field } from './Field';
 export { default as Input } from './Input';
+export { default as Textarea } from './Textarea';
 export { default as Select } from './Select';
 export { default as Checkbox } from './Checkbox';
 export { default as Switch } from './Switch';

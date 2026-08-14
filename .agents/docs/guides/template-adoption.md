@@ -52,13 +52,15 @@ that a copy-paste will pass casual review and then quietly ship two accents. If 
 |---|---|---|---|---|
 | `ai.html` | Invoice Management | `/invoices` — **done** | — (already the DS origin) | — |
 | `zb.html` | Financial Dashboard | `/invoices` detail view | Invoice **activity timeline** (Created → Viewed → Reminder sent → Internal note), attachment empty-state, payment-score meter | 61 hex values; its card chrome |
-| `aj.html` | Salesforce Task Mgmt | `/bug-tracker` | Task-schedule board, assignee-avatar rows, "Pending Approval" lane, employees-involved rail | FA icon font; Salesforce blue |
+| `aj.html` (now `daily-note-todo-template.html`) | Salesforce Task Mgmt | `/bug-tracker`; `/daily` — **done** | Task-schedule board, assignee-avatar rows, "Pending Approval" lane, employees-involved rail | FA icon font; Salesforce blue |
 | `ac.html` | Create Task (form) | `/bug-tracker` create/edit modal | **Stepped form IA**: Task Info → Assignment → Subtasks → Schedule → Completion, with a live preview pane; removable tag pills; removable subtask rows | 20 inline styles; its `onclick` handlers |
 | `zc.html` | Timeline Dashboard | `/optimization-calendar`, `/calendar` | Horizontal month-spanning **Gantt/timeline** track, "Show done" filter toggle, cross-month continuity | Its palette |
 | `zd.html` | CRM Dashboard | `/chat`, `/ai-chat` contact rail | Contact card + deal-stage stepper (Discovery → Negotiation → Proposal), pros/cons split panel, tabbed record (Summary/Analytics/Details/Files/History) | FA icon font |
 | `af.html` | HubSpot Productivity | `/dashboard` | **Chart-type switcher** (Column/Scatter/Heatmap/Boxplot/Waterfall) with "max 2 overlaps" constraint, optional-parameters drawer, division filters | HubSpot orange |
 | `za.html` | Luminar Docs | `/about/docs`, `/about/docs/:docId` | 3-pane docs shell: section nav → page nav → on-page ToC; Get Started / Products / Tools grouping | Its typography |
 | `aa.html` | Neon Dark Dashboard | `/dashboard` (KPI band only) | KPI-card + sparkline density, "Top performing" leaderboard, channel-breakdown list with totals | **Everything visual** — esp. `#ccff33` |
+| `zg.html` | Issue Tracking (Linear/Tegon) | `/bug-tracker` — **done** | Status-grouped lanes with sticky headers + count pills; status as a named badge; assignee avatars on the row | FA icon font; its greys; the absolutely-positioned dropdowns |
+| `zi.html` | Book Editor | `/notes` — **done** | Collection search; category chips as the filter control; explicit per-card action row; a real multi-line editor | Its palette; the fixed 1200×800 artboard; the rich-text toolbar |
 
 ---
 
@@ -199,6 +201,96 @@ to `rgb(197, 244, 58)` — `#C5F43A`, brand lime. `tsc` and `eslint` clean on al
 > light shadow in dark mode. It does not — a freshly inserted clone of the same element resolves to
 > the dark shadow, and the compiled CSS is correct. Any property under `transition` needs this
 > caveat when measured headlessly; measure a clone, or a property that isn't transitioned.
+
+---
+
+## 5d. `/daily` — Daily note & todos ✅ built
+
+First screen ported end-to-end under §4. Source: `daily-note-todo-template.html` (the
+`aj.html` row above). Files: `pages/DailyNote.tsx`, `hooks/useDailyTodos.ts`,
+`lib/dailyTodos.ts` (+ 32 tests).
+
+**Harvested:** day header with a stat rail and completion meter, filter pills, a lane board
+of task cards, per-card affordances (reorder, delete), lazy empty states.
+
+**Rejected, per §2:** every hex, the Font Awesome icon set, the `body { overflow: hidden }`
+viewport lock, and the fixed 5-column board.
+
+Two deviations worth recording, both because the mockup's structure outran the data:
+
+- **Two lanes, not five.** The source's five colour columns are the same card repeated —
+  they encode nothing. A todo has one axis (done or not), so three further lanes would be
+  chrome with no data to fill them. This is the "density is a product decision" line in §6
+  being drawn deliberately rather than by copying.
+- **Reorder is buttons, not drag.** Keyboard- and touch-reachable, and no new dependency.
+
+No new primitive was needed — the screen is `Surface` · `Meter` · `Checkbox` · `Input` ·
+`AccentButton` · `Badge` · `SegmentedControl` · `EmptyState` · `PageHeader`. One change went
+back into the system rather than into the page: `Input` now carries `ref` through (React 19
+passes it as an ordinary prop), so focus management no longer requires bespoke markup.
+
+Verified signed in at 1270px and 375px, light and dark: no console errors, no page-level
+horizontal scroll at either width, theme tokens flip, and **exactly one `.ds-glow` element**
+in the rendered tree — the Add button, as §4 step 4 requires. Todos were added, toggled,
+renamed, reordered, deleted and cleared against the real API, and each change was confirmed
+in `GET /api/notes` rather than on screen alone.
+
+> The §5c measuring caveat applies here too, and cost time before it was remembered: the
+> input's colour is under `transition-colors`, so `getComputedStyle` returned the *light*
+> value in dark mode. A freshly inserted clone reports `rgb(255,255,255)` correctly.
+> Separately, the pane never holds real document focus, so `el.focus()`/`el.blur()` are
+> no-ops — dispatch `focusout` directly to exercise an `onBlur` handler.
+
+## 5e. Notes & Issues — `zi.html` + `zg.html` ✅ built
+
+Two more sources ported into screens that already existed, so this round was mostly
+**gap-closing rather than new construction**. Files: `pages/NotesCalendar.tsx`,
+`pages/BugTracker.tsx`, plus two design-system additions.
+
+| Source | Target | Harvested | Rejected |
+|---|---|---|---|
+| `zg.html` (Linear/Tegon issue tracker) | `/bug-tracker` | Status-grouped lanes with sticky headers + count pills; status as a *named* badge, not a bare dot; assignee avatars | FA icon font; its greys; the floating filter/assignee dropdowns |
+| `zi.html` (book editor) | `/notes` | Search over the collection; category chips as the filter control; an explicit per-card action row; a real multi-line editor | Its palette; the 1200×800 fixed artboard; the rich-text toolbar |
+
+**Two primitives were missing and got built first** (§4 step 2), not inlined into the pages:
+
+- **`Textarea`** — `Input`'s twin. It had been an open gap for six sprints, and the cost
+  was visible: `AdminDocs` shipped a raw `<textarea>` with a hand-written class string,
+  and `NotesCalendar`'s content field was a single-line `Input` that silently could not
+  hold a paragraph. Now used by both screens and the `/daily` note body.
+- **`Badge` semantic tones** (`success` `warning` `info` `danger`) — `BugTracker` alone
+  carried two private colour maps (`STATUS_TONE`, `PRIORITY_STYLE`) with their own greens
+  and ambers, invisible to any audit of the system. Both are now one lookup to a tone.
+  Tones are tinted rather than solid so several can appear in a list without competing
+  with the view's single accent.
+
+Gaps closed on `/notes`, each of which was simply absent: **search**, **category filter**
+(tags were rendered but not actionable), **edit** (a note could be pinned, scheduled and
+deleted — never corrected), and a **delete confirmation**. That last one was a live
+violation of this system's own rule that `ConfirmDialog` is required before any
+destructive action ships.
+
+**One pre-existing bug found and fixed while measuring.** The 5-segment status filter
+cannot wrap, so at 375px it set the width of the whole board column and the *page* scrolled
+sideways — measured at 506px against a 375px viewport. It now scrolls inside its own track,
+and the grid item carries `min-w-0`. This is the §5b lesson repeating: a flex or grid child
+without `min-w-0` refuses to shrink below its content, and one wide element takes the page
+with it.
+
+Verified signed in, light and dark, at 1280px and 375px: no page-level horizontal scroll on
+either screen at either width, theme tokens flip, and **exactly one `.ds-glow` per view**
+(`New note` / `New ticket`). On Notes: search narrowed 4→1 by content, a category chip
+narrowed 4→2, edit round-tripped a multi-line body and a new tag to the API, and delete was
+confirmed to be a no-op on Cancel and a real delete on confirm. On Issues: all four lanes
+rendered with live counts, and filtering to one status correctly dropped the lanes and put
+the status badge back on each row.
+
+> Add to the §5c/§5d measuring caveats: **`getComputedStyle` is meaningless while the pane
+> is hidden.** `innerWidth` and `clientWidth` report `0`, so every element "overflows" and
+> `scrollWidth > clientWidth` is trivially true. Call `resize_window` to force a real
+> viewport before believing any layout measurement. Radix also holds a closed dialog in the
+> DOM indefinitely here, so assert on `data-state="closed"` rather than on the node being
+> gone.
 
 ---
 
