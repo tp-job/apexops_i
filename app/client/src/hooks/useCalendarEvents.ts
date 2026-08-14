@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useReducer, useMemo } from 'react';
 import type { Dayjs } from 'dayjs';
-import { fetchCalendarNotes } from '@/utils/calendarApi';
+import { fetchCalendarNotes } from '@/services/calendar';
 import { eventsReducer, mapNotesToCalendarEvents, type EventsAction } from '@/utils/calendarEvents';
 import type { CalendarEvent } from '@/types/calendar';
 

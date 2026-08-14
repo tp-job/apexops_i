@@ -3,6 +3,7 @@ import prisma from '../lib/prisma';
 import { resolveMembership } from '../lib/projectAccess';
 import {
     eventVolumeByProject,
+    eventVolumeByProjects,
     issueStatusCounts,
     regressionCount,
     releaseMarkers,
@@ -51,11 +52,18 @@ router.get('/rollup', async (req: Request, res: Response): Promise<void> => {
 
         const projectIds = memberships.map((m) => m.project.id);
         if (!projectIds.length) {
-            res.json({ range, projects: [], totals: { projects: 0, unresolved: 0, events: 0, regressions: 0 } });
+            // `awaitingFirstEvent` is read unguarded by the dashboard, so it has to
+            // be present on this path too — omitting it made the no-projects case
+            // depend on `undefined > 0` being false rather than on saying zero.
+            res.json({
+                range,
+                projects: [],
+                totals: { projects: 0, unresolved: 0, events: 0, regressions: 0, awaitingFirstEvent: 0 },
+            });
             return;
         }
 
-        const [unresolvedRows, eventRows, lastEventRows, regressionRows, newIssueRows] =
+        const [unresolvedRows, eventRows, lastEventRows, regressionRows, newIssueRows, seriesBy] =
             await Promise.all([
                 prisma.issue.groupBy({
                     by: ['projectId'],
@@ -86,6 +94,15 @@ router.get('/rollup', async (req: Request, res: Response): Promise<void> => {
                     where: { projectId: { in: projectIds }, firstSeen: { gte: w.since } },
                     _count: { _all: true },
                 }),
+                /**
+                 * Per-project event histogram, one query for all of them.
+                 *
+                 * The scalars above answer *how much*; this answers *when*, which is
+                 * what the dashboard's heatmap and sparklines are drawn from. Without
+                 * it those charts would have to be inferred from totals — a shape that
+                 * looks like a measurement without being one.
+                 */
+                eventVolumeByProjects(projectIds, range),
             ]);
 
         const byId = <T extends { projectId: number }>(rows: T[]) =>
@@ -108,6 +125,7 @@ router.get('/rollup', async (req: Request, res: Response): Promise<void> => {
                 regressions: regressionsBy.get(id)?._count._all ?? 0,
                 newIssues: newBy.get(id)?._count._all ?? 0,
                 lastEventAt: lastBy.get(id)?._max.createdAt?.toISOString() ?? null,
+                series: seriesBy.get(id) ?? [],
             };
         });
 

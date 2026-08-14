@@ -23,6 +23,7 @@ import {
     FiAlertTriangle,
 } from 'react-icons/fi';
 import {
+    PageHeader,
     Surface,
     StatTile,
     Meter,
@@ -51,7 +52,6 @@ import {
     type SortDirection,
     type GanttBar,
 } from '@/components/design-system';
-import { PageHeader } from '@/components/common/layout';
 import { fadeUp, scaleIn, stagger, inViewOnce } from '@/lib/motion';
 
 // ── Section wrapper ───────────────────────────────────────────

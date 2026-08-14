@@ -1,7 +1,7 @@
 import type { Dayjs } from 'dayjs';
 import dayjs from 'dayjs';
 import type { CalendarEvent, CategoryId } from '@/types/calendar';
-import type { CalendarNoteApi } from '@/utils/calendarApi';
+import type { CalendarNoteApi } from '@/services/calendar';
 
 /**
  * Note→event mapping and local CRUD reducer for the calendar feature.

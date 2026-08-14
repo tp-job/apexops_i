@@ -98,8 +98,8 @@ that expired mid-session silently broke every request, while the app kept render
 now owns the refresh with a single in-flight promise; all four client transports —
 [`fetchWithAuth`](../../../app/client/src/api/client.ts), the axios instance in `services/api.ts`,
 the six modules that called `fetch` directly, and `services/auth.ts` itself — refresh once and retry
-once on a 401. Spec and evidence: [`build-spec.md`](../../../build-spec.md),
-[`progress.md`](../../../progress.md). Socket handshakes are **not** covered and are recorded there
+once on a 401. Spec and evidence: [`build-spec.md`](../archive/sprint-3-auth-build-spec.md),
+[`progress.md`](../archive/sprint-3-auth-progress.md). Socket handshakes are **not** covered and are recorded there
 as a gap belonging to the real-time-stream item.
 
 ---
@@ -204,8 +204,8 @@ The last unshipped feature in the objective, and the one that decides whether th
 against a production React build at all. `Event.release` already exists as the hook; nothing else does.
 
 **Status: P0 shipped 2026-08-04.** Spec and evidence:
-[`build-spec.md`](../../../build-spec.md), [`progress.md`](../../../progress.md),
-[`feature-list.json`](../../../feature-list.json) — 12/13 features verified.
+[`build-spec.md`](../archive/sprint-4-sourcemaps-build-spec.md), [`progress.md`](../archive/sprint-4-sourcemaps-progress.md),
+[`feature-list.json`](../archive/sprint-4-sourcemaps-feature-list.json) — 12/13 features verified.
 
 | P | Item | Est | |
 |---|---|---|---|
@@ -281,8 +281,8 @@ global `User.role` only, which this sprint does not touch. See the spec's findin
 
 ### Sprint 5 — Settings that enforce, roles that mean something
 
-**Status: shipped 2026-08-04.** Spec and evidence: [`build-spec.md`](../../../build-spec.md),
-[`progress.md`](../../../progress.md), [`feature-list.json`](../../../feature-list.json) —
+**Status: shipped 2026-08-04.** Spec and evidence: [`build-spec.md`](../archive/sprint-5-settings-roles-build-spec.md),
+[`progress.md`](../archive/sprint-5-settings-roles-progress.md), [`feature-list.json`](../archive/sprint-5-settings-roles-feature-list.json) —
 17/17 features, 62/62 API assertions, acceptance criteria 1–14 all met.
 
 Landed in two passes. S1/S2 and half of S4 shipped early on **2026-07-31** (`/settings` with profile,
@@ -329,8 +329,8 @@ shipped **2026-08-04**, once Sprint 3's 401-refresh path unblocked S-D2.
 ### Sprint 7 — Platform hardening
 
 **Status: shipped 2026-08-04.** Spec [`platform-hardening.md`](../features/platform-hardening.md)
-(`E-D1`…`E-D6`); evidence [`build-spec.md`](../../../build-spec.md),
-[`progress.md`](../../../progress.md), [`feature-list.json`](../../../feature-list.json) —
+(`E-D1`…`E-D6`); evidence [`build-spec.md`](../archive/sprint-7-hardening-build-spec.md),
+[`progress.md`](../archive/sprint-7-hardening-progress.md), [`feature-list.json`](../archive/sprint-7-hardening-feature-list.json) —
 19/19 features, 77 assertions, criteria 1–14.
 
 Scoping the row changed it. Two of the three planned items were smaller than assumed, and **the most

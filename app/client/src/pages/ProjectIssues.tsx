@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { FiAlertTriangle, FiInbox, FiRadio, FiRotateCcw, FiSearch, FiZap } from 'react-icons/fi';
 import {
+    PageHeader,
     AccentButton,
     Badge,
     DataTable,
@@ -13,8 +14,7 @@ import {
     Surface,
     type Column,
 } from '@/components/design-system';
-import { PageHeader } from '@/components/common/layout';
-import ProjectTabs from '@/components/layouts/ProjectTabs';
+import ProjectTabs from '@/components/layout/ProjectTabs';
 import { useIssues } from '@/hooks/useIssues';
 import { useProject } from '@/hooks/useProject';
 import { getErrorMessage } from '@/utils/error';

@@ -1,28 +1,56 @@
 /**
- * Shared types for note stats and overview API.
+ * Note Type Definitions
+ * 
+ * Shared type definitions for the note system.
+ * Extracted from NoteEditor.tsx and NoteDashboard.tsx for consistency.
  */
 
-export interface RecentActivity {
+export type NoteBlockType = 'paragraph' | 'heading' | 'checklist' | 'quote' | 'code' | 'richText';
+
+export interface BaseNoteBlock {
     id: string;
-    title: string;
-    type: string;
-    createdAt: string;
-    updatedAt: string;
+    type: NoteBlockType;
 }
 
-export interface NoteStats {
-    total: number;
-    byType: {
-        text: number;
-        image: number;
-        list: number;
-        link: number;
-    };
-    pinned: {
-        pinned: number;
-        unpinned: number;
-    };
-    daily: Array<{ date: string; day: string; count: number }>;
-    monthly: Array<{ month: string; monthName: string; count: number }>;
-    recentActivity?: RecentActivity[];
+export interface ParagraphBlock extends BaseNoteBlock {
+    type: 'paragraph';
+    text: string;
+}
+
+export interface RichTextBlock extends BaseNoteBlock {
+    type: 'richText';
+    html: string;
+}
+
+export type NoteBlock = ParagraphBlock | RichTextBlock;
+
+export interface Note {
+    id: string;
+    title: string;
+    content: string;
+    type: 'text' | 'image' | 'list' | 'link';
+    isPinned: boolean;
+    color?: string;
+    tags?: string[];
+    imageUrl?: string;
+    linkUrl?: string;
+    checklistItems?: ChecklistItem[];
+    quote?: Quote;
+    /** ISO date the note is planned for. Null/absent means unscheduled. */
+    scheduledFor?: string | null;
+    /** ISO deadline, independent of `scheduledFor`. */
+    dueDate?: string | null;
+    createdAt?: string;
+    updatedAt?: string;
+    blocks?: NoteBlock[];
+}
+
+export interface ChecklistItem {
+    text: string;
+    checked: boolean;
+}
+
+export interface Quote {
+    text: string;
+    author: string;
 }

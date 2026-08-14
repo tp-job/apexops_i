@@ -57,5 +57,12 @@ export type { Person } from './AvatarStack';
 export type { Segment } from './SegmentedControl';
 export type { GanttBar } from './GanttTrack';
 
-// Re-export the existing layout primitives so the system has one door.
-export { PageHeader, GlassPanel, KpiCard, PillTabs } from '@/components/common/layout';
+// Page-level layout primitives. These used to live in `components/common/layout`
+// and be re-exported from here, which meant the "one door" this barrel claims to
+// be was actually two: 17 files imported PageHeader through the design system and
+// 14 reached past it to the source folder. Same component, two paths, and no way
+// to tell from a call site which convention a file was following.
+export { default as PageHeader } from './PageHeader';
+export { default as GlassPanel } from './GlassPanel';
+export { default as KpiCard } from './KpiCard';
+export { default as PillTabs } from './PillTabs';

@@ -1,6 +1,6 @@
 # Build spec — Sprint 9: the two admin surfaces
 
-Ledger: [`feature-list.json`](feature-list.json) · Log: [`progress.md`](progress.md)
+Ledger: [`feature-list.json`](sprint-9-admin-surfaces-feature-list.json) · Log: [`progress.md`](sprint-9-admin-surfaces-progress.md)
 **Decisions live in [`admin-docs-and-console.md`](.agents/docs/features/admin-docs-and-console.md)**
 (`S9-D1`…`S9-D8`). This file does not restate them.
 

@@ -10,6 +10,7 @@ import {
     FiZap,
 } from 'react-icons/fi';
 import {
+    PageHeader,
     AccentButton,
     Badge,
     SegmentedControl,
@@ -18,7 +19,6 @@ import {
     Timeline,
     type TimelineItem,
 } from '@/components/design-system';
-import { PageHeader } from '@/components/common/layout';
 import EventVolumeChart from '@/components/charts/EventVolumeChart';
 import StackPanel from '@/components/common/StackPanel';
 import { useIssueDetail } from '@/hooks/useIssueDetail';

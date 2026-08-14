@@ -1,9 +1,8 @@
 import type { FC } from 'react';
 import { useParams } from 'react-router-dom';
 import { FiAlertTriangle } from 'react-icons/fi';
-import { SkeletonText, Surface } from '@/components/design-system';
-import { PageHeader } from '@/components/common/layout';
-import ProjectTabs from '@/components/layouts/ProjectTabs';
+import { PageHeader, SkeletonText, Surface } from '@/components/design-system';
+import ProjectTabs from '@/components/layout/ProjectTabs';
 import BugTracker from './BugTracker';
 import { useProject } from '@/hooks/useProject';
 

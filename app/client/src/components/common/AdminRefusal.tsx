@@ -1,7 +1,6 @@
 import type { FC } from 'react';
 import { FiShield } from 'react-icons/fi';
-import { EmptyState, Surface } from '@/components/design-system';
-import { PageHeader } from '@/components/common/layout';
+import { PageHeader, EmptyState, Surface } from '@/components/design-system';
 
 /**
  * What an admin page shows to someone who is not an admin.

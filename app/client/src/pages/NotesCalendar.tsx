@@ -8,10 +8,12 @@ import {
     FiChevronLeft,
     FiChevronRight,
     FiClock,
+    FiEdit2,
     FiFileText,
     FiGrid,
     FiPlus,
     FiRefreshCw,
+    FiSlash,
     FiStar,
     FiTrash2,
 } from 'react-icons/fi';
@@ -19,16 +21,21 @@ import {
     Surface,
     AccentButton,
     Badge,
+    ConfirmDialog,
+    ContextMenu,
     EmptyState,
     SegmentedControl,
     Input,
     Field,
+    Modal,
     PageHeader,
+    useContextMenu,
+    type ContextMenuItem,
 } from '@/components/design-system';
 import { useNoteList } from '@/hooks/useNoteList';
 import { useCalendarEvents } from '@/hooks/useCalendarEvents';
-import { createNote, deleteNote, toggleNotePin, updateNote } from '@/components/ui/note/utils/noteApi';
-import type { Note } from '@/components/ui/note/utils/noteTypes';
+import { createNote, deleteNote, toggleNotePin, updateNote } from '@/services/notes';
+import type { Note } from '@/types/notes';
 import { fadeUp, stagger } from '@/lib/motion';
 
 /**
@@ -58,6 +65,69 @@ const NOTE_ACCENT: Record<string, string> = {
     link: 'bg-amber-500',
 };
 
+/**
+ * The colour palette a note can be tagged with.
+ *
+ * Stored as the **name**, not a hex value — `Note.color` already holds bare names
+ * in existing rows (`'red'`), and a column carrying both idioms could never be
+ * grouped or filtered reliably. It also keeps theming in the client, where the
+ * light/dark pair for each hue lives.
+ *
+ * Six entries including "none" is a deliberate ceiling: this is a colour *label*,
+ * not a spectrum, and a right-click menu stops being scannable past about ten
+ * items.
+ */
+interface NoteColor {
+    /** Value persisted to `Note.color`. `null` for the uncoloured default. */
+    id: string | null;
+    label: string;
+    dot: string;
+    chip: string;
+}
+
+const NOTE_COLORS: NoteColor[] = [
+    {
+        id: null,
+        label: 'No colour',
+        dot: 'bg-gray-300 dark:bg-gray-600',
+        chip: 'bg-white/70 text-brand-dark dark:bg-white/10 dark:text-white',
+    },
+    {
+        id: 'red',
+        label: 'Red',
+        dot: 'bg-red-500',
+        chip: 'bg-red-500/15 text-red-700 dark:bg-red-500/25 dark:text-red-200',
+    },
+    {
+        id: 'amber',
+        label: 'Amber',
+        dot: 'bg-amber-500',
+        chip: 'bg-amber-500/15 text-amber-700 dark:bg-amber-500/25 dark:text-amber-200',
+    },
+    {
+        id: 'emerald',
+        label: 'Emerald',
+        dot: 'bg-emerald-500',
+        chip: 'bg-emerald-500/15 text-emerald-700 dark:bg-emerald-500/25 dark:text-emerald-200',
+    },
+    {
+        id: 'sky',
+        label: 'Sky',
+        dot: 'bg-sky-500',
+        chip: 'bg-sky-500/15 text-sky-700 dark:bg-sky-500/25 dark:text-sky-200',
+    },
+    {
+        id: 'violet',
+        label: 'Violet',
+        dot: 'bg-violet-500',
+        chip: 'bg-violet-500/15 text-violet-700 dark:bg-violet-500/25 dark:text-violet-200',
+    },
+];
+
+/** Unknown colours from older rows fall back to the default rather than vanishing. */
+const colorOf = (note: Note): NoteColor =>
+    NOTE_COLORS.find((c) => c.id === (note.color ?? null)) ?? NOTE_COLORS[0];
+
 /** `YYYY-MM-DD` for the day a note belongs on: its schedule, else when it was written. */
 const noteDayKey = (note: Note): string | null => {
     const raw = note.scheduledFor ?? note.createdAt;
@@ -81,8 +151,13 @@ const NoteCard: FC<{
             <Surface variant="frost" radius="2xl" padding="md" className="h-full">
                 <div className="flex h-full flex-col gap-3">
                     <div className="flex items-start gap-2">
+                        {/* An explicit colour wins over the type accent: the user
+                            chose it, and a deliberate label should not be overruled
+                            by a default derived from the note's kind. */}
                         <span
-                            className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${NOTE_ACCENT[note.type] ?? 'bg-gray-400'}`}
+                            className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
+                                note.color ? colorOf(note).dot : (NOTE_ACCENT[note.type] ?? 'bg-gray-400')
+                            }`}
                             aria-hidden
                         />
                         <h3 className="min-w-0 flex-1 truncate text-sm font-semibold text-brand-dark dark:text-white">
@@ -153,7 +228,11 @@ const MonthGrid: FC<{
     notesByDay: Record<string, Note[]>;
     onPick: (dayKey: string) => void;
     selectedDay: string | null;
-}> = ({ month, notesByDay, onPick, selectedDay }) => {
+    /** Right-click on a note chip. */
+    onNoteMenu: (event: React.MouseEvent, note: Note) => void;
+    /** Right-click on the day cell itself, away from any chip. */
+    onDayMenu: (event: React.MouseEvent, dayKey: string) => void;
+}> = ({ month, notesByDay, onPick, selectedDay, onNoteMenu, onDayMenu }) => {
     const cells = useMemo(() => {
         const first = month.startOf('month');
         // `day()` is 0=Sunday; the grid starts Monday, so Sunday becomes the 7th slot.
@@ -189,6 +268,7 @@ const MonthGrid: FC<{
                             key={key}
                             type="button"
                             onClick={() => onPick(key)}
+                            onContextMenu={(e) => onDayMenu(e, key)}
                             aria-label={`${d.format('D MMMM YYYY')}, ${dayNotes.length} note${dayNotes.length === 1 ? '' : 's'}`}
                             aria-current={isToday ? 'date' : undefined}
                             className={[
@@ -214,9 +294,15 @@ const MonthGrid: FC<{
                             </span>
                             <div className="flex flex-col gap-0.5">
                                 {dayNotes.slice(0, 2).map((n) => (
+                                    // A span, not a button: this sits inside the day
+                                    // cell's own button, and nesting interactive
+                                    // elements is invalid. Right-click does not
+                                    // activate the parent, so the gesture is safe here.
                                     <span
                                         key={n.id}
-                                        className="truncate rounded bg-white/70 px-1 py-0.5 text-[10px] text-brand-dark dark:bg-white/10 dark:text-white"
+                                        onContextMenu={(e) => onNoteMenu(e, n)}
+                                        title={n.title || 'Untitled'}
+                                        className={`truncate rounded px-1 py-0.5 text-[10px] ${colorOf(n).chip}`}
                                     >
                                         {n.title || 'Untitled'}
                                     </span>
@@ -247,6 +333,20 @@ const NotesCalendar: FC = () => {
     const [notice, setNotice] = useState<string | null>(null);
     const [title, setTitle] = useState('');
     const [content, setContent] = useState('');
+
+    /**
+     * Two menus, because there are two kinds of target — a note and an empty day —
+     * and they offer different actions. Each is a *single* shared instance for
+     * every element of its kind, per `useContextMenu`'s own contract: one portal
+     * and one set of document listeners, not one per cell.
+     */
+    const noteMenu = useContextMenu<Note>();
+    const dayMenu = useContextMenu<string>();
+
+    const [editing, setEditing] = useState<Note | null>(null);
+    const [editTitle, setEditTitle] = useState('');
+    const [editContent, setEditContent] = useState('');
+    const [confirmDelete, setConfirmDelete] = useState<Note | null>(null);
 
     // `useCalendarEvents` is kept mounted in calendar mode so its request (and the
     // server's timezone resolution) stays the source of truth for `totalNotes`,
@@ -309,6 +409,120 @@ const NotesCalendar: FC = () => {
                 }),
             'Could not create that note.',
         ).then(() => { setTitle(''); setContent(''); setCreating(false); });
+    };
+
+    // Opening one menu closes the other. The chips live *inside* the day cells, so
+    // without this a right-click could leave both surfaces open at once.
+    const openNoteMenu = (event: React.MouseEvent, note: Note) => {
+        dayMenu.close();
+        noteMenu.openAtCursor(event, note);
+    };
+    const openDayMenu = (event: React.MouseEvent, dayKey: string) => {
+        noteMenu.close();
+        dayMenu.openAtCursor(event, dayKey);
+    };
+
+    const beginEdit = (note: Note) => {
+        setEditing(note);
+        setEditTitle(note.title ?? '');
+        setEditContent(note.content ?? '');
+    };
+
+    const saveEdit = () => {
+        if (!editing) return;
+        run(
+            () => updateNote(editing.id, { title: editTitle.trim(), content: editContent.trim() }),
+            'Could not save that note.',
+        ).then(() => setEditing(null));
+    };
+
+    /**
+     * Every action routes through `run()` — the same helper the visible buttons
+     * already use — so busy state, the error notice and the refetch behave
+     * identically no matter which surface triggered them. A menu that mutated
+     * directly would be a second, silently divergent write path.
+     */
+    const noteMenuItems = (note: Note): ContextMenuItem[] => [
+        {
+            id: 'edit',
+            label: 'Edit note…',
+            icon: <FiEdit2 size={14} />,
+            disabled: readOnly,
+            onSelect: () => beginEdit(note),
+        },
+        {
+            id: 'pin',
+            label: note.isPinned ? 'Unpin note' : 'Pin note',
+            icon: <FiStar size={14} />,
+            disabled: readOnly,
+            onSelect: () => run(() => toggleNotePin(note.id, !note.isPinned), 'Could not change the pin.'),
+        },
+        ...NOTE_COLORS.map((c, i) => {
+            const current = (note.color ?? null) === c.id;
+            return {
+                id: `color-${c.id ?? 'none'}`,
+                // Disabled rather than ticked: the menu has no selected-state
+                // affordance, and an item that would change nothing should not
+                // look actionable. The suffix says why it is greyed out.
+                label: current ? `${c.label} (current)` : c.label,
+                icon: <span className={`block h-3 w-3 rounded-full ${c.dot}`} />,
+                separatorBefore: i === 0,
+                disabled: readOnly || current,
+                onSelect: () => run(() => updateNote(note.id, { color: c.id }), 'Could not change the colour.'),
+            };
+        }),
+        ...(note.scheduledFor
+            ? [
+                  {
+                      id: 'unschedule',
+                      label: 'Unschedule',
+                      icon: <FiSlash size={14} />,
+                      separatorBefore: true,
+                      disabled: readOnly,
+                      // Explicit null clears it; omitting the key would be a no-op.
+                      onSelect: () =>
+                          run(
+                              () => updateNote(note.id, { scheduledFor: null }),
+                              'Could not unschedule that note.',
+                          ),
+                  },
+              ]
+            : []),
+        {
+            id: 'delete',
+            label: 'Delete note',
+            icon: <FiTrash2 size={14} />,
+            destructive: true,
+            separatorBefore: true,
+            disabled: readOnly,
+            onSelect: () => setConfirmDelete(note),
+        },
+    ];
+
+    const dayMenuItems = (dayKey: string): ContextMenuItem[] => {
+        const count = notesByDay[dayKey]?.length ?? 0;
+        return [
+            {
+                id: 'new',
+                label: `New note on ${dayjs(dayKey).format('D MMM')}`,
+                icon: <FiPlus size={14} />,
+                disabled: readOnly,
+                onSelect: () => {
+                    setSelectedDay(dayKey);
+                    setCreating(true);
+                },
+            },
+            ...(count
+                ? [
+                      {
+                          id: 'open',
+                          label: `Open day · ${count} note${count === 1 ? '' : 's'}`,
+                          icon: <FiCalendar size={14} />,
+                          onSelect: () => setSelectedDay(dayKey),
+                      },
+                  ]
+                : []),
+        ];
     };
 
     const pinnedCount = notesList.filter((n) => n.isPinned).length;
@@ -535,11 +749,14 @@ const NotesCalendar: FC = () => {
                                     notesByDay={notesByDay}
                                     onPick={(k) => setSelectedDay((cur) => (cur === k ? null : k))}
                                     selectedDay={selectedDay}
+                                    onNoteMenu={openNoteMenu}
+                                    onDayMenu={openDayMenu}
                                 />
 
                                 <p className="text-xs text-gray-400 dark:text-gray-500">
                                     {totalNotes} note{totalNotes === 1 ? '' : 's'} this month. Unscheduled notes
-                                    appear on the day they were written.
+                                    appear on the day they were written. Right-click a note to edit, colour
+                                    or delete it, or a day to add one.
                                 </p>
                             </div>
                         </Surface>
@@ -581,9 +798,14 @@ const NotesCalendar: FC = () => {
                                         {dayNotes.map((n) => (
                                             <li
                                                 key={n.id}
+                                                onContextMenu={(e) => openNoteMenu(e, n)}
                                                 className="flex flex-col gap-1 rounded-2xl bg-black/[0.03] px-4 py-3 dark:bg-white/5"
                                             >
                                                 <div className="flex items-center gap-2">
+                                                    <span
+                                                        className={`h-2 w-2 shrink-0 rounded-full ${colorOf(n).dot}`}
+                                                        aria-hidden
+                                                    />
                                                     <span className="truncate text-sm font-semibold text-brand-dark dark:text-white">
                                                         {n.title || 'Untitled'}
                                                     </span>
@@ -607,6 +829,84 @@ const NotesCalendar: FC = () => {
                     </motion.div>
                 </div>
             )}
+
+            <ContextMenu
+                open={noteMenu.open}
+                position={noteMenu.position}
+                items={noteMenu.target ? noteMenuItems(noteMenu.target) : []}
+                onClose={noteMenu.close}
+                label={`Actions for ${noteMenu.target?.title || 'note'}`}
+            />
+            <ContextMenu
+                open={dayMenu.open}
+                position={dayMenu.position}
+                items={dayMenu.target ? dayMenuItems(dayMenu.target) : []}
+                onClose={dayMenu.close}
+                label={
+                    dayMenu.target
+                        ? `Actions for ${dayjs(dayMenu.target).format('D MMMM YYYY')}`
+                        : 'Day actions'
+                }
+            />
+
+            <Modal
+                open={editing !== null}
+                onOpenChange={(o) => !o && setEditing(null)}
+                title="Edit note"
+                description="Colour, pin and schedule stay where they are — change those from the note's menu."
+                dismissible={!busy}
+                footer={
+                    <>
+                        <AccentButton
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setEditing(null)}
+                            disabled={busy}
+                        >
+                            Cancel
+                        </AccentButton>
+                        <AccentButton
+                            size="sm"
+                            onClick={saveEdit}
+                            disabled={busy || (!editTitle.trim() && !editContent.trim())}
+                        >
+                            {busy ? 'Saving…' : 'Save note'}
+                        </AccentButton>
+                    </>
+                }
+            >
+                <div className="flex flex-col gap-4">
+                    <Field label="Title">
+                        <Input
+                            value={editTitle}
+                            onChange={(e) => setEditTitle(e.target.value)}
+                            placeholder="What's this about?"
+                            autoFocus
+                        />
+                    </Field>
+                    <Field label="Content" hint="Title or content — one of them is required.">
+                        <Input
+                            value={editContent}
+                            onChange={(e) => setEditContent(e.target.value)}
+                            placeholder="Optional"
+                        />
+                    </Field>
+                </div>
+            </Modal>
+
+            <ConfirmDialog
+                open={confirmDelete !== null}
+                onOpenChange={(o) => !o && setConfirmDelete(null)}
+                title="Delete this note?"
+                description={`"${confirmDelete?.title || 'Untitled'}" will be removed from the calendar and from your notes. This cannot be undone.`}
+                confirmLabel="Delete note"
+                destructive
+                onConfirm={async () => {
+                    if (!confirmDelete) return;
+                    await run(() => deleteNote(confirmDelete.id), 'Could not delete that note.');
+                    setConfirmDelete(null);
+                }}
+            />
         </div>
     );
 };

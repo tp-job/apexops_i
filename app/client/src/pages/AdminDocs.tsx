@@ -8,6 +8,7 @@ import {
     FiTrash2,
 } from 'react-icons/fi';
 import {
+    PageHeader,
     AccentButton,
     Badge,
     ConfirmDialog,
@@ -17,7 +18,6 @@ import {
     SegmentedControl,
     Surface,
 } from '@/components/design-system';
-import { PageHeader } from '@/components/common/layout';
 import AdminRefusal from '@/components/common/AdminRefusal';
 import DocsArticle from '@/components/docs/DocsArticle';
 import DocsToc from '@/components/docs/DocsToc';

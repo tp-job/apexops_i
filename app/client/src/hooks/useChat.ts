@@ -7,7 +7,7 @@ interface UseChatOptions {
     /** Only used to decide whether to connect and to label own messages — the
      *  server derives the real sender identity from the access token. */
     currentUserId: number | null;
-    /** Conversation to join — from `utils/chatApi.ts`'s `getDirectRoomId`. `null` while no chat is open. */
+    /** Conversation to join — from `services/chat.ts`'s `getDirectRoomId`. `null` while no chat is open. */
     roomId: string | null;
 }
 

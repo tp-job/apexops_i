@@ -1,6 +1,6 @@
 # Admin Documentation editor & Console Monitor — decisions
 
-Sprint 9. Spec: [`build-spec.md`](../../../build-spec.md) · Ledger: [`feature-list.json`](../../../feature-list.json)
+Sprint 9. Spec: [`build-spec.md`](../archive/sprint-9-admin-surfaces-build-spec.md) · Ledger: [`feature-list.json`](../archive/sprint-9-admin-surfaces-feature-list.json)
 
 These are the calls that were genuinely undecidable from the code, locked before implementation.
 The spec does not restate them; it references them by id.

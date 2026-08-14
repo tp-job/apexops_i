@@ -21,7 +21,7 @@ import {
 } from '@/components/design-system';
 import { useAuth } from '@/context/auth-context';
 import { useChat } from '@/hooks/useChat';
-import { fetchChatUsers, getDirectRoomId } from '@/utils/chatApi';
+import { fetchChatUsers, getDirectRoomId } from '@/services/chat';
 import type { ChatUser } from '@/types/chat';
 import { fadeUp, stagger } from '@/lib/motion';
 

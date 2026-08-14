@@ -8,6 +8,7 @@ import {
     FiTrendingUp,
 } from 'react-icons/fi';
 import {
+    PageHeader,
     AccentButton,
     Badge,
     EmptyState,
@@ -15,8 +16,7 @@ import {
     SkeletonText,
     Surface,
 } from '@/components/design-system';
-import { PageHeader } from '@/components/common/layout';
-import ProjectTabs from '@/components/layouts/ProjectTabs';
+import ProjectTabs from '@/components/layout/ProjectTabs';
 import EventVolumeChart, { type ChartMarker } from '@/components/charts/EventVolumeChart';
 import { useProjectOverview } from '@/hooks/useOverview';
 import { formatDate, formatNumber, levelTone, relativeTime } from '@/utils/format';

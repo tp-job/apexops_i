@@ -1,6 +1,6 @@
 # Progress — Sprint 9: the two admin surfaces
 
-Spec: [`build-spec.md`](build-spec.md) · Ledger: [`feature-list.json`](feature-list.json)
+Spec: [`build-spec.md`](sprint-9-admin-surfaces-build-spec.md) · Ledger: [`feature-list.json`](sprint-9-admin-surfaces-feature-list.json)
 Decisions: [`admin-docs-and-console.md`](.agents/docs/features/admin-docs-and-console.md)
 
 Sprint 8 was scoped on 2026-08-07 and never started. Its spec, ledger, progress and decisions are

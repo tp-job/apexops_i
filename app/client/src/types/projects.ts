@@ -230,6 +230,14 @@ export interface RollupProject {
     newIssues: number;
     /** `null` means the project has never received an event — not "quiet". */
     lastEventAt: string | null;
+    /**
+     * Event volume bucketed across the selected range — hourly for 24h, daily
+     * otherwise, gap-filled so quiet buckets are zeroes rather than absences.
+     *
+     * This is what the heatmap and the row sparklines are drawn from. The scalars
+     * above cannot substitute: they say how much, never when.
+     */
+    series: TimelineBucket[];
 }
 
 export interface RollupResponse {

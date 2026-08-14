@@ -13,6 +13,7 @@ import {
     FiUsers,
 } from 'react-icons/fi';
 import {
+    PageHeader,
     AccentButton,
     Badge,
     ConfirmDialog,
@@ -24,8 +25,7 @@ import {
     SkeletonText,
     Surface,
 } from '@/components/design-system';
-import { PageHeader } from '@/components/common/layout';
-import ProjectTabs from '@/components/layouts/ProjectTabs';
+import ProjectTabs from '@/components/layout/ProjectTabs';
 import { useMembers } from '@/hooks/useMembers';
 import { useProject } from '@/hooks/useProject';
 import { useAuth } from '@/context/auth-context';

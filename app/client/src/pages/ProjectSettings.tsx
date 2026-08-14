@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { FiAlertTriangle, FiCheck, FiCopy, FiRadio, FiRefreshCw } from 'react-icons/fi';
 import {
+    PageHeader,
     AccentButton,
     Badge,
     Checkbox,
@@ -13,8 +14,7 @@ import {
     Surface,
     Switch,
 } from '@/components/design-system';
-import { PageHeader } from '@/components/common/layout';
-import ProjectTabs from '@/components/layouts/ProjectTabs';
+import ProjectTabs from '@/components/layout/ProjectTabs';
 import SourceMapsPanel from '@/components/common/SourceMapsPanel';
 import { useProject } from '@/hooks/useProject';
 import { getApiBaseUrl } from '@/api/config';

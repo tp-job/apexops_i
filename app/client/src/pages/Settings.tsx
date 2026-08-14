@@ -11,6 +11,7 @@ import {
     FiUser,
 } from 'react-icons/fi';
 import {
+    PageHeader,
     AccentButton,
     Badge,
     ConfirmDialog,
@@ -20,7 +21,6 @@ import {
     SkeletonText,
     Surface,
 } from '@/components/design-system';
-import { PageHeader } from '@/components/common/layout';
 import { useAuth } from '@/context/auth-context';
 import { useThemeControl } from '@/hooks/useThemeControl';
 import { authApi } from '@/services/auth';

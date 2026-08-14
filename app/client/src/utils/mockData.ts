@@ -1,5 +1,5 @@
 import type { Ticket, Log } from '@/types/bugTrackerApp';
-import type { Note } from '@/components/ui/note/utils/noteTypes';
+import type { Note } from '@/types/notes';
 
 export const mockTickets: Ticket[] = [
     {

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import type { Note } from '@/components/ui/note/utils/noteTypes';
-import { fetchNotes } from '@/components/ui/note/utils/noteApi';
+import type { Note } from '@/types/notes';
+import { fetchNotes } from '@/services/notes';
 
 export interface UseNoteListResult {
     notesList: Note[];

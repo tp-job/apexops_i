@@ -9,8 +9,7 @@ import {
     FiPlay,
     FiTrash2,
 } from 'react-icons/fi';
-import { AccentButton, Badge, EmptyState, Surface } from '@/components/design-system';
-import { PageHeader } from '@/components/common/layout';
+import { PageHeader, AccentButton, Badge, EmptyState, Surface } from '@/components/design-system';
 import AdminRefusal from '@/components/common/AdminRefusal';
 import { useConsoleMonitor, type MonitorStatus } from '@/hooks/useConsoleMonitor';
 import { formatLogLine, type LogLevel } from '@/lib/consoleBuffer';

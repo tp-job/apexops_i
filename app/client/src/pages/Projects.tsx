@@ -17,6 +17,7 @@ import {
     FiSettings,
 } from 'react-icons/fi';
 import {
+    PageHeader,
     AccentButton,
     Badge,
     ConfirmDialog,
@@ -31,7 +32,6 @@ import {
     useContextMenu,
     type ContextMenuItem,
 } from '@/components/design-system';
-import { PageHeader } from '@/components/common/layout';
 import { useProjects } from '@/hooks/useProjects';
 import { useToast } from '@/context/toast-context';
 import { getErrorMessage } from '@/utils/error';

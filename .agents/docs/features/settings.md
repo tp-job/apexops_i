@@ -3,8 +3,8 @@
 > ## Status: **SHIPPED.** S1/S2/S4a on 2026-07-31, S3/S4b/S5 on 2026-08-04.
 >
 > S-D1…S-D5 were locked as written and every one of them survived contact. Build record:
-> [`build-spec.md`](../../../build-spec.md), [`progress.md`](../../../progress.md),
-> [`feature-list.json`](../../../feature-list.json) — 17/17 features, 62/62 API assertions.
+> [`build-spec.md`](../archive/sprint-5-settings-roles-build-spec.md), [`progress.md`](../archive/sprint-5-settings-roles-progress.md),
+> [`feature-list.json`](../archive/sprint-5-settings-roles-feature-list.json) — 17/17 features, 62/62 API assertions.
 >
 > **Three amendments made during the build**, each because implementing revealed something this
 > document could not have known:

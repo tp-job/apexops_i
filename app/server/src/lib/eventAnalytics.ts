@@ -43,6 +43,15 @@ export function windowFor(range: Range): Window {
  * Fills gaps so quiet periods render as quiet rather than as missing data — a
  * chart that simply omits empty buckets is narrower *and* lies about the shape.
  */
+function fillFrom(counts: Map<number, number>, w: Window): Bucket[] {
+    const out: Bucket[] = [];
+    const end = Math.floor(Date.now() / w.stepMs) * w.stepMs;
+    for (let t = w.since.getTime(); t <= end; t += w.stepMs) {
+        out.push({ start: new Date(t).toISOString(), count: counts.get(t) ?? 0 });
+    }
+    return out;
+}
+
 function fill(rows: { bucket: Date; count: bigint }[], w: Window): Bucket[] {
     const counts = new Map<number, number>();
     for (const r of rows) {
@@ -50,13 +59,7 @@ function fill(rows: { bucket: Date; count: bigint }[], w: Window): Bucket[] {
         // JSON.stringify — same trap as `Event.id`.
         counts.set(new Date(r.bucket).getTime(), Number(r.count));
     }
-
-    const out: Bucket[] = [];
-    const end = Math.floor(Date.now() / w.stepMs) * w.stepMs;
-    for (let t = w.since.getTime(); t <= end; t += w.stepMs) {
-        out.push({ start: new Date(t).toISOString(), count: counts.get(t) ?? 0 });
-    }
-    return out;
+    return fillFrom(counts, w);
 }
 
 /**
@@ -93,6 +96,52 @@ export async function eventVolumeByProject(projectId: number, range: Range): Pro
         ORDER BY 1
     `;
     return fill(rows, w);
+}
+
+/**
+ * The same histogram as `eventVolumeByProject`, for **many projects at once**.
+ *
+ * One grouped query rather than a loop over `eventVolumeByProject`. The caller is
+ * `GET /rollup` — the first screen after sign-in — and that handler is written
+ * throughout to avoid N+1 because the cost there is felt immediately once someone
+ * has more than a couple of projects. A per-project loop would put it straight back.
+ *
+ * Every project id asked for comes back in the map, including ones with no events
+ * at all: an absent key and an all-zero series are different claims, and the
+ * caller should not have to guess which it is holding.
+ */
+export async function eventVolumeByProjects(
+    projectIds: number[],
+    range: Range
+): Promise<Map<number, Bucket[]>> {
+    const out = new Map<number, Bucket[]>();
+    if (!projectIds.length) return out;
+
+    const w = windowFor(range);
+    // See the note on `eventVolumeByIssue`: the bound is `${iso}::timestamp`, never
+    // a JS Date. A Date shifts by the session offset and quietly returns nothing.
+    const rows = await prisma.$queryRaw<{ project_id: number; bucket: Date; count: bigint }[]>`
+        SELECT "project_id", date_trunc(${w.unit}, "created_at") AS bucket, COUNT(*) AS count
+        FROM "events"
+        WHERE "project_id" IN (${Prisma.join(projectIds)})
+          AND "created_at" >= ${w.since.toISOString()}::timestamp
+        GROUP BY 1, 2
+        ORDER BY 1, 2
+    `;
+
+    const byProject = new Map<number, Map<number, number>>();
+    for (const r of rows) {
+        const counts = byProject.get(r.project_id) ?? new Map<number, number>();
+        counts.set(new Date(r.bucket).getTime(), Number(r.count));
+        byProject.set(r.project_id, counts);
+    }
+
+    // Built from `projectIds`, not from the returned rows — a project with zero
+    // events in the window still gets a full, gap-filled series of zeroes.
+    for (const id of projectIds) {
+        out.set(id, fillFrom(byProject.get(id) ?? new Map(), w));
+    }
+    return out;
 }
 
 export interface ReleaseMarker {

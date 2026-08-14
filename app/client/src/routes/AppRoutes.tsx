@@ -21,7 +21,7 @@ import ProjectMembers from '@/pages/ProjectMembers';
 import InviteAccept from '@/pages/InviteAccept';
 import DesignSystem from '@/pages/DesignSystem';
 import Docs from '@/pages/Docs';
-import AppLayout from '@/layouts/AppLayout';
+import AppLayout from '@/components/layout/AppLayout';
 import ProtectedRoute from '@/routes/ProtectedRoute';
 
 /**

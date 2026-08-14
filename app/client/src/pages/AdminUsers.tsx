@@ -2,6 +2,7 @@ import type { FC } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FiAlertTriangle, FiSearch, FiUsers } from 'react-icons/fi';
 import {
+    PageHeader,
     AccentButton,
     Badge,
     ConfirmDialog,
@@ -13,7 +14,6 @@ import {
     Surface,
     type Column,
 } from '@/components/design-system';
-import { PageHeader } from '@/components/common/layout';
 import AdminRefusal from '@/components/common/AdminRefusal';
 import { useAuth } from '@/context/auth-context';
 import { useToast } from '@/context/toast-context';

@@ -8,7 +8,7 @@
 
 import { getAuthToken } from '@/api/config';
 import { fetchWithAuth } from '@/api/client';
-import type { Note } from '@/components/ui/note/utils/noteTypes';
+import type { Note } from '@/types/notes';
 import { isMockEnabled, isNetworkFailure, readOnlyOfflineMessage } from '@/utils/offlineMock';
 import { mockNotes } from '@/utils/mockData';
 
@@ -143,7 +143,8 @@ interface UpdateNoteParams {
     checklistItems?: { text: string; checked: boolean }[];
     quote?: { text: string; author: string };
     tags?: string[];
-    color?: string;
+    /** Explicit `null` clears the colour back to the default; omit to leave it. */
+    color?: string | null;
     isPinned?: boolean;
     /** Explicit `null` clears the schedule; omit the key to leave it untouched. */
     scheduledFor?: string | null;

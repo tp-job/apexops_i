@@ -2,8 +2,8 @@ import type { FC } from 'react';
 import { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
-import Sidebar from '@/components/layouts/Sidebar';
-import Topbar from '@/components/layouts/Topbar';
+import Sidebar from '@/components/layout/Sidebar';
+import Topbar from '@/components/layout/Topbar';
 import { DUR, EASE_LUX } from '@/lib/motion';
 
 /**

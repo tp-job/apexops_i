@@ -1,4 +1,5 @@
 import type { FC } from 'react';
+import { useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
 import {
@@ -10,6 +11,7 @@ import {
     FiZap,
 } from 'react-icons/fi';
 import {
+    PageHeader,
     AccentButton,
     DataTable,
     EmptyState,
@@ -19,7 +21,9 @@ import {
     Surface,
     type Column,
 } from '@/components/design-system';
-import { PageHeader } from '@/components/common/layout';
+import ProjectHeatmap from '@/components/charts/ProjectHeatmap';
+import RankedBarChart from '@/components/charts/RankedBarChart';
+import Sparkline from '@/components/charts/Sparkline';
 import { useRollup } from '@/hooks/useOverview';
 import { formatNumber, relativeTime } from '@/utils/format';
 import { fadeUp, stagger } from '@/lib/motion';
@@ -49,6 +53,20 @@ const RANGES = [
 const Dashboard: FC = () => {
     const { rollup, loading, error, range, setRange } = useRollup();
     const navigate = useNavigate();
+
+    /**
+     * Re-sorted by volume rather than reusing the table's order. The table ranks by
+     * *attention needed* (regressions first), which is a different question — a
+     * bar chart carrying that order would draw bars whose lengths disagree with
+     * their own sequence, which reads as a rendering bug.
+     */
+    const volumeBars = useMemo(
+        () =>
+            (rollup?.projects ?? [])
+                .map((p) => ({ id: p.id, label: p.name, value: p.events }))
+                .sort((a, b) => b.value - a.value),
+        [rollup]
+    );
 
     const columns: Column<RollupProject>[] = [
         {
@@ -108,6 +126,16 @@ const Dashboard: FC = () => {
                     {formatNumber(p.events)}
                 </span>
             ),
+        },
+        {
+            key: 'trend',
+            header: 'Trend',
+            className: 'w-24',
+            hideOnMobile: true,
+            // The shape only, with no axis — the `events` column two cells over is
+            // where the number is read. Paired like that it adds direction to a
+            // magnitude; alone it would be an ornament.
+            render: (p) => <Sparkline values={p.series.map((b) => b.count)} />,
         },
         {
             key: 'lastEventAt',
@@ -214,6 +242,52 @@ const Dashboard: FC = () => {
                             event — the snippet is not installed anywhere yet.
                         </p>
                     )}
+
+                    {/*
+                      * Three charts, three different questions — the split matters,
+                      * because the rule this page already sets for its numbers
+                      * ("if it means the same thing on both, one is redundant")
+                      * applies just as much to pictures of them:
+                      *   heatmap   — which project got loud, and *when*
+                      *   bar chart — who is biggest right now, no time involved
+                      *   sparkline — one project's own trajectory, in its row
+                      *
+                      * All three read from the roll-up already in hand. No chart
+                      * gets its own range picker: the control in the page header
+                      * scopes the whole screen, so everything moves together.
+                      */}
+                    <div className="grid gap-4 xl:grid-cols-3">
+                        <motion.div variants={fadeUp} initial="hidden" animate="show" className="xl:col-span-2">
+                            <Surface variant="panel" padding="md" className="flex h-full flex-col gap-4">
+                                <div>
+                                    <h2 className="font-heading text-base font-bold text-brand-dark dark:text-white">
+                                        Event volume by project
+                                    </h2>
+                                    <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                                        Shaded against the busiest {range === '24h' ? 'hour' : 'day'} across
+                                        every project — two rows darkening in the same column usually means
+                                        one shared cause.
+                                    </p>
+                                </div>
+                                <ProjectHeatmap projects={rollup.projects} range={range} />
+                            </Surface>
+                        </motion.div>
+
+                        <motion.div variants={fadeUp} initial="hidden" animate="show">
+                            <Surface variant="panel" padding="md" className="flex h-full flex-col gap-4">
+                                <div>
+                                    <h2 className="font-heading text-base font-bold text-brand-dark dark:text-white">
+                                        Busiest projects
+                                    </h2>
+                                    <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                                        Total events in the selected range. Volume is not severity — a loud
+                                        project is not necessarily the broken one.
+                                    </p>
+                                </div>
+                                <RankedBarChart bars={volumeBars} unitLabel="events" />
+                            </Surface>
+                        </motion.div>
+                    </div>
 
                     <Surface variant="panel" padding="md" className="flex flex-col gap-4">
                         <div>

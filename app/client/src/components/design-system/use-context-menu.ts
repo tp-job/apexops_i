@@ -35,7 +35,24 @@ export function useContextMenu<T>(): ContextMenuState<T> {
         // inside a list would otherwise open the card menu and then immediately
         // replace it with the list's own.
         event.stopPropagation();
-        setPosition({ x: event.clientX, y: event.clientY });
+
+        /**
+         * Not every `contextmenu` event comes from a cursor.
+         *
+         * Shift+F10 and the Menu key fire a real `contextmenu` event on the focused
+         * element, which is the only way a keyboard user reaches a right-click menu
+         * at all. Several browsers report `0,0` for those, and taken literally that
+         * pins the menu to the top-left corner of the viewport, nowhere near the
+         * thing it acts on. Falling back to the element's own box puts it where a
+         * mouse user would have seen it.
+         */
+        const fromKeyboard = event.clientX === 0 && event.clientY === 0;
+        if (fromKeyboard && event.currentTarget instanceof HTMLElement) {
+            const rect = event.currentTarget.getBoundingClientRect();
+            setPosition({ x: rect.left, y: rect.bottom + 4 });
+        } else {
+            setPosition({ x: event.clientX, y: event.clientY });
+        }
         setTarget(next);
     }, []);
 
