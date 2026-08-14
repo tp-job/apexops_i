@@ -105,7 +105,14 @@ model Note {
   id             Int      @id @default(autoincrement())
   userId         Int?     @map("user_id")
   title          String
+  /// The note's text, **always plain**. Rich notes keep their formatting in
+  /// `contentRich` and project a plain rendering here, because four readers
+  /// (calendar previews, note cards, search) treat this column as text — storing
+  /// markup would leak tags into search results and card previews.
   content        String?
+  /// A ProseMirror/TipTap document. Null for every note written as plain text,
+  /// which is what makes this additive: readers that ignore it see no change.
+  contentRich    Json?    @map("content_rich")
   type           String?  @default("text")
   isPinned       Boolean  @default(false) @map("is_pinned")
   color          String?

@@ -1,4 +1,5 @@
 import express, { Request, Response } from 'express';
+import { Prisma } from '@prisma/client';
 import prisma from '../lib/prisma';
 import { authenticate } from '../middleware/auth';
 import { validate } from '../middleware/validate';
@@ -12,6 +13,8 @@ const formatNote = (n: any) => ({
     userId: n.userId,
     title: n.title,
     content: n.content,
+    /** Null for a plain-text note; readers fall back to `content`. */
+    contentRich: n.contentRich ?? null,
     type: n.type,
     isPinned: n.isPinned,
     color: n.color,
@@ -38,6 +41,15 @@ const parseNoteId = (raw: string | string[] | undefined): number | null => {
 
 /** Optional date fields arrive as ISO strings or explicit null; both are meaningful. */
 const toDateOrNull = (v: unknown): Date | null => (typeof v === 'string' ? new Date(v) : null);
+
+/**
+ * Coerces a nullable `Json` column's value for Prisma.
+ *
+ * On a `Json?` field a bare `null` is ambiguous — Prisma cannot tell "store the
+ * JSON value null" from "store SQL NULL" — and rejects it. `DbNull` is the one
+ * that means "this note has no rich document", which is what clearing it is.
+ */
+const toJsonOrDbNull = (v: unknown) => (v === null ? Prisma.DbNull : (v as Prisma.InputJsonValue));
 
 // ── GET / ────────────────────────────────────────────────────
 router.get('/', authenticate, async (req: Request, res: Response): Promise<void> => {
@@ -209,11 +221,12 @@ router.get('/:id', authenticate, async (req: Request, res: Response): Promise<vo
 // ── POST / ───────────────────────────────────────────────────
 router.post('/', authenticate, validate(createNoteSchema), async (req: Request, res: Response): Promise<void> => {
     try {
-        const { title, content, type, isPinned, color, tags, imageUrl, linkUrl, checklistItems, quote, scheduledFor, dueDate } = req.body;
+        const { title, content, contentRich, type, isPinned, color, tags, imageUrl, linkUrl, checklistItems, quote, scheduledFor, dueDate } = req.body;
 
         const note = await prisma.note.create({
             data: {
                 userId: req.user!.id, title, content, type,
+                ...(contentRich !== undefined && { contentRich: toJsonOrDbNull(contentRich) }),
                 isPinned, color: color || null, tags,
                 imageUrl: imageUrl || null, linkUrl: linkUrl || null,
                 checklistItems, quote,
@@ -239,6 +252,8 @@ const updateNoteHandler = async (req: Request, res: Response): Promise<void> => 
         for (const f of fields) {
             if (req.body[f] !== undefined) data[f] = req.body[f];
         }
+        // Nullable Json can't ride along above — a bare `null` is ambiguous to Prisma.
+        if (req.body.contentRich !== undefined) data.contentRich = toJsonOrDbNull(req.body.contentRich);
         // Date fields need coercion, and an explicit `null` means "unschedule" —
         // so they can't ride along in the loop above.
         for (const f of ['scheduledFor', 'dueDate'] as const) {

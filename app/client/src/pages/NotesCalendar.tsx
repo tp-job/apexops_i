@@ -255,7 +255,15 @@ const EditNoteDialog: FC<{
                 <Field label="Title" id="edit-note-title">
                     <Input value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
                 </Field>
-                <Field label="Content" hint="Title or content — one of them is required." id="edit-note-content">
+                <Field
+                    label="Content"
+                    hint={
+                        note?.contentRich
+                            ? 'This note was written with formatting. Saving here keeps the text and drops the formatting.'
+                            : 'Title or content — one of them is required.'
+                    }
+                    id="edit-note-content"
+                >
                     <Textarea rows={6} value={content} onChange={(e) => setContent(e.target.value)} />
                 </Field>
                 <Field label="Categories" hint="Comma separated. These are the tags you can filter by." id="edit-note-tags">
@@ -827,7 +835,13 @@ const NotesCalendar: FC = () => {
                 onSave={(patch) => {
                     const target = editing;
                     if (!target) return;
-                    run(() => updateNote(target.id, patch), 'Could not save that note.').then(() =>
+                    // This dialog edits plain text. On a note that carries a rich
+                    // document, saving here has to *drop* it — leaving it would make
+                    // `content` and `contentRich` disagree, and the editor on
+                    // `/daily` would keep showing text this dialog just replaced.
+                    // The dialog warns before it comes to this.
+                    const withRich = target.contentRich ? { ...patch, contentRich: null } : patch;
+                    run(() => updateNote(target.id, withRich), 'Could not save that note.').then(() =>
                         setEditing(null),
                     );
                 }}

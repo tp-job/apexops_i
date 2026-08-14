@@ -1,5 +1,5 @@
 import type { FC } from 'react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import dayjs from 'dayjs';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -26,7 +26,8 @@ import {
     SegmentedControl,
     Surface,
 } from '@/components/design-system';
-import { useDailyTodos } from '@/hooks/useDailyTodos';
+import type { JSONContent } from '@tiptap/react';
+import { useDailyTodos, type SaveState } from '@/hooks/useDailyTodos';
 import {
     addTodo,
     clearCompleted,
@@ -59,6 +60,12 @@ import { fadeUp, stagger } from '@/lib/motion';
  * - **Reordering is buttons, not drag.** Move up/down works from the keyboard
  *   and on touch, and costs no dependency. Drag can be added over it later.
  */
+
+/**
+ * The editor is ~300 kB of ProseMirror and it lives on exactly one route, so it
+ * is split out — otherwise every page in the app pays for it at first load.
+ */
+const RichTextEditor = lazy(() => import('@/components/editor/RichTextEditor'));
 
 const FILTERS = [
     { value: 'all', label: 'All' },
@@ -199,21 +206,37 @@ const Lane: FC<{
     </Surface>
 );
 
+// ── Save state ────────────────────────────────────────────────
+
+/**
+ * What the document's save actually did.
+ *
+ * The mockup this page follows offers "Save as draft" and "Publish changes";
+ * neither exists here, because a daily note has no draft state and autosave
+ * makes an explicit save button a lie either way — it would already be saved
+ * before it was pressed. What the user actually needs to know is whether their
+ * words are on the server, so that is what this says. `dirty` is never dressed
+ * up as saved.
+ */
+const SaveStatus: FC<{ state: SaveState; savedAt: number | null }> = ({ state, savedAt }) => {
+    if (state === 'saving') return <>Saving…</>;
+    if (state === 'dirty') return <>Unsaved changes</>;
+    if (state === 'error') return <span className="text-global-red">Not saved</span>;
+    if (state === 'saved' && savedAt) return <>Saved {dayjs(savedAt).format('HH:mm')}</>;
+    return null;
+};
+
 // ── Page ──────────────────────────────────────────────────────
 
 const DailyNote: FC = () => {
     const [dayKey, setDayKey] = useState<string>(() => todayKey());
     const [filter, setFilter] = useState<TodoFilter>('all');
     const [draft, setDraft] = useState('');
-    const [focus, setFocus] = useState('');
 
     const {
-        note, todos, body, progress, loading, saving, error, notice, dismissNotice, refetch, commitTodos, saveBody,
+        note, todos, body, richDoc, progress, loading, saving, error, notice, dismissNotice, refetch,
+        commitTodos, queueDocument, flushDocument, saveState, savedAt,
     } = useDailyTodos(dayKey);
-
-    // `body` is owned by the hook and replaced whenever the day changes; the local
-    // copy is what the user is typing into right now.
-    useEffect(() => setFocus(body), [body]);
 
     const addRef = useRef<HTMLInputElement>(null);
     const day = useMemo(() => dayjs(dayKey), [dayKey]);
@@ -323,16 +346,45 @@ const DailyNote: FC = () => {
                     {/* Knob off on purpose: it glows, and this view's one accent
                         belongs to the Add button. */}
                     <Meter value={progress.percent} knob={false} height={8} />
+                </div>
+            </Surface>
 
-                    <Input
-                        value={focus}
-                        onChange={(e) => setFocus(e.target.value)}
-                        onBlur={() => saveBody(focus)}
-                        onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
-                        disabled={busy}
-                        placeholder="What is this day about? (saved when you click away)"
-                        aria-label="Note for the day"
+            {/* ── The day's document ── */}
+            <Surface variant="panel" radius="3xl" padding="lg">
+                <div className="flex flex-col gap-4">
+                    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                        <h2 className="text-base font-bold font-heading text-brand-dark dark:text-white">Day note</h2>
+                        <p className="text-xs text-gray-400 dark:text-gray-500">
+                            Written up for {day.format('D MMM')}. Saves itself as you type.
+                        </p>
+                        <span className="ml-auto text-xs font-medium text-gray-400 dark:text-gray-500">
+                            <SaveStatus state={saveState} savedAt={savedAt} />
+                        </span>
+                    </div>
+
+                    <Suspense
+                        fallback={<div className="h-64 animate-pulse rounded-2xl bg-black/5 dark:bg-white/5" aria-hidden />}
+                    >
+                    <RichTextEditor
+                        // Remounting per day is deliberate: a document editor holds
+                        // undo history and a selection, and carrying Monday's undo
+                        // stack into Tuesday would let Ctrl-Z paste Monday's text
+                        // into Tuesday's note.
+                        key={dayKey}
+                        doc={(richDoc as JSONContent | null) ?? null}
+                        plainFallback={body}
+                        // `readOnly`, **not** `busy`. `busy` includes `saving`,
+                        // and the whole point of autosave is that a save in
+                        // flight is invisible — disabling the editor mid-save
+                        // dropped focus and the selection every 1.5 seconds, so
+                        // no toolbar control could ever be applied. Only a day
+                        // that failed to load makes this read-only.
+                        editable={!readOnly}
+                        placeholder="What is this day about?"
+                        onChange={queueDocument}
+                        onBlur={() => { void flushDocument(); }}
                     />
+                    </Suspense>
                 </div>
             </Surface>
 
