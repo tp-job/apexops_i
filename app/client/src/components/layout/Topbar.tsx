@@ -1,5 +1,5 @@
-import type { FC } from 'react';
-import { FiLogOut, FiMenu, FiMoon, FiSun } from 'react-icons/fi';
+import type { FC, RefObject } from 'react';
+import { FiCpu, FiLogOut, FiMenu, FiMoon, FiSun } from 'react-icons/fi';
 import { useAuth } from '@/context/auth-context';
 import { useThemeControl } from '@/hooks/useThemeControl';
 import { Badge } from '@/components/design-system';
@@ -15,7 +15,15 @@ import NotificationBell from './NotificationBell';
  * The bell is here precisely because it now is real: it reads the notification
  * feed, which regressions actually write to.
  */
-const Topbar: FC<{ onOpenNav: () => void }> = ({ onOpenNav }) => {
+interface TopbarProps {
+    onOpenNav: () => void;
+    assistantOpen: boolean;
+    onToggleAssistant: () => void;
+    /** Owned by `AppLayout` so it can return focus here when the panel closes. */
+    assistantTriggerRef?: RefObject<HTMLButtonElement | null>;
+}
+
+const Topbar: FC<TopbarProps> = ({ onOpenNav, assistantOpen, onToggleAssistant, assistantTriggerRef }) => {
     const { user, logout } = useAuth();
     // `useThemeControl`, not `useTheme`: the top bar is rendered on every
     // authenticated page, so this is also where the account's stored theme gets
@@ -40,6 +48,29 @@ const Topbar: FC<{ onOpenNav: () => void }> = ({ onOpenNav }) => {
             <ProjectSwitcher />
 
             <div className="ml-auto flex items-center gap-2">
+                {/*
+                  * Assistant trigger. Leads the right-hand cluster because it opens a
+                  * workspace surface, where the controls after it act on the current
+                  * session. The active fill is `Sidebar`'s active-nav treatment
+                  * reused, so "this thing is open" reads the same in both rails.
+                  */}
+                <button
+                    ref={assistantTriggerRef}
+                    type="button"
+                    onClick={onToggleAssistant}
+                    aria-label={assistantOpen ? 'Close AI assistant' : 'Open AI assistant'}
+                    aria-expanded={assistantOpen}
+                    aria-controls="assistant-panel"
+                    className={[
+                        'grid h-9 w-9 place-items-center rounded-xl transition-colors',
+                        assistantOpen
+                            ? 'bg-brand-accent text-brand-dark'
+                            : 'text-gray-600 hover:bg-black/5 dark:text-gray-300 dark:hover:bg-white/10',
+                    ].join(' ')}
+                >
+                    <FiCpu size={17} />
+                </button>
+
                 <NotificationBell />
 
                 <button
