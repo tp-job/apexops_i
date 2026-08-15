@@ -49,8 +49,51 @@ model User {
   issueStatusChanges IssueStatusChange[]
   notifications      Notification[]
   editedDocPages     DocPage[]           @relation("docPageEditor")
+  aiKey              UserAiKey?
 
   @@map("users")
+}
+
+// ── BYOK provider key ────────────────────────────────────────
+/// One user's own AI provider API key, encrypted at rest (sprint 11, F003).
+///
+/// **`ciphertext` must never be selected into a response.** The only shape that
+/// may leave the server is `maskedKey`; `app/server/src/api/ai-key.ts` names its
+/// columns explicitly for that reason, and `lib/crypto.ts` is the only module
+/// that turns this back into a usable key.
+///
+/// The key is reversible on purpose — we have to *send* it to the provider, not
+/// merely check it — so the protection this offers is precisely "a database dump
+/// alone is not enough", and it depends on `AI_KEY_SECRET` living somewhere the
+/// database is not.
+model UserAiKey {
+  id     Int    @id @default(autoincrement())
+  /// Unique, not just indexed: one key per user is the whole data model, and a
+  /// second row would make "which key do we spend?" a coin flip.
+  userId Int    @unique @map("user_id")
+  /// Constrained to 'gemini' in v1. The column exists now so adding a provider
+  /// later is not a migration; the abstraction deliberately does not.
+  provider String @default("gemini")
+
+  /// AES-256-GCM. All three are base64 — never hex; see lib/crypto.ts.
+  ciphertext String
+  iv         String
+  authTag    String @map("auth_tag")
+
+  /// First four and last four characters only. Safe to return.
+  maskedKey  String    @map("masked_key")
+  /// Set when the provider accepted the key at save time. Null means stored but
+  /// never proven — which should be impossible via the API, since the probe runs
+  /// before the write.
+  verifiedAt DateTime? @map("verified_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
+
+  /// Cascade: a deleted account must not leave a decryptable credential behind.
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_ai_keys")
 }
 
 // ── User Settings ────────────────────────────────────────────

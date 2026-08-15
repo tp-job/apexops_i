@@ -1,0 +1,315 @@
+{
+  "project": {
+    "name": "ApexOps — AI Assistant (BYOK)",
+    "description": "Surface the already-hardened POST /api/ai/chat as a collapsible right-hand assistant panel, and let each user spend their own provider API key, stored encrypted at rest and never returned to the client.",
+    "stack": "React 19 + TypeScript + Vite + Tailwind v4 + motion/react | Express + Prisma + Postgres | Node crypto AES-256-GCM | Google Generative Language API (gemini-2.5-flash)",
+    "branch": "sprint-11/ai-assistant-byok",
+    "spec": ".agents/harness/sprint-11-ai-assistant-byok/build-spec.md",
+    "created_at": "2026-08-15",
+    "last_updated": "2026-08-15"
+  },
+  "features": [
+    {
+      "id": "F001",
+      "category": "core",
+      "priority": "critical",
+      "description": "Envelope encryption primitives exist and are correct (lib/crypto.ts)",
+      "steps": [
+        "encrypt(plain) returns { ciphertext, iv, authTag }; decrypt of that triple returns the exact original string",
+        "Two encrypt() calls on identical input produce different ciphertext and different iv (fresh 12-byte IV per write)",
+        "FAILURE CASE: flipping one character of authTag makes decrypt throw, not return garbage",
+        "FAILURE CASE: AI_KEY_SECRET unset or not 32 bytes makes the module throw at call time with a named error, and there is no code path that stores plaintext instead",
+        "mask('AIzaSyABCD...WXYZ4f2c') returns first-4 + elision + last-4 and never the middle",
+        "npm test -- crypto is green, and the tamper case genuinely fails when the assertion is inverted"
+      ],
+      "depends_on": [],
+      "passes": true,
+      "notes": "VERIFIED 2026-08-15. 18 tests green; full server suite 91 green; tsc --noEmit clean. Tamper case observed FAILING when inverted to .not.toThrow(), then restored — the assertion is load-bearing, not decorative. Derivation is scryptSync over a constant salt (documented: the input is a high-entropy server secret, not a password) and is cached against the secret so rotation re-derives. Base64 chosen for all three parts and asserted, because Node's Buffer default is hex."
+    },
+    {
+      "id": "F002",
+      "category": "security",
+      "priority": "critical",
+      "description": "AI_KEY_SECRET is documented, distinct from JWT_SECRET, and absent from tracked source",
+      "steps": [
+        ".env.example gains AI_KEY_SECRET with a generation command and a comment saying it must differ from JWT_SECRET",
+        "Secret scan over the tracked tree returns clean; no key material in any harness file or commit",
+        "Server refuses to start OR key endpoints answer 503 when AI_KEY_SECRET is missing — chosen behaviour documented, not accidental",
+        "FAILURE CASE: setting AI_KEY_SECRET equal to JWT_SECRET produces a startup warning"
+      ],
+      "depends_on": ["F001"],
+      "passes": true,
+      "notes": "VERIFIED 2026-08-15. .env.example documents AI_KEY_SECRET with a randomBytes(32) generation command and the rotation consequence. .env is gitignored (.gitignore:22). Secret scan over the new files is clean. Behaviour chosen and documented: production THROWS on missing / <32 chars / equal-to-JWT_SECRET (all three observed throwing under NODE_ENV=production); dev warns and uses an obvious non-random fallback, matching lib/jwtSecrets.ts. The shared-secret warning was observed in dev. Crucially the dev fallback still ENCRYPTS — there is no plaintext path."
+    },
+    {
+      "id": "F003",
+      "category": "core",
+      "priority": "critical",
+      "description": "UserAiKey model migrated; User back-relation in place",
+      "steps": [
+        "Dev server on :3000 stopped before prisma generate (Windows EPERM), then generate + schema apply both succeed",
+        "user_ai_keys table exists with unique user_id, and columns ciphertext, iv, auth_tag, masked_key, verified_at, provider",
+        "Deleting a user cascades the key row away (onDelete: Cascade)",
+        "FAILURE CASE: inserting a second row for the same user_id violates the unique constraint",
+        "npm run typecheck is green at the server workspace"
+      ],
+      "depends_on": ["F001"],
+      "passes": true,
+      "notes": "VERIFIED 2026-08-15. IMPORTANT CORRECTION TO THE SPEC: this repo has NO database/prisma/migrations/ directory — it has never used `prisma migrate`, and the prior sprint (daily-note-rich-editor.md:162) applied schema changes with `prisma db push`. Running `prisma migrate dev` as the spec originally said would have made Prisma treat the populated database as drifted and offer to RESET it. Applied with `db push` instead, after previewing the exact SQL via `prisma migrate diff --script`: purely additive — one CREATE TABLE, one unique index, one cascade FK, zero DROP or ALTER of existing tables. Verified against the live database: all 10 columns present with correct types and verified_at nullable; unique index user_ai_keys_user_id_key exists; FAILURE CASE observed — a second row for the same user_id is rejected with Prisma P2002; cascade confirmed by deleting a user and counting 0 remaining key rows. Both behavioural checks ran inside transactions that were rolled back, and a residue count afterwards confirmed 0 stray rows and 0 stray users. Server stopped before generate (no EPERM) and restarted; tsc --noEmit clean, 91 server tests green, /api/health reports database connected."
+    },
+    {
+      "id": "F004",
+      "category": "security",
+      "priority": "critical",
+      "description": "PUT /api/ai/key validates against the provider before writing anything",
+      "steps": [
+        "A structurally invalid key is rejected on shape alone, before any network call is made",
+        "A well-shaped but wrong key is rejected by the list-models probe with 400 INVALID_KEY",
+        "FAILURE CASE: after a rejected save, SELECT count(*) FROM user_ai_keys is unchanged — the write happens only after the probe passes",
+        "The probe uses list-models, not generateContent, so validation spends no tokens",
+        "A valid key returns { provider, maskedKey, verifiedAt } and the row now holds ciphertext, not the key",
+        "Unauthenticated PUT answers 401"
+      ],
+      "depends_on": ["F001", "F003"],
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "F005",
+      "category": "security",
+      "priority": "critical",
+      "description": "GET and DELETE /api/ai/key are scoped to the caller and leak nothing",
+      "steps": [
+        "GET returns the masked form only; the handler's Prisma select does not name ciphertext at all",
+        "GET with no stored key returns null (200), not 404 — absence is a normal state",
+        "DELETE removes the row; a second DELETE is idempotent and still 200/204",
+        "FAILURE CASE: user A's token cannot read or delete user B's key — no route accepts a userId parameter",
+        "No admin route exists anywhere that reads another user's key",
+        "Unauthenticated GET/DELETE answer 401"
+      ],
+      "depends_on": ["F004"],
+      "passes": false,
+      "notes": "REQ-S5. The absence of an admin path is a feature, not an omission."
+    },
+    {
+      "id": "F006",
+      "category": "security",
+      "priority": "critical",
+      "description": "Plaintext key material never appears in any response, log, or error across a full lifecycle",
+      "steps": [
+        "Run save -> GET -> send a message -> trigger a provider error -> delete, capturing all server stdout/stderr and all HTTP response bodies",
+        "grep the captured output for the full key string: zero hits",
+        "grep for the key's middle segment (defeats naive masking): zero hits",
+        "FAILURE CASE: force a fetch failure whose err.message embeds the request URL (which carries ?key=), and confirm the handler logs it but returns none of it",
+        "Browser devtools network tab over the same lifecycle shows no plaintext key in any response body",
+        "No key material is written to localStorage, sessionStorage, or IndexedDB"
+      ],
+      "depends_on": ["F004", "F005", "F008"],
+      "passes": false,
+      "notes": "This is acceptance criterion 2 and US-10. It is a gate, not a note. ai.ts:153-157 already warns that fetch error messages carry the key in the URL."
+    },
+    {
+      "id": "F007",
+      "category": "core",
+      "priority": "critical",
+      "description": "resolveKey() implements BYOK -> env -> NO_KEY without weakening the existing caps",
+      "steps": [
+        "With a stored key, the outbound call uses it (verify by storing a key valid for a different project and observing the attribution or the distinct error)",
+        "With no stored key and GEMINI_API_KEY set, the request still succeeds — existing behaviour preserved",
+        "With neither, the response is 503 with code NO_KEY, distinguishable from the generic unconfigured 503",
+        "FAILURE CASE: a row whose authTag has been corrupted falls through to the env key rather than erroring, and logs only the user id",
+        "CRITICAL ORDERING: an 8001-character prompt returns 400 and produces NO outbound request (confirm by network capture or provider-side counter) — resolveKey must not run before validateChatBody",
+        "The decrypted key is not cached in a module variable between requests"
+      ],
+      "depends_on": ["F001", "F003"],
+      "passes": false,
+      "notes": "The ordering step is the one that matters. ai.ts's whole design is that every refusal precedes the spend."
+    },
+    {
+      "id": "F008",
+      "category": "core",
+      "priority": "high",
+      "description": "Typed error codes on /api/ai/* without breaking the existing response shape",
+      "steps": [
+        "Responses carry { error, code } where code is one of NO_KEY | INVALID_KEY | RATE_LIMITED | PROVIDER_ERROR | EMPTY_RESPONSE",
+        "The pre-existing { error } key is still present and unchanged, so nothing reading it breaks",
+        "429 from aiChatLimiter carries RATE_LIMITED and a retry-after value the client can render",
+        "FAILURE CASE: an unmapped provider failure still returns a 502 with PROVIDER_ERROR rather than an undefined code",
+        "Provider-supplied text appears in none of the five bodies"
+      ],
+      "depends_on": ["F007"],
+      "passes": false,
+      "notes": "Data-mapping trap: the existing route returns { error } with no code. Additive only."
+    },
+    {
+      "id": "F009",
+      "category": "functional",
+      "priority": "high",
+      "description": "Client data layer sends, trims, and maps errors — verified before any UI exists",
+      "steps": [
+        "services/assistant.ts goes through fetchWithAuth, so the 401 refresh-and-replay is inherited rather than reimplemented",
+        "useAssistant trims history to the newest 20 before sending, so the server's 400 is a backstop and not the normal path",
+        "role is mapped user->user and assistant->model on the way out, and model->assistant on the way back (Gemini says 'model', not 'assistant')",
+        "verifiedAt is parsed from an ISO string into a Date at the client edge, not passed around as a string typed as Date",
+        "FAILURE CASE: each of the five server codes produces a distinct discriminated error value, exercised from a scratch harness with no UI mounted",
+        "FAILURE CASE: a missing candidates[0].content.parts[0].text does not throw — every level of that path is optional"
+      ],
+      "depends_on": ["F008"],
+      "passes": false,
+      "notes": "Verified headless on purpose. A data layer proven only through finished UI has been proven twice and understood once."
+    },
+    {
+      "id": "F010",
+      "category": "ui",
+      "priority": "critical",
+      "description": "AssistantPanel mounts as a right-hand slot without disturbing existing pages",
+      "steps": [
+        "AppLayout's main becomes a flex row; Outlet keeps min-w-0",
+        "At >=1280px the panel is an inline column and page content reflows rather than overflowing",
+        "Below 1280px it is an overlay drawer with a scrim, reusing the existing mobile-nav motion vocabulary",
+        "FAILURE CASE: open the panel on Bug Tracker and Projects (DataTable, GanttTrack) — no horizontal page scroll appears at 1280 or 1440",
+        "Toggling the panel does not remount or reset the routed page's state",
+        "Collapsed/expanded persists in localStorage across reload and across a route change"
+      ],
+      "depends_on": [],
+      "passes": true,
+      "notes": "VERIFIED 2026-08-15 by DOM measurement in the browser pane (screenshots and synthetic clicks do not work on this machine; driven via javascript_tool). Measured at 1280: panel 380px, main 1014->634, hScroll false. Bug Tracker, Projects, Notes, Daily, Dashboard all overflowBy 0. Fresh load at 1024 mounts the DRAWER variant with ds-elev-3 and a scrim, main full width 758. Esc closes and focus returns to the trigger (document.activeElement === trigger). Open state survived a real page reload. Remount probe: a stamped node inside <main> kept the SAME node identity across close+reopen, so the routed page reflows rather than rebuilds. Tokens resolve to Luxe (#ffffff / #222222 surface, #C5F43A active trigger) and zero shadcn neutral utilities appear in the subtree. DEFECT FOUND AND FIXED during verification: xl:block/xl:hidden mounted BOTH variants, putting two elements with id='assistant-panel' in the document and making aria-controls ambiguous; replaced with a matchMedia decision (hooks/useMediaQuery.ts) so exactly one exists — measured 2 before, 1 after. GAP: the live resize swap could not be verified here — the CDP viewport override fires neither 'resize' nor matchMedia 'change' (probe counted 0 of each while matchMedia itself flipped), so the listener path is unproven in a real browser. Mount decision itself is verified at both widths via fresh loads. Re-check on a real resize before Stage 4."
+    },
+    {
+      "id": "F011",
+      "category": "ui",
+      "priority": "critical",
+      "description": "Conversation renders: user bubble, bare assistant text, thinking indicator",
+      "steps": [
+        "A full exchange renders with the user message tinted and right-aligned, the assistant message bare and left-aligned",
+        "The thinking indicator appears while a request is in flight and is removed on both success and failure",
+        "The composer is disabled in flight, so two concurrent sends are impossible",
+        "The list scrolls to the newest message on append without yanking the page behind it",
+        "FAILURE CASE: an empty thread shows the EmptyState, not a blank box",
+        "Markdown renders to React nodes — a fenced code block renders as a code block, and grep for dangerouslySetInnerHTML under components/assistant returns zero hits"
+      ],
+      "depends_on": ["F009", "F010"],
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "F012",
+      "category": "ui",
+      "priority": "high",
+      "description": "KeyDialog saves, masks, and deletes a key from the UI",
+      "steps": [
+        "Dialog opens on DS Modal so Radix owns focus management",
+        "The key field is type=password and is cleared from component state immediately after a successful save",
+        "After save the masked form and verifiedAt are shown; the plaintext is not recoverable from the UI",
+        "Delete is gated behind ConfirmDialog, per the design-system rule for destructive actions",
+        "FAILURE CASE: saving a bad key shows INVALID_KEY inline and leaves the dialog open with the field intact",
+        "A NO_KEY response anywhere renders KeyMissingNotice with a CTA that opens this dialog, rather than a red error"
+      ],
+      "depends_on": ["F005", "F011"],
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "F013",
+      "category": "a11y",
+      "priority": "high",
+      "description": "Panel is keyboard-complete and announces correctly",
+      "steps": [
+        "Esc closes the panel and returns focus to the toggle that opened it",
+        "The toggle carries aria-expanded and aria-controls pointing at the panel",
+        "The message list is role=log aria-live=polite; a new assistant reply is announced once, not twice",
+        "Tab order runs header -> list -> composer with no traps outside the modal",
+        "FAILURE CASE: with prefers-reduced-motion: reduce, the thinking indicator and the panel transition stop animating",
+        "Focus is visible on every interactive element in both themes"
+      ],
+      "depends_on": ["F011", "F012"],
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "F014",
+      "category": "ui",
+      "priority": "high",
+      "description": "Design-system compliance: tokens only, no forked styling",
+      "steps": [
+        "grep for hex literals under components/assistant returns zero hits",
+        "All motion values come from @/lib/motion (EASE_LUX, DUR, SPRING); no inline tween literals",
+        "Every new surface is checked in light and dark at 1440, 1280, 768 and 375",
+        "Reused DS primitives are imported from @/components/design-system, never by deep path — the one-door rule",
+        "FAILURE CASE: no new component is added to the design-system barrel (AssistantPanel is layout, not a primitive)",
+        "FAILURE CASE: grep under components/assistant for the shadcn neutral tokens (bg-background, text-foreground, text-muted-foreground, border-border) returns zero hits — this repo has two token systems and only Luxe is correct here",
+        "Panel container matches Sidebar's treatment mirrored (bg-light-surface / dark:bg-dark-surface, border-l, no shadow, no blur at >=1280)",
+        "Lime brand-accent appears on exactly one focal element in the panel — the send button — and NOT on user message bubbles"
+      ],
+      "depends_on": ["F011", "F012"],
+      "passes": false,
+      "notes": "D6 CONFIRMED by the user 2026-08-15: ApexOps Luxe design system, not the reference screenshot's pink palette. Full per-surface token map is build-spec.md section 9."
+    },
+    {
+      "id": "F015",
+      "category": "core",
+      "priority": "critical",
+      "description": "Both workspaces build and test clean",
+      "steps": [
+        "npm run build at app/client is green — tsc --noEmit alone is NOT sufficient, erasableSyntaxOnly errors surface only in the real build",
+        "npm run typecheck is green at both workspaces",
+        "npm test is green at both workspaces",
+        "The CI workflow passes on the branch",
+        "FAILURE CASE: no test was loosened or skipped to reach green — diff the test files and confirm"
+      ],
+      "depends_on": ["F013", "F014"],
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "F016",
+      "category": "functional",
+      "priority": "medium",
+      "description": "Message actions: copy and retry",
+      "steps": [],
+      "depends_on": ["F011"],
+      "passes": false,
+      "notes": "Stub — specify steps before implementing. Empty steps cannot pass. Retry semantics (re-send prior prompt vs. regenerate from same history) is an open question."
+    },
+    {
+      "id": "F017",
+      "category": "ui",
+      "priority": "medium",
+      "description": "Composer character counter and approaching-limit warning",
+      "steps": [],
+      "depends_on": ["F011"],
+      "passes": false,
+      "notes": "Stub. Warn from 7000 toward the 8000 server cap."
+    },
+    {
+      "id": "F018",
+      "category": "functional",
+      "priority": "medium",
+      "description": "New-chat control clears the thread and its sessionStorage entry",
+      "steps": [],
+      "depends_on": ["F011"],
+      "passes": false,
+      "notes": "Stub."
+    },
+    {
+      "id": "F019",
+      "category": "functional",
+      "priority": "low",
+      "description": "Rate-limit and provider-error surfaces render their own affordances",
+      "steps": [],
+      "depends_on": ["F011", "F008"],
+      "passes": false,
+      "notes": "Stub. 429 shows retry-after; PROVIDER_ERROR offers retry."
+    },
+    {
+      "id": "F020",
+      "category": "core",
+      "priority": "medium",
+      "description": "Docs updated: user-flow.md and the feature doc reflect what shipped",
+      "steps": [],
+      "depends_on": ["F015"],
+      "passes": false,
+      "notes": "Stub. Gate 10 in the scope doc's checklist."
+    }
+  ]
+}
