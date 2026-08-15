@@ -105,8 +105,8 @@
         "No key material is written to localStorage, sessionStorage, or IndexedDB"
       ],
       "depends_on": ["F004", "F005", "F008"],
-      "passes": false,
-      "notes": "This is acceptance criterion 2 and US-10. It is a gate, not a note. ai.ts:153-157 already warns that fetch error messages carry the key in the URL."
+      "passes": true,
+      "notes": "VERIFIED 2026-08-15. Full lifecycle run: save -> get -> send (real provider round trip) -> provider error on the user's own key -> rejected save -> delete, capturing all 7 response bodies plus the server's stdout/stderr to a file. Results: full key 0 hits in bodies, 0 in server log; key middle segment 0 and 0; any 'AIza' prefix 0 in the log; 'ciphertext' 0 in bodies. METHOD NOTE THAT MATTERED: the first attempt used preview_logs, whose searches returned 'no match' for the key — but also 'no match' for strings that were definitely logged, so the capture was not live and the negative result proved NOTHING. Re-run against a server started with stdout/stderr redirected to a file, and only trusted after confirming the log DID contain the handler lines ('AI provider rejected credentials: API key not valid...' and '[ai-key] provider rejected a key during validation: 400 INVALID_ARGUMENT') — i.e. the provider's message is logged, the key never is. FAILURE CASE: ai.ts was temporarily repointed at an unreachable host to force the catch block; the response was 502 PROVIDER_ERROR containing no URL and no key, while the log got only the stack trace. ai.ts restored and confirmed by an empty git diff plus a live call returning PONG. CLIENT: localStorage/sessionStorage/IndexedDB/cookies scanned in the browser — zero key material; only 'theme' and 'apexops.assistant.open' present."
     },
     {
       "id": "F007",
@@ -155,8 +155,8 @@
         "FAILURE CASE: a missing candidates[0].content.parts[0].text does not throw — every level of that path is optional"
       ],
       "depends_on": ["F008"],
-      "passes": false,
-      "notes": "Verified headless on purpose. A data layer proven only through finished UI has been proven twice and understood once."
+      "passes": true,
+      "notes": "VERIFIED 2026-08-15 headless — 19 tests in services/assistant.test.ts, no UI mounted; full client suite 115 green; npm run build green. Covers: goes through fetchWithAuth (so the single refresh coordinator in lib/authSession.ts is inherited, not duplicated); assistant->model role mapping on the way out; history trimmed to the newest 20 of 35; all six server codes mapped to distinct discriminated errors; an unrecognised code degraded to UNKNOWN rather than passed through; a thrown fetch reported as NETWORK and never as a server verdict; retryAfter read from RateLimit-Reset; non-JSON error body survived; a 200 with no text surfaced as EMPTY_RESPONSE instead of throwing; verifiedAt parsed from ISO string to Date. TEST-QUALITY DEFECT FOUND AND FIXED: the first draft asserted failures with `await fn().catch(e => expect(...))`, which passes VACUOUSLY when nothing throws — the assertion never runs. Rewritten as `await expect(fn()).rejects.toMatchObject({ detail: { code } })`. Then mutation-checked: role mapping was changed to emit 'assistant' and the trim was removed, and the suite failed exactly those two tests before both were restored. BUILD DEFECT FOUND: `constructor(public readonly detail)` is a TypeScript-only parameter property, banned by this client's erasableSyntaxOnly. `tsc --noEmit` accepted it; `npm run build` rejected it with TS1294. Rewritten as an explicit field."
     },
     {
       "id": "F010",

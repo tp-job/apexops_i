@@ -11,9 +11,10 @@ Written for a reader with zero memory of this build — because that is who read
 ## Current state
 
 - **Status:** Gate 3 open. Inner loop running.
-- **Passing:** 8 / 20 features (F001–F005, F007, F008, F010)
-- **Next:** **F006** (full-lifecycle leak scan — its dependencies F007/F008 are now met), then F009 (client data layer) → F011 (conversation UI).
-- **The entire server half is done and proven end to end.** What remains is the client.
+- **Passing:** 10 / 20 features (F001–F005, F006, F007, F008, F009, F010)
+- **Next:** **F011** (conversation UI) → F012 (KeyDialog) → F013 (a11y) → F014 (token audit) → F015 (build/test gate).
+- **Server half complete and proven. Client data layer complete and proven headless.** What remains is UI only.
+- **Acceptance criterion 2 (no key material anywhere) is verified** — see F006.
 - **DB workflow:** `prisma db push` only. **Never `prisma migrate dev`** — see the F003 note.
 - **Open gap:** F010's live resize swap is unproven — this browser pane fires no `resize`/matchMedia `change` events. Re-check on a real browser resize before Stage 4.
 - **Branch:** `sprint-11/ai-assistant-byok` — **already existed and is checked out**, level with `main` (0 ahead / 0 behind)
@@ -51,6 +52,37 @@ Then, before any Prisma work:
 ---
 
 ## Sessions
+
+### 2026-08-15 — F006 + F009 (leak scan + client data layer)
+
+**Completed**
+- **[F006]** Full-lifecycle leak scan ✅ — **acceptance criterion 2 is now proven**, not asserted.
+- **[F009]** `types/assistant.ts`, `services/assistant.ts`, `hooks/useAssistant.ts` ✅ — 19 headless tests, client suite 115 green, `npm run build` green.
+
+**The methodological lesson of this session: a negative result is worthless until the instrument is proven**
+- The first leak scan used `preview_logs`, which reported "no logs matching AIzaSy". It also reported no match for strings that were **definitely** logged — so the capture was not live and the clean result proved nothing. Re-ran against a server started with stdout/stderr redirected to a file, and only trusted the scan after confirming the log *did* contain the handler lines. This is the same trap as the `.env`-not-reloading one earlier: **check that the test can fail before believing it passed.**
+- Result once the instrument was trustworthy: full key 0 hits in response bodies and 0 in the server log; middle segment 0 and 0; `AIza` prefix 0 in the log; `ciphertext` 0 in bodies. The provider's own message *is* logged (`API key not valid...`) and the key never is — exactly the designed split.
+- Browser storage scanned: no key material in localStorage, sessionStorage, IndexedDB or cookies.
+
+**Three defects found by verification, all fixed**
+1. **Vacuous tests.** The first draft of `assistant.test.ts` asserted failures with `await fn().catch(e => expect(...))` — which passes when nothing throws, because the assertion never runs. Rewritten as `rejects.toMatchObject`. Then **mutation-checked**: role mapping was changed to emit `assistant` and the trim was deleted; the suite failed exactly those two tests, then both were restored.
+2. **`erasableSyntaxOnly`.** `constructor(public readonly detail)` is a TypeScript-only parameter property. `tsc --noEmit` accepted it; `npm run build` rejected it with **TS1294**. This is the documented reason the build, not the typecheck, is the gate for this client.
+3. **`ai.ts` temporarily repointed** at an unreachable host to force the catch block (502 `PROVIDER_ERROR`, no URL, no key in the body). Restored and confirmed by an empty `git diff` plus a live `PONG`.
+
+**Care note**
+- A `Get-CimInstance | Where CommandLine -like '*server.ts*'` filter to kill dev servers matched my own shells too, because their command lines contained that string. Nothing was lost (all work had been committed as `f2a8f49`), but **match on process name and port, not on a substring of the command line.**
+
+**Left undone**
+- Uncommitted: `types/assistant.ts`, `services/assistant.ts`, `services/assistant.test.ts`, `hooks/useAssistant.ts`, harness.
+- A background server is running with its log at `%TEMP%/f006-server.log`; the normal `preview_start {name:'server'}` can take over any time.
+
+**Status:** 10 / 20 passing (50%)
+
+**Next session should**
+1. **F011** — conversation UI, wired to `useAssistant`. Markdown to React nodes via `lib/docsMarkdown`, never `dangerouslySetInnerHTML`.
+2. **F012** — `KeyDialog` on the DS `Modal`, delete behind `ConfirmDialog`.
+
+---
 
 ### 2026-08-15 — F007 + F008 (key resolution + typed errors)
 
