@@ -16,6 +16,14 @@ interface ConfirmDialogProps {
     destructive?: boolean;
     /** May be async; the dialog stays open and locked until it settles. */
     onConfirm: () => void | Promise<void>;
+    /**
+     * Holds the confirm button closed until the caller says the gate is passed —
+     * a typed project name, a checked acknowledgement.
+     *
+     * Separate from `busy`, which means "in flight". This one means "not yet
+     * allowed", and the two want different button labels and different reasons.
+     */
+    confirmDisabled?: boolean;
     /** Extra context — a consequences list, an affected-rows count. */
     children?: ReactNode;
 }
@@ -45,6 +53,7 @@ const ConfirmDialog: FC<ConfirmDialogProps> = ({
     cancelLabel = 'Cancel',
     destructive = false,
     onConfirm,
+    confirmDisabled = false,
     children,
 }) => {
     const [busy, setBusy] = useState(false);
@@ -83,7 +92,7 @@ const ConfirmDialog: FC<ConfirmDialogProps> = ({
                         variant={destructive ? 'dark' : 'accent'}
                         size="sm"
                         onClick={handleConfirm}
-                        disabled={busy}
+                        disabled={busy || confirmDisabled}
                         className={
                             destructive
                                 ? 'bg-global-red text-white shadow-md hover:bg-global-red/90'

@@ -161,6 +161,19 @@ const RichTextEditor: FC<RichTextEditorProps> = ({
     );
 
     const editor = useEditor({
+        /**
+         * **Required under React StrictMode**, which double-mounts in dev:
+         * mount → unmount → remount. Without this, TipTap builds the editor
+         * during the first render pass, StrictMode's simulated unmount destroys
+         * it, and the effects below then run against a destroyed instance.
+         *
+         * The failure was not a null check anyone forgot. `useEditor` returns a
+         * manager object that stays **truthy** after the underlying editor is
+         * destroyed, so `if (!editor) return` passed and the very next line threw
+         * `Cannot read properties of null (reading 'commands')` — straight into
+         * the error boundary on a cold load of `/daily`.
+         */
+        immediatelyRender: false,
         extensions: buildExtensions(),
         content: initial,
         editable,
@@ -196,7 +209,10 @@ const RichTextEditor: FC<RichTextEditorProps> = ({
     // bouncing straight back out as a change and triggering a save of what was
     // just loaded.
     useEffect(() => {
-        if (!editor) return;
+        // `isDestroyed` as well as null: see the note on `immediatelyRender`.
+        // A destroyed editor is still truthy, so the null check alone is not a
+        // guard — it is the appearance of one.
+        if (!editor || editor.isDestroyed) return;
         if (doc && richDocKey(doc) === lastEmitted.current) return;
 
         const next = doc ?? (plainFallback ? (plainTextToRichDoc(plainFallback) as JSONContent) : { type: 'doc', content: [{ type: 'paragraph' }] });
@@ -219,7 +235,7 @@ const RichTextEditor: FC<RichTextEditorProps> = ({
     // The identity check matters for the same reason: React re-runs this effect
     // whenever `editor` is re-read, and a no-op toggle would still emit.
     useEffect(() => {
-        if (!editor || editor.isEditable === editable) return;
+        if (!editor || editor.isDestroyed || editor.isEditable === editable) return;
         editor.setEditable(editable, false);
     }, [editor, editable]);
 

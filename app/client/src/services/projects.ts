@@ -9,6 +9,7 @@ import type {
     IssueStats,
     IssueStatus,
     Project,
+    ProjectDeletionSummary,
     ProjectOverview,
     PromotedTicket,
     RollupResponse,
@@ -68,6 +69,17 @@ export const projectsAPI = {
         apiRequest(`/api/projects/${slug}`, { method: 'DELETE' }),
 
     restore: (slug: string): Promise<Project> => apiPost<Project>(`/api/projects/${slug}/restore`),
+
+    /** What a permanent delete would destroy. Read before showing the confirm. */
+    deletionSummary: (slug: string): Promise<ProjectDeletionSummary> =>
+        apiRequest<ProjectDeletionSummary>(`/api/projects/${slug}/deletion-summary`),
+
+    /**
+     * Permanent delete — a **different endpoint** from `archive`, not a flag on it.
+     * The server refuses (409) unless the project is already archived.
+     */
+    destroy: (slug: string): Promise<{ deleted: boolean; slug: string; name: string }> =>
+        apiRequest(`/api/projects/${slug}/permanent`, { method: 'DELETE' }),
 
     /** Cross-project ranking for the global dashboard. Server-side ranked. */
     rollup: (range: IssueRange = '24h'): Promise<RollupResponse> =>

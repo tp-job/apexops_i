@@ -82,6 +82,35 @@ html, body {
   color: #f3f4f6;
 }
 
+/* Floating panel surface — dropdowns, popovers, context menus.
+ *
+ * **Opaque on purpose, and this is the difference from `.ds-frost`.** A frosted
+ * card sits on the page *background*, where 55% white plus a blur reads as
+ * premium. A menu sits on top of arbitrary *content*, and there a blur is not
+ * concealment: it smears detail but preserves contrast, so a lime highlight or a
+ * bold button underneath still reads straight through the panel. That was the
+ * bug — the projects dropdown showed the calendar chip behind it and the
+ * notifications popover showed "Refresh"/"New note" through its own list.
+ *
+ * Dark mode was worse: `.dark .ds-frost` is rgba(255,255,255,0.05), i.e. almost
+ * entirely transparent.
+ *
+ * No `backdrop-filter` here — behind an opaque fill it renders nothing and only
+ * costs a compositing layer. The elevation comes from the shadow instead. */
+.ds-menu {
+  background: #ffffff;
+  border: 1px solid rgba(17, 24, 39, 0.08);
+  box-shadow: var(--shadow-ds-3);
+}
+.dark .ds-menu {
+  /* Lighter than the #141414–#1c1c1c canvas so the panel reads as elevated
+     rather than as a hole cut in the page. */
+  background: #242424;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.55);
+  color: #f3f4f6;
+}
+
 /* Elevation helpers */
 .ds-elev-1 { box-shadow: var(--shadow-ds-1); }
 .ds-elev-2 { box-shadow: var(--shadow-ds-2); }

@@ -191,7 +191,7 @@ const ContextMenu: FC<ContextMenuProps> = ({ open, position, items, onClose, lab
                     ? { left: coords.x, top: coords.y }
                     : { left: 0, top: 0, visibility: 'hidden' }
             }
-            className="ds-frost fixed z-[60] min-w-[13rem] rounded-2xl p-1.5 shadow-2xl outline-none"
+            className="ds-menu fixed z-[60] min-w-[13rem] rounded-2xl p-1.5 outline-none"
         >
             <MenuBody
                 items={items}

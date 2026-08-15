@@ -316,6 +316,93 @@ router.delete('/:slug', async (req: Request, res: Response): Promise<void> => {
     }
 });
 
+// ── GET /:slug/deletion-summary ──────────────────────────────
+/**
+ * What a permanent delete would destroy, counted **before** it happens.
+ *
+ * "This cannot be undone" is an adjective; "this deletes 1,284 events and 12
+ * issues" is a fact, and only the second one lets someone decide. The confirm
+ * dialog reads straight off this.
+ *
+ * Owner-only for the same reason the delete is: the counts are a rough map of
+ * the project's contents, and a member who cannot delete has no reason to it.
+ */
+router.get('/:slug/deletion-summary', async (req: Request, res: Response): Promise<void> => {
+    try {
+        const found = await resolveMembership(req.params.slug, req.user!.id);
+        if (!found) { res.status(404).json({ error: 'Project not found' }); return; }
+        if (!isOwner(found.role)) {
+            res.status(403).json({ error: 'Only the project owner can delete a project' });
+            return;
+        }
+
+        const projectId = found.project.id;
+        const [events, issues, tickets, members, invites, sourceMaps] = await Promise.all([
+            prisma.event.count({ where: { projectId } }),
+            prisma.issue.count({ where: { projectId } }),
+            prisma.ticket.count({ where: { projectId } }),
+            prisma.projectMember.count({ where: { projectId } }),
+            prisma.projectInvite.count({ where: { projectId } }),
+            prisma.sourceMap.count({ where: { projectId } }),
+        ]);
+
+        res.json({
+            name: found.project.name,
+            slug: found.project.slug,
+            archived: found.project.archivedAt !== null,
+            counts: { events, issues, tickets, members, invites, sourceMaps },
+        });
+    } catch (err: any) {
+        console.error('Error building deletion summary:', err);
+        res.status(500).json({ error: err.message || 'Failed to build deletion summary' });
+    }
+});
+
+// ── DELETE /:slug/permanent ──────────────────────────────────
+/**
+ * Permanent delete. **The only route in this API that destroys data.**
+ *
+ * Deliberately not `DELETE /:slug` — that is the soft archive, and overloading
+ * one verb so that a query parameter decides between "reversible" and "gone
+ * forever" is how the wrong one gets called.
+ *
+ * **Requires the project to be archived first (409 otherwise).** Archive is the
+ * reversible step and it is one click; making deletion reachable only from an
+ * already-archived project means no single mistake destroys a workspace. The
+ * client hides the action the same way, but the rule is enforced here — the UI
+ * is a convenience, not the boundary.
+ *
+ * One `delete()`, not a hand-rolled sweep of child tables: every relation to
+ * Project declares `onDelete: Cascade` in the schema, so the database removes
+ * members, invites, issues, events, status changes, source maps and tickets.
+ * Enumerating them here would mean this list silently missing whatever table is
+ * added next.
+ */
+router.delete('/:slug/permanent', async (req: Request, res: Response): Promise<void> => {
+    try {
+        const found = await resolveMembership(req.params.slug, req.user!.id);
+        if (!found) { res.status(404).json({ error: 'Project not found' }); return; }
+        if (!isOwner(found.role)) {
+            res.status(403).json({ error: 'Only the project owner can delete a project' });
+            return;
+        }
+        if (found.project.archivedAt === null) {
+            res.status(409).json({
+                error: 'Archive the project before deleting it permanently',
+            });
+            return;
+        }
+
+        await prisma.project.delete({ where: { id: found.project.id } });
+
+        res.json({ deleted: true, slug: found.project.slug, name: found.project.name });
+    } catch (err: any) {
+        if (err.code === 'P2025') { res.status(404).json({ error: 'Project not found' }); return; }
+        console.error('Error deleting project:', err);
+        res.status(500).json({ error: err.message || 'Failed to delete project' });
+    }
+});
+
 // ── POST /:slug/restore ──────────────────────────────────────
 router.post('/:slug/restore', async (req: Request, res: Response): Promise<void> => {
     try {

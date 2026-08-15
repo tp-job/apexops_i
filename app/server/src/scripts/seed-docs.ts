@@ -6,16 +6,16 @@ import prisma from '../lib/prisma';
  * The one-time migration of `content/docs.tsx` into the database (F001, S9-D1).
  *
  * 929 lines of hand-authored JSX across eleven primitives is a conversion with
- * judgment in it, not a regex — so the six bodies were converted by hand into
+ * judgment in it, not a regex — so the original six bodies were converted by hand into
  * `docs-content/*.md` and are reviewed as a diff, page by page. This script only
  * does the part a script should do: read them and write the rows.
  *
- * **Idempotent by slug.** Re-running updates the six seeded pages in place and
+ * **Idempotent by slug.** Re-running updates the seeded pages in place and
  * touches nothing else, so it is safe on an instance where an admin has already
  * created pages of their own. It never deletes.
  *
- *     npm run seed:docs                 # seed or refresh the six pages
- *     npm run seed:docs -- --force      # overwrite admin edits to those six
+ *     npm run seed:docs                 # seed or refresh the seeded pages
+ *     npm run seed:docs -- --force      # overwrite admin edits to those pages
  *
  * Without `--force` a page whose body has been edited since the seed is left
  * alone and reported: re-running a seed script should not be how someone's
@@ -52,11 +52,44 @@ const PAGES: SeedPage[] = [
         order: 1,
         summary: 'Report your first error in about two minutes.',
     },
+    /**
+     * `Using ApexOps` sits second, ahead of SDK and the API reference, which is
+     * why those three groups renumber below.
+     *
+     * Every other page here is written for someone wiring up the SDK. None of
+     * them answered "how do I use the app", and the gap showed: a user
+     * concluded the daily note had no way to save and that notes had to be
+     * written twice, in two places, because nothing said otherwise.
+     */
+    {
+        slug: 'daily-notes',
+        title: 'Daily notes & todos',
+        group: 'Using ApexOps',
+        groupOrder: 1,
+        order: 0,
+        summary: 'How the day note saves itself, how to read the save status, and where the note ends up.',
+    },
+    {
+        slug: 'notes-and-calendar',
+        title: 'Notes & Calendar',
+        group: 'Using ApexOps',
+        groupOrder: 1,
+        order: 1,
+        summary: 'One set of notes, two views. Scheduling, colours, the right-click menu, search and tags.',
+    },
+    {
+        slug: 'projects-and-roles',
+        title: 'Projects & roles',
+        group: 'Using ApexOps',
+        groupOrder: 1,
+        order: 2,
+        summary: 'What a project holds, who can do what, and the difference between archiving and deleting.',
+    },
     {
         slug: 'sdk',
         title: 'Browser SDK',
         group: 'SDK',
-        groupOrder: 1,
+        groupOrder: 2,
         order: 0,
         summary: 'Script tag configuration, capture behaviour and payload limits.',
     },
@@ -64,7 +97,7 @@ const PAGES: SeedPage[] = [
         slug: 'grouping',
         title: 'Grouping & retention',
         group: 'Concepts',
-        groupOrder: 2,
+        groupOrder: 3,
         order: 0,
         summary: 'How events collapse into issues, and how long raw events are kept.',
     },
@@ -72,7 +105,7 @@ const PAGES: SeedPage[] = [
         slug: 'ingest-api',
         title: 'Ingest API',
         group: 'API reference',
-        groupOrder: 3,
+        groupOrder: 4,
         order: 0,
         summary: 'The single public endpoint the SDK posts to. Key-authenticated, write-only.',
     },
@@ -80,7 +113,7 @@ const PAGES: SeedPage[] = [
         slug: 'rest-api',
         title: 'REST API',
         group: 'API reference',
-        groupOrder: 3,
+        groupOrder: 4,
         order: 1,
         summary: 'Session-authenticated endpoints for projects, issues and tickets.',
     },
@@ -99,7 +132,7 @@ async function main(): Promise<void> {
         const existing = await prisma.docPage.findUnique({ where: { slug: page.slug } });
 
         if (!existing) {
-            // Seeded as PUBLISHED: these six are the documentation that is live
+            // Seeded as PUBLISHED: this is the documentation that is live
             // today, so seeding them as drafts would take the public docs down
             // for as long as it took someone to notice.
             await prisma.docPage.create({ data: { ...page, body, status: 'published' } });

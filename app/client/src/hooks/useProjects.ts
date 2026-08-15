@@ -12,6 +12,8 @@ export interface UseProjectsResult {
     rename: (slug: string, name: string) => Promise<Project>;
     archive: (slug: string) => Promise<void>;
     restore: (slug: string) => Promise<Project>;
+    /** Permanent. The row leaves the list whether or not archived are shown. */
+    destroy: (slug: string) => Promise<void>;
 }
 
 /**
@@ -80,5 +82,13 @@ export function useProjects(includeArchived = false): UseProjectsResult {
         return project;
     }, []);
 
-    return { projects, loading, error, refetch, create, rename, archive, restore };
+    const destroy = useCallback(async (slug: string) => {
+        await projectsAPI.destroy(slug);
+        // Unlike archive, there is no state in which a deleted project still
+        // belongs on screen — `includeArchived` does not apply to a row that no
+        // longer exists.
+        setProjects((prev) => prev.filter((p) => p.slug !== slug));
+    }, []);
+
+    return { projects, loading, error, refetch, create, rename, archive, restore, destroy };
 }

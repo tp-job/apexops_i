@@ -19,6 +19,27 @@ export interface ProjectStats {
     lastEventAt: string | null;
 }
 
+/**
+ * What `DELETE /:slug/permanent` would destroy, read before the confirm dialog.
+ *
+ * The counts are the point. "This cannot be undone" is a warning nobody weighs;
+ * "1,284 events, 12 issues, 3 tickets" is a quantity someone can actually
+ * recognise as more or less than they expected.
+ */
+export interface ProjectDeletionSummary {
+    name: string;
+    slug: string;
+    archived: boolean;
+    counts: {
+        events: number;
+        issues: number;
+        tickets: number;
+        members: number;
+        invites: number;
+        sourceMaps: number;
+    };
+}
+
 export interface Project {
     id: number;
     name: string;

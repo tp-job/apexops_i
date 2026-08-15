@@ -67,7 +67,7 @@ const NotificationBell: FC = () => {
             {open && (
                 <div
                     role="menu"
-                    className="ds-frost absolute right-0 z-50 mt-2 w-80 rounded-2xl p-1.5 shadow-xl"
+                    className="ds-menu absolute right-0 z-50 mt-2 w-80 rounded-2xl p-1.5"
                 >
                     <div className="flex items-center justify-between px-3 py-2">
                         <p className="text-sm font-semibold text-brand-dark dark:text-white">

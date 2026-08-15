@@ -1,15 +1,20 @@
 import type { FC } from 'react';
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { motion, AnimatePresence } from 'motion/react';
 import {
     FiAlertOctagon,
+    FiAlertTriangle,
     FiArrowDown,
     FiArrowUp,
+    FiCalendar,
+    FiCheck,
     FiCheckCircle,
     FiChevronLeft,
     FiChevronRight,
     FiList,
+    FiLoader,
     FiPlus,
     FiRefreshCw,
     FiSun,
@@ -218,12 +223,81 @@ const Lane: FC<{
  * words are on the server, so that is what this says. `dirty` is never dressed
  * up as saved.
  */
-const SaveStatus: FC<{ state: SaveState; savedAt: number | null }> = ({ state, savedAt }) => {
-    if (state === 'saving') return <>Saving…</>;
-    if (state === 'dirty') return <>Unsaved changes</>;
-    if (state === 'error') return <span className="text-global-red">Not saved</span>;
-    if (state === 'saved' && savedAt) return <>Saved {dayjs(savedAt).format('HH:mm')}</>;
-    return null;
+const SaveStatus: FC<{
+    state: SaveState;
+    savedAt: number | null;
+    /** False before the day has any content — nothing has been written yet. */
+    hasNote: boolean;
+    onRetry: () => void;
+}> = ({ state, savedAt, hasNote, onRetry }) => {
+    const pill = 'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium';
+
+    if (state === 'saving') {
+        return (
+            <span className={`${pill} bg-black/5 text-gray-600 dark:bg-white/10 dark:text-gray-300`}>
+                <FiLoader size={12} className="animate-spin" aria-hidden />
+                Saving…
+            </span>
+        );
+    }
+    if (state === 'dirty') {
+        return (
+            <span className={`${pill} bg-amber-500/15 text-amber-700 dark:bg-amber-500/20 dark:text-amber-200`}>
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-500" aria-hidden />
+                Unsaved changes
+            </span>
+        );
+    }
+    if (state === 'error') {
+        // The only status with an action attached: a failed save is the one case
+        // where the user can do something, and the retry has to be where the bad
+        // news is rather than in a toast that has already gone.
+        return (
+            <span className={`${pill} bg-global-red/10 text-global-red`}>
+                <FiAlertTriangle size={12} aria-hidden />
+                Not saved
+                <button
+                    type="button"
+                    onClick={onRetry}
+                    className="rounded underline underline-offset-2 outline-none hover:no-underline focus-visible:ring-2 focus-visible:ring-global-red/40"
+                >
+                    Retry
+                </button>
+            </span>
+        );
+    }
+    if (state === 'saved' && savedAt) {
+        return (
+            <span className={`${pill} bg-emerald-500/15 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-200`}>
+                <FiCheck size={12} aria-hidden />
+                Saved {dayjs(savedAt).format('HH:mm')}
+            </span>
+        );
+    }
+
+    /**
+     * `idle` — and it must **not** render nothing.
+     *
+     * This was the bug. `idle` is the state on every page load before the first
+     * keystroke, so the page promised "saves itself as you type" and then showed
+     * no evidence it ever had. Silence from a save indicator does not read as
+     * "fine"; it reads as "this feature is not working", which is exactly what
+     * happened.
+     *
+     * The two idle cases are genuinely different and are not collapsed: a day
+     * with content is saved, a day with none has nothing to save because an
+     * empty day deliberately writes no row (`useDailyTodos.ts`).
+     */
+    return hasNote ? (
+        <span className={`${pill} bg-emerald-500/15 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-200`}>
+            <FiCheck size={12} aria-hidden />
+            All changes saved
+        </span>
+    ) : (
+        <span className={`${pill} bg-black/5 text-gray-500 dark:bg-white/10 dark:text-gray-400`}>
+            Nothing to save yet
+        </span>
+    );
 };
 
 // ── Page ──────────────────────────────────────────────────────
@@ -249,6 +323,25 @@ const DailyNote: FC = () => {
     const done = visible.filter((t) => t.checked);
 
     const shiftDay = (delta: number) => setDayKey(day.add(delta, 'day').format('YYYY-MM-DD'));
+
+    /**
+     * Ctrl/Cmd+S flushes the pending write.
+     *
+     * Strictly unnecessary — autosave has already scheduled it — but the reflex
+     * is universal and the browser's own "save this page" dialog is a genuinely
+     * bad answer to it, appearing over an app that had in fact saved. Honouring
+     * the keystroke costs one listener and converts a moment of doubt into the
+     * status pill flicking to "Saving…".
+     */
+    useEffect(() => {
+        const onKey = (e: KeyboardEvent) => {
+            if (!(e.key === 's' && (e.metaKey || e.ctrlKey))) return;
+            e.preventDefault();
+            if (!readOnly) void flushDocument();
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [flushDocument, readOnly]);
 
     const submitTodo = (e: React.FormEvent) => {
         e.preventDefault();
@@ -352,14 +445,45 @@ const DailyNote: FC = () => {
             {/* ── The day's document ── */}
             <Surface variant="panel" radius="3xl" padding="lg">
                 <div className="flex flex-col gap-4">
-                    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                        <h2 className="text-base font-bold font-heading text-brand-dark dark:text-white">Day note</h2>
-                        <p className="text-xs text-gray-400 dark:text-gray-500">
-                            Written up for {day.format('D MMM')}. Saves itself as you type.
+                    <div className="flex flex-col gap-2">
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                            <h2 className="text-base font-bold font-heading text-brand-dark dark:text-white">Day note</h2>
+                            <p className="text-xs text-gray-400 dark:text-gray-500">
+                                Written up for {day.format('D MMM')}. There is no save button — it saves as you type.
+                            </p>
+                            {/* `aria-live` so the state change is announced, not just
+                                shown. This is the one piece of feedback the whole
+                                editor rests on. */}
+                            <span className="ml-auto" aria-live="polite">
+                                <SaveStatus
+                                    state={saveState}
+                                    savedAt={savedAt}
+                                    hasNote={note !== null}
+                                    onRetry={() => { void flushDocument(); }}
+                                />
+                            </span>
+                        </div>
+
+                        {/*
+                          * Where the note actually goes.
+                          *
+                          * A day note *is* a note — same table, tagged `daily` and
+                          * scheduled on this day — so it already appears in Notes &
+                          * Calendar. Nothing said so, and the reasonable conclusion
+                          * from that silence was that the two screens were separate
+                          * and everything had to be written twice.
+                          */}
+                        <p className="flex items-center gap-1.5 text-xs text-gray-400 dark:text-gray-500">
+                            <FiCalendar size={12} aria-hidden />
+                            This is a note, not a separate scratchpad — find it in{' '}
+                            <Link
+                                to="/notes"
+                                className="rounded font-medium text-brand-dark underline underline-offset-2 outline-none hover:no-underline focus-visible:ring-2 focus-visible:ring-brand-dark/30 dark:text-gray-200 dark:focus-visible:ring-brand-accent/40"
+                            >
+                                Notes &amp; Calendar
+                            </Link>{' '}
+                            on {day.format('D MMM')}.
                         </p>
-                        <span className="ml-auto text-xs font-medium text-gray-400 dark:text-gray-500">
-                            <SaveStatus state={saveState} savedAt={savedAt} />
-                        </span>
                     </div>
 
                     <Suspense

@@ -39,6 +39,7 @@ import { useNoteList } from '@/hooks/useNoteList';
 import { useCalendarEvents } from '@/hooks/useCalendarEvents';
 import { createNote, deleteNote, toggleNotePin, updateNote } from '@/services/notes';
 import type { Note } from '@/types/notes';
+import { DAILY_TAG } from '@/lib/dailyTodos';
 import { fadeUp, stagger } from '@/lib/motion';
 
 /**
@@ -1009,7 +1010,18 @@ const NotesCalendar: FC = () => {
                                                     <span className="truncate text-sm font-semibold text-brand-dark dark:text-white">
                                                         {n.title || 'Untitled'}
                                                     </span>
-                                                    {!n.scheduledFor && (
+                                                    {/* The half of the link that lives on this
+                                                        side: a day note written on /daily lands
+                                                        here as an ordinary note, and without
+                                                        saying so this screen looks like a
+                                                        separate place the same text has to be
+                                                        re-entered. */}
+                                                    {n.tags?.includes(DAILY_TAG) && (
+                                                        <Badge tone="accent" className="ml-auto shrink-0">
+                                                            daily
+                                                        </Badge>
+                                                    )}
+                                                    {!n.scheduledFor && !n.tags?.includes(DAILY_TAG) && (
                                                         <Badge tone="outline" className="ml-auto shrink-0">
                                                             written
                                                         </Badge>

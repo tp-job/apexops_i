@@ -15,6 +15,7 @@ import {
     FiRadio,
     FiRotateCcw,
     FiSettings,
+    FiTrash2,
 } from 'react-icons/fi';
 import {
     PageHeader,
@@ -33,11 +34,12 @@ import {
     type ContextMenuItem,
 } from '@/components/design-system';
 import { useProjects } from '@/hooks/useProjects';
+import { projectsAPI } from '@/services/projects';
 import { useToast } from '@/context/toast-context';
 import { getErrorMessage } from '@/utils/error';
 import { relativeTime } from '@/utils/format';
 import { fadeUp, stagger } from '@/lib/motion';
-import type { Project } from '@/types/projects';
+import type { Project, ProjectDeletionSummary } from '@/types/projects';
 
 interface CardProps {
     project: Project;
@@ -127,7 +129,7 @@ const ProjectCard: FC<CardProps> = ({ project, onContextMenu, onMenuButton }) =>
 
 const Projects: FC = () => {
     const [showArchived, setShowArchived] = useState(false);
-    const { projects, loading, error, create, rename, archive, restore } = useProjects(showArchived);
+    const { projects, loading, error, create, rename, archive, restore, destroy } = useProjects(showArchived);
     const navigate = useNavigate();
     const toast = useToast();
     const menu = useContextMenu<Project>();
@@ -142,6 +144,35 @@ const Projects: FC = () => {
     const [renameError, setRenameError] = useState<string | null>(null);
 
     const [archiveTarget, setArchiveTarget] = useState<Project | null>(null);
+
+    /**
+     * Delete is the one action that reads before it writes. The summary is
+     * fetched when the dialog opens so the confirmation can name real
+     * quantities; until it lands the dialog says so rather than showing zeroes,
+     * which would read as "nothing will be lost".
+     */
+    const [deleteTarget, setDeleteTarget] = useState<Project | null>(null);
+    const [deleteSummary, setDeleteSummary] = useState<ProjectDeletionSummary | null>(null);
+    const [deleteConfirmText, setDeleteConfirmText] = useState('');
+    const [summaryError, setSummaryError] = useState<string | null>(null);
+
+    const openDelete = (project: Project) => {
+        setDeleteTarget(project);
+        setDeleteSummary(null);
+        setDeleteConfirmText('');
+        setSummaryError(null);
+        void projectsAPI
+            .deletionSummary(project.slug)
+            .then(setDeleteSummary)
+            .catch((err) => setSummaryError(getErrorMessage(err, 'Could not read what would be deleted')));
+    };
+
+    const closeDelete = () => {
+        setDeleteTarget(null);
+        setDeleteSummary(null);
+        setDeleteConfirmText('');
+        setSummaryError(null);
+    };
 
     const submitCreate = async () => {
         if (!name.trim()) {
@@ -267,6 +298,22 @@ const Projects: FC = () => {
                             toast.showError(getErrorMessage(err, 'Could not restore project'))
                         );
                 },
+            });
+            /**
+             * Permanent delete lives **only here**, on an already-archived
+             * project. Archiving is one click and fully reversible; requiring it
+             * first means destroying a workspace is never a single mis-click, and
+             * the server enforces the same rule with a 409 rather than trusting
+             * this menu to be the boundary.
+             */
+            items.push({
+                id: 'delete',
+                label: 'Delete permanently…',
+                icon: <FiTrash2 size={15} />,
+                destructive: true,
+                separatorBefore: true,
+                disabled: !isOwner,
+                onSelect: () => openDelete(project),
             });
         } else {
             items.push({
@@ -480,6 +527,79 @@ const Projects: FC = () => {
                     }
                 }}
             />
+
+            {/* ── Delete permanently ──────────────────────────── */}
+            <ConfirmDialog
+                open={deleteTarget !== null}
+                onOpenChange={(v) => {
+                    if (!v) closeDelete();
+                }}
+                title={deleteTarget ? `Delete “${deleteTarget.name}” forever?` : 'Delete project'}
+                description="This removes the project and everything reported into it. Unlike archiving, it cannot be undone and there is no restore."
+                confirmLabel="Delete forever"
+                destructive
+                // The gate: the name has to be typed exactly. Deliberately not a
+                // second "are you sure" — a dialog you can dismiss by pressing the
+                // same button twice is not a confirmation, it is a speed bump.
+                confirmDisabled={deleteConfirmText.trim() !== (deleteTarget?.name ?? '')}
+                onConfirm={async () => {
+                    if (!deleteTarget) return;
+                    try {
+                        await destroy(deleteTarget.slug);
+                        toast.showSuccess(`Deleted “${deleteTarget.name}”`);
+                        closeDelete();
+                    } catch (err) {
+                        toast.showError(getErrorMessage(err, 'Could not delete project'));
+                        throw err;
+                    }
+                }}
+            >
+                <div className="flex flex-col gap-4">
+                    {summaryError ? (
+                        <p className="text-sm text-global-red">{summaryError}</p>
+                    ) : !deleteSummary ? (
+                        // Never zeroes while loading — "0 events" reads as "nothing
+                        // will be lost", which is the opposite of unknown.
+                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                            Checking what this would delete…
+                        </p>
+                    ) : (
+                        <div className="rounded-2xl bg-global-red/5 p-3">
+                            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-global-red">
+                                Permanently deleted
+                            </p>
+                            <ul className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm text-brand-dark dark:text-gray-200">
+                                {([
+                                    ['Events', deleteSummary.counts.events],
+                                    ['Issues', deleteSummary.counts.issues],
+                                    ['Tickets', deleteSummary.counts.tickets],
+                                    ['Members', deleteSummary.counts.members],
+                                    ['Invites', deleteSummary.counts.invites],
+                                    ['Source maps', deleteSummary.counts.sourceMaps],
+                                ] as const).map(([label, n]) => (
+                                    <li key={label} className="flex justify-between gap-2">
+                                        <span className="text-gray-500 dark:text-gray-400">{label}</span>
+                                        <span className="font-numbers font-semibold tabular-nums">{n}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
+
+                    <Field
+                        label={`Type “${deleteTarget?.name ?? ''}” to confirm`}
+                        hint="Exact match, including capitals."
+                    >
+                        <Input
+                            value={deleteConfirmText}
+                            onChange={(e) => setDeleteConfirmText(e.target.value)}
+                            placeholder={deleteTarget?.name ?? ''}
+                            autoFocus
+                            autoComplete="off"
+                        />
+                    </Field>
+                </div>
+            </ConfirmDialog>
         </div>
     );
 };

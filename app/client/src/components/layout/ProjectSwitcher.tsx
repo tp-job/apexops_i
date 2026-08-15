@@ -55,7 +55,7 @@ const ProjectSwitcher: FC = () => {
             {open && (
                 <div
                     role="menu"
-                    className="ds-frost absolute right-0 z-50 mt-2 w-64 rounded-2xl p-1.5 shadow-xl"
+                    className="ds-menu absolute right-0 z-50 mt-2 w-64 rounded-2xl p-1.5"
                 >
                     <div className="max-h-72 overflow-y-auto">
                         {projects.map((p) => (
