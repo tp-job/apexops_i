@@ -71,8 +71,8 @@
         "Unauthenticated PUT answers 401"
       ],
       "depends_on": ["F001", "F003"],
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "VERIFIED 2026-08-15 against the running server with a real Gemini key supplied by the user. Observed: malformed key -> 400 INVALID_KEY with rows 0->0 (rejected on shape, no network call); provider='openai' -> 400 INVALID_PROVIDER; well-shaped BOGUS key -> 400 INVALID_KEY with rows 0->0, which is the failure case that matters (the probe runs before the write); real key -> 200 with maskedKey 'AIza…dIl0' and verifiedAt set; a second save upserts to 1 row, not 2; stored ciphertext does not contain the plaintext; iv is 16 base64 chars (12 bytes). DESIGN IMPROVEMENT over api/ai.ts: the probe sends the key in the 'x-goog-api-key' HEADER rather than Google's documented '?key=' query parameter. ai.ts:153-157 documents that a fetch error's message can carry the request URL and therefore the key — the header removes that leak class entirely. Probe endpoint is list-models, confirmed to return 200/50 models for a valid key and 400 INVALID_ARGUMENT for a bogus one, spending zero tokens. PROVIDER_UNREACHABLE is deliberately 503 and NOT 400: a network failure is not proof the key is bad, and saying so would cost a user a working credential."
     },
     {
       "id": "F005",
@@ -88,8 +88,8 @@
         "Unauthenticated GET/DELETE answer 401"
       ],
       "depends_on": ["F004"],
-      "passes": false,
-      "notes": "REQ-S5. The absence of an admin path is a feature, not an omission."
+      "passes": true,
+      "notes": "VERIFIED 2026-08-15. GET/PUT/DELETE all answer 401 unauthenticated. GET with no stored key returns 200 with key=null (absence is a normal state, not a 404). The handler's Prisma select names only provider/maskedKey/verifiedAt/updatedAt — 'ciphertext' appears in zero response bodies across the whole lifecycle. DELETE is idempotent: 200, then 200 again, rows 0. CROSS-USER ISOLATION verified with two real sessions rather than argued from the code: the dev ADMIN account's GET returned key=null (its own absent key, not the user's), the admin's DELETE left the user's row intact, and GET /api/ai/key/<userId> returns 404 because no route accepts a userId at all. The absence of an admin read path is the feature."
     },
     {
       "id": "F006",
@@ -122,8 +122,8 @@
         "The decrypted key is not cached in a module variable between requests"
       ],
       "depends_on": ["F001", "F003"],
-      "passes": false,
-      "notes": "The ordering step is the one that matters. ai.ts's whole design is that every refusal precedes the spend."
+      "passes": true,
+      "notes": "VERIFIED 2026-08-15 against the running server. CRITICAL ORDERING observed: an 8001-char prompt returns 400 INVALID_REQUEST in 4ms — a real Gemini call takes >400ms, so the refusal demonstrably precedes any outbound request; validateChatBody runs before resolveKey, which also means no credential is decrypted for a request that was never going to be sent. Stored key -> 200 keySource='user'. No stored key + env set -> 200 keySource='env' (pre-sprint behaviour preserved). Neither -> 503 NO_KEY, distinct from the generic unconfigured 503. FAILURE CASE: a row whose auth_tag was corrupted via raw SQL fell through to the env key and returned 200 keySource='env' rather than 500, logging only the user id. The decrypted key is returned per request and never cached in a module variable. Also moved this file off Google's documented '?key=' query parameter onto the 'x-goog-api-key' header, closing the leak the file's own catch block warns about."
     },
     {
       "id": "F008",
@@ -138,8 +138,8 @@
         "Provider-supplied text appears in none of the five bodies"
       ],
       "depends_on": ["F007"],
-      "passes": false,
-      "notes": "Data-mapping trap: the existing route returns { error } with no code. Additive only."
+      "passes": true,
+      "notes": "VERIFIED 2026-08-15 — all five codes observed live, none inferred. NO_KEY (503, env key cleared and server restarted so dotenv re-read), INVALID_KEY (400, a wrong key injected at the DB layer), RATE_LIMITED (429, AI_RATE_LIMIT_PER_HOUR temporarily set to 2, third request refused, RateLimit-Reset=3600s present), PROVIDER_ERROR, EMPTY_RESPONSE, plus INVALID_REQUEST for local cap violations. The legacy `error` string is present on every body including the limiter's 429, so nothing reading it breaks. DEFECT FOUND AND FIXED during verification: Gemini answers 400 for a rejected key, NOT 401/403, and a bad key is otherwise indistinguishable from a malformed payload — both are HTTP 400 with error.status 'INVALID_ARGUMENT'. Routing on status alone reported a user's bad key as 'Invalid request to AI service', which is unactionable: the user cannot tell the fix is to re-enter their key. Now keyed on error.details[].reason === 'API_KEY_INVALID', measured from real provider responses. A rejected USER key returns 400 INVALID_KEY (actionable); a rejected ENV key returns 503 PROVIDER_ERROR, because the user can do nothing about the org's misconfiguration and should not be told to delete their own key. The limiter's code lives in middleware/rateLimit.ts since that 429 is produced before the route runs."
     },
     {
       "id": "F009",

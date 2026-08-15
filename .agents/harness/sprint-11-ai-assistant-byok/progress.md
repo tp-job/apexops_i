@@ -11,7 +11,9 @@ Written for a reader with zero memory of this build — because that is who read
 ## Current state
 
 - **Status:** Gate 3 open. Inner loop running.
-- **Passing:** 4 / 20 features (F001, F002, F003, F010)
+- **Passing:** 8 / 20 features (F001–F005, F007, F008, F010)
+- **Next:** **F006** (full-lifecycle leak scan — its dependencies F007/F008 are now met), then F009 (client data layer) → F011 (conversation UI).
+- **The entire server half is done and proven end to end.** What remains is the client.
 - **DB workflow:** `prisma db push` only. **Never `prisma migrate dev`** — see the F003 note.
 - **Open gap:** F010's live resize swap is unproven — this browser pane fires no `resize`/matchMedia `change` events. Re-check on a real browser resize before Stage 4.
 - **Branch:** `sprint-11/ai-assistant-byok` — **already existed and is checked out**, level with `main` (0 ahead / 0 behind)
@@ -49,6 +51,65 @@ Then, before any Prisma work:
 ---
 
 ## Sessions
+
+### 2026-08-15 — F007 + F008 (key resolution + typed errors)
+
+**Completed**
+- **[F007]** `resolveKey()` in `api/ai.ts` ✅ — BYOK → env → `NO_KEY`, with the caps still ahead of it.
+- **[F008]** Typed error codes ✅ — all five observed live, additive to the existing `{ error }` shape.
+
+**The defect this feature existed to catch, and the one it nearly shipped with**
+- **Gemini answers HTTP 400 for a rejected key — not 401/403.** And a bad key is otherwise *identical* to a malformed payload: both are 400 with `error.status: 'INVALID_ARGUMENT'`. My first cut routed on the status code, so a user with a bad stored key got "Invalid request to AI service" — wrong, and unactionable, since nothing told them the fix was to re-enter their key. Caught because the verification asserted the expected **code**, not just a 4xx. Now keyed on `error.details[].reason === 'API_KEY_INVALID'`, measured from real provider responses rather than assumed from docs.
+- Follow-on decision: a rejected **user** key → `400 INVALID_KEY` (actionable). A rejected **env** key → `503 PROVIDER_ERROR`. Telling a user their key is invalid when the org's key is the broken one sends them to delete a working credential.
+
+**Decisions**
+- **`api/ai.ts` moved off `?key=` onto the `x-goog-api-key` header.** The file's own catch block warned that a fetch error message can carry the request URL, and the URL carried the key. Now defence in depth rather than the only defence.
+- **`validateChatBody` strictly before `resolveKey`.** Resolving is a database read *and* a decryption; doing it ahead of the caps would spend work on a request about to be refused, and would decrypt a credential for a request that had no business reaching the provider. Proved by timing: the oversize prompt is refused in **4ms**, where a real call takes >400ms.
+- **A decrypt failure falls through to the env key**, never 500. A row under a rotated `AI_KEY_SECRET` means "no usable key", and the user should land on "add your API key".
+- Responses now carry `keySource: 'user' | 'env'` — useful to the panel, and never the key itself.
+
+**Method note worth keeping**
+- `ts-node-dev` restarts on **source** change, not on `.env` change, so dotenv does not re-read. Testing `NO_KEY` and `RATE_LIMITED` needed a `touch src/server.ts` after editing `.env`. The first attempt silently tested nothing — every request returned 200 and it looked like a pass. Verified the env had actually taken by reading `GET /api/ai/status` before trusting the result.
+- `AI_RATE_LIMIT_PER_HOUR=2` made the 429 observable without burning 30 requests of real quota. `.env` was backed up and restored; confirmed afterwards via `/api/ai/status` (`ready`, limits intact) and a live call returning `PONG`.
+
+**Left undone**
+- Uncommitted: `api/ai.ts`, `api/ai-key.ts`, `middleware/rateLimit.ts`, `server.ts`, `.agents/harness/`.
+
+**Status:** 8 / 20 passing (40%)
+
+**Next session should**
+1. **F006** — the full-lifecycle leak scan; its dependencies are now met.
+2. **F009** — client data layer, verified headless before any UI exists.
+
+---
+
+### 2026-08-15 — F004 + F005 (key API)
+
+**Completed**
+- **[F004]** `PUT /api/ai/key` ✅ and **[F005]** `GET`/`DELETE /api/ai/key` ✅ — `api/ai-key.ts`, mounted at `server.ts` **before** `aiRoutes` so `/api/ai/key` matches its own router. Verified against the running server with a real Gemini key.
+
+**Decisions**
+- **The key travels in the `x-goog-api-key` header, never `?key=`.** Google documents the query-parameter form, and `api/ai.ts:153–157` documents why that is dangerous here: a `fetch` failure's `err.message` can carry the request URL, and the URL carries the key. A header cannot end up in an error string, a redirect, or a proxy log that records paths only. **`api/ai.ts` still uses `?key=` and should be moved to the header as part of F007** — same fix, same reason, and it closes the leak the file already warns about.
+- **`PROVIDER_UNREACHABLE` is 503, not 400.** A timeout is not proof the key is bad. Returning `INVALID_KEY` on a network blip would tell a user to delete a working credential.
+- **Shape check before the network call.** Deliberately loose (length + no whitespace): being strict about a vendor's key format is how you reject a valid key the day the vendor changes it. The provider stays the authority.
+- **`GET` returns `200 { key: null }`, not 404** — otherwise "no key yet" and "endpoint missing" are indistinguishable in the client's error handling.
+- **`DELETE` is idempotent.** The caller wanted "no key stored"; that is the end state either way.
+
+**Discovered**
+- **Pre-existing IPv6 rate-limit bypass**, unrelated to this sprint. The server logs three `ERR_ERL_KEY_GEN_IPV6` validation errors at boot from `middleware/rateLimit.ts:44`, `:73`, `:96` — custom `keyGenerator`s use `req.ip` without the `ipKeyGenerator` helper, so **IPv6 clients can evade the limits**, including `aiChatLimiter`, which is one of the four controls this sprint depends on. Not caused by my changes; present before them. Needs its own fix.
+- The list-models probe returns 50 models and confirms `gemini-2.5-flash` is available on the supplied key.
+
+**Left undone**
+- F006 (full lifecycle leak scan) needs F007/F008 first — the partial scan here already shows 0 leaks across every key-API response body.
+- Uncommitted: `api/ai-key.ts`, `server.ts`, `schema.prisma`, `.agents/harness/`.
+
+**Status:** 6 / 20 passing (30%)
+
+**Next session should**
+1. **F007** — `resolveKey()` in `api/ai.ts`, and move that file to the header form while you are in it.
+2. **F008** — typed error codes, additive to the existing `{ error }` shape.
+
+---
 
 ### 2026-08-15 — F003 (UserAiKey schema)
 

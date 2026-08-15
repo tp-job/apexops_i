@@ -370,7 +370,7 @@ app.get('/', (_req: Request, res: Response) => {
             notes: ['/api/notes', '/api/notes/:id'],
             ingest: ['/api/ingest'],
             consoleLogs: ['/api/console-logs', '/api/console-logs/script'],
-            ai: ['/api/ai/chat', '/api/ai/status'],
+            ai: ['/api/ai/chat', '/api/ai/status', '/api/ai/key'],
         },
     });
 });
@@ -388,6 +388,7 @@ import ticketsRoutes from './api/tickets';
 import notesRoutes from './api/notes';
 import consoleLogsRoutes from './api/console-logs';
 import aiRoutes from './api/ai';
+import aiKeyRoutes from './api/ai-key';
 import consoleMonitorRoutes from './api/console-monitor';
 import chatRoutes from './api/chat';
 import notificationsRoutes from './api/notifications';
@@ -415,6 +416,9 @@ app.use('/api/invites', invitesRoutes);
 app.use('/api/tickets', ticketsRoutes);
 app.use('/api/notes', notesRoutes);
 app.use('/api/console-logs', consoleLogsRoutes);
+// Mounted before `aiRoutes` so `/api/ai/key` is matched by its own router rather
+// than falling through to the chat router's handlers.
+app.use('/api/ai', aiKeyRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/console-monitor', consoleMonitorRoutes);
 app.use('/api/chat', chatRoutes);
