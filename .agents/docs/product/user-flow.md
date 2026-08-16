@@ -66,7 +66,7 @@ rebuilding Bug Tracker/Notes/Calendar — that has to factor into sequencing, no
 | **Logs / Console Monitor** | `Log` CRUD + stats + batch; separate multi-session Puppeteer capture (`console-monitor.ts`, session-owner-gated) | no surviving hook — was folded into Dashboard/BugTracker views before | none yet — closest template fit is `zc.html`'s dense record rows |
 | **Notes + Calendar** (merged per Finding 2) | `Note` CRUD, `stats/overview`, `calendar/:year/:month` | `hooks/useNoteList.ts`, `hooks/useCalendarEvents.ts`, `services/notes.ts`, `services/calendar.ts`, `types/notes.ts`. *(`useNoteStatsOverview`, `useNoteAiChat` and `useOptimizationCalendarEvents` were deleted as dead code; the note modules moved out of `components/ui/` on 2026-08-15.)* | `TimelineLayout` (zc.html) + `GanttTrack` |
 | **Chat** (interpersonal) | `GET /api/chat/users` only | **gone** — needs a new hook + socket wiring from spec in `devrule.md` §8 | `zd.html`'s contact rail (documented, not scaffolded) |
-| **AI Chat** (Gemini assistant) | `POST /api/ai/chat`, `GET /api/ai/status` | **no client hook at all** — `useNoteAiChat.ts` was the last caller and was deleted as dead code 2026-08-15; both endpoints are still live and mounted | none yet |
+| **AI Assistant** (Gemini, BYOK) | `POST /api/ai/chat`, `GET /api/ai/status`, plus `GET/PUT/DELETE /api/ai/key` (sprint 11) | **shipped 2026-08-16** — `hooks/useAssistant.ts` owns the thread, `services/assistant.ts` owns the wire, `components/assistant/*` owns the surface | right-hand panel in `AppLayout`, not a route |
 | **Account Settings** | `PUT /profile /settings /password` | logic lives directly in `services/auth.ts` + `AuthContext`, no dedicated hook | none yet |
 | **Invoices** | none (Finding 1) | mock-only, was never real | `ai.html` — origin of the design system, not a route |
 
@@ -81,7 +81,6 @@ flowchart TD
     C --> D[Bug Tracker]
     C --> E[Notes + Calendar]
     C --> F[Chat]
-    C --> G[AI Chat]
     C --> H[Account Settings]
     D --> D1[Ticket detail / create — Stepper flow from ac.html]
     E --> E1[Note editor]
@@ -89,7 +88,13 @@ flowchart TD
     F --> F1[Conversation thread]
     H --> H1[Profile / Security / Notifications tabs]
     C -.->|power-tool, not primary nav| I[Console Monitor]
+    G[AI Assistant panel] -.->|Topbar toggle, overlays every page| C
+    G -.-> D
+    G -.-> E
 ```
+
+*(The assistant is drawn pointing **into** the pages rather than hanging off Dashboard: it is a
+panel that opens alongside whatever route you are on, not a place you navigate to.)*
 
 **Entry.** Unauthenticated users land on Auth (login/register) — there is currently no public
 landing page (`Homepage.tsx` was deleted along with everything else). Whether a marketing/landing
@@ -101,9 +106,12 @@ end-to-end this session (shadcn Alert + `StatTile`/`Surface`/`motion`, real tick
 verified in-browser). Rebuilding it first again gives every other page a working reference
 instead of a description.
 
-**Primary nav (4 items, not 7).** Bug Tracker, Notes+Calendar, Chat, Account Settings. AI Chat can
-live as an entry point from either Notes or Dashboard rather
-than needing its own top-level nav slot — it's an assistant, not a destination. Console Monitor is
+**Primary nav (4 items, not 7).** Bug Tracker, Notes+Calendar, Chat, Account Settings. The AI
+assistant correctly never took a nav slot — but it did *not* end up as an entry point from Notes or
+Dashboard as this paragraph originally guessed. It shipped as a **Topbar toggle opening a
+right-hand panel that overlays no route and belongs to none**: available from every page, losing
+nothing when you navigate, because "it's an assistant, not a destination" argues for a persistent
+slot rather than a doorway on two particular pages. Console Monitor is
 a real, working feature (session-scoped Puppeteer capture) but it's a power-tool for debugging a
 running app, not a screen most users open often — surface it from Logs/Bug Tracker context, not
 primary nav.
@@ -129,9 +137,12 @@ than a compromise.
    Building it as one page from the start avoids doing the merge as a *second* migration later.
 4. **Account Settings** — no hook to write, `services/auth.ts` already does the work; mostly a
    forms-and-tabs UI exercise once the pattern from steps 1–3 is established.
-5. **AI Chat** — backend trivial (`POST /api/ai/chat`, live and mounted), needs one new hook. The
-   `useNoteAiChat.ts` that this step said to copy was deleted as dead code on 2026-08-15, so the
-   hook now gets written from scratch against the endpoint rather than adapted.
+5. ~~**AI Chat**~~ — **done 2026-08-16** (sprint 11, `sprint-11/ai-assistant-byok`). The estimate
+   here — "backend trivial, needs one new hook" — was right about the chat endpoint and wrong about
+   the feature: the cost was not the hook, it was **BYOK**. Letting each user spend their own key
+   added a `UserAiKey` table, AES-256-GCM envelope encryption (`lib/crypto.ts`), a validate-before-
+   write key API, and a typed error vocabulary so a rejected key reads as "re-enter your key"
+   instead of "invalid request". Full write-up: `.agents/docs/features/ai-assistant-byok.md`.
 6. **Chat (interpersonal)** — last, because it's the only feature needing a new hook *and* new
    socket wiring *and* new UI, with the smallest backend surface (`/users` only — presence/message
    history endpoints don't exist yet either). Doing it last means the socket.io client pattern from

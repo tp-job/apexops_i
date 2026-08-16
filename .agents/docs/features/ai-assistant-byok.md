@@ -1,7 +1,10 @@
 # AI Assistant (BYOK) — right-sidebar copilot
 
-**Status:** scoped, not started · **Branch:** `sprint-11/ai-assistant-byok`
+**Status:** **built and verified 2026-08-16** — 20/20 features in the ledger; branch pushed, no PR opened ·
+**Branch:** `sprint-11/ai-assistant-byok`
 **Written:** 2026-08-15 · **Method:** Promethean Parthenon — Task pillar (extract → brief), Role pillar at D1/D2.
+**Build record:** `.agents/harness/sprint-11-ai-assistant-byok/` (`build-spec.md`, `feature-list.json`, `progress.md`) —
+per-feature verification notes, including what was observed and what was not.
 
 ---
 
@@ -233,68 +236,127 @@ Add `aiKey UserAiKey?` to `model User`.
 Each step ends in a verified commit. **"Implemented" is not "verified" — do not tick a box you did not observe.**
 
 ### Gate 0 — branch
-- [ ] `git checkout -b sprint-11/ai-assistant-byok`
-- [ ] Confirm D6 with the user (pink palette vs. Luxe tokens) — this is the one blocking question
+- [x] `git checkout -b sprint-11/ai-assistant-byok`
+- [x] Confirm D6 with the user (pink palette vs. Luxe tokens) — this is the one blocking question
 
 ### Phase 1 — crypto foundation *(do this first; everything else assumes it)*
-- [ ] `lib/crypto.ts`: `encrypt(plain)` → `{ciphertext, iv, authTag}`, `decrypt(...)` → string, `mask(key)`
-- [ ] Fail loudly if `AI_KEY_SECRET` is missing or ≠32 bytes. No plaintext fallback (REQ-S1)
-- [ ] `crypto.test.ts`: round-trip; tampered `authTag` throws; two encrypts of the same input differ (fresh IV)
-- [ ] Document `AI_KEY_SECRET` in `.env.example` with a generation command
-- [ ] ✅ **Verify:** `npm test -- crypto` green, tamper case genuinely fails
+- [x] `lib/crypto.ts`: `encrypt(plain)` → `{ciphertext, iv, authTag}`, `decrypt(...)` → string, `mask(key)`
+- [x] Fail loudly if `AI_KEY_SECRET` is missing or ≠32 bytes. No plaintext fallback (REQ-S1)
+- [x] `crypto.test.ts`: round-trip; tampered `authTag` throws; two encrypts of the same input differ (fresh IV)
+- [x] Document `AI_KEY_SECRET` in `.env.example` with a generation command
+- [x] ✅ **Verify:** `npm test -- crypto` green, tamper case genuinely fails
 
 ### Phase 2 — schema
-- [ ] Add `UserAiKey` + the `User` back-relation
-- [ ] Stop `:3000`, `prisma generate`, `prisma migrate dev`
-- [ ] ✅ **Verify:** table exists; server typechecks
+- [x] Add `UserAiKey` + the `User` back-relation
+- [x] Stop `:3000`, `prisma generate`, ~~`prisma migrate dev`~~ → **`prisma db push`** (see correction 1 below)
+- [x] ✅ **Verify:** table exists; server typechecks
 
 ### Phase 3 — key API
-- [ ] `api/ai-key.ts`: `GET /api/ai/key`, `PUT /api/ai/key`, `DELETE /api/ai/key`, all `authenticate`
-- [ ] `PUT`: shape check → provider list-models probe (REQ-S6) → encrypt → upsert. Probe fails ⇒ 400, **zero writes**
-- [ ] `GET`: `select` only the safe columns. Never select `ciphertext` in this handler
-- [ ] Mount in `server.ts`
-- [ ] ✅ **Verify:** save a real key; save a junk key (400, table still empty); `GET` shows the mask; `DELETE` clears it; **grep the full request log for key material → zero hits (US-10)**
+- [x] `api/ai-key.ts`: `GET /api/ai/key`, `PUT /api/ai/key`, `DELETE /api/ai/key`, all `authenticate`
+- [x] `PUT`: shape check → provider list-models probe (REQ-S6) → encrypt → upsert. Probe fails ⇒ 400, **zero writes**
+- [x] `GET`: `select` only the safe columns. Never select `ciphertext` in this handler
+- [x] Mount in `server.ts`
+- [x] ✅ **Verify:** save a real key; save a junk key (400, table still empty); `GET` shows the mask; `DELETE` clears it; **grep the full request log for key material → zero hits (US-10)**
 
 ### Phase 4 — wire BYOK into the chat route
-- [ ] `resolveKey(userId)` in `ai.ts` implementing D2's three branches
-- [ ] Distinguish `503 NO_KEY` from the existing generic 503
-- [ ] Confirm every cap still runs **before** `resolveKey` — never reorder
-- [ ] ✅ **Verify:** with a BYOK key set → reply; key deleted + env key present → still replies; both absent → `503 NO_KEY`; oversize prompt → 400 with **no** outbound request
+- [x] `resolveKey(userId)` in `ai.ts` implementing D2's three branches
+- [x] Distinguish `503 NO_KEY` from the existing generic 503
+- [x] Confirm every cap still runs **before** `resolveKey` — never reorder
+- [x] ✅ **Verify:** with a BYOK key set → reply; key deleted + env key present → still replies; both absent → `503 NO_KEY`; oversize prompt → 400 with **no** outbound request
 
 ### Phase 5 — client data layer
-- [ ] `types/assistant.ts`, `services/assistant.ts` (via `fetchWithAuth`, so 401-refresh is inherited)
-- [ ] `useAssistant.ts`: thread state, 20-message trim, `sessionStorage`, typed errors per REQ-B5
-- [ ] ✅ **Verify:** send from a scratch harness before any UI exists; error codes surface distinctly
+- [x] `types/assistant.ts`, `services/assistant.ts` (via `fetchWithAuth`, so 401-refresh is inherited)
+- [x] `useAssistant.ts`: thread state, 20-message trim, `sessionStorage`, typed errors per REQ-B5
+- [x] ✅ **Verify:** send from a scratch harness before any UI exists; error codes surface distinctly
 
 ### Phase 6 — panel shell
-- [ ] `AssistantPanel` (aside ≥1280 / drawer + scrim below, reusing the mobile-nav motion)
-- [ ] `AppLayout` `<main>` → flex row; `Outlet` gets `min-w-0`
-- [ ] `AssistantToggle` in `Topbar`; `localStorage` persistence (REQ-U5)
-- [ ] ✅ **Verify:** toggle at 1440 and 768; reload keeps state; page state survives open→close→open; no horizontal scroll
+- [x] `AssistantPanel` (aside ≥1280 / drawer + scrim below, reusing the mobile-nav motion)
+- [x] `AppLayout` `<main>` → flex row; `Outlet` gets `min-w-0`
+- [x] `AssistantToggle` in `Topbar`; `localStorage` persistence (REQ-U5)
+- [x] ✅ **Verify:** toggle at 1440 and 768; reload keeps state; page state survives open→close→open; no horizontal scroll
 
 ### Phase 7 — conversation UI
-- [ ] Header, MessageList/MessageRow, UserBubble (tinted, right), AssistantMessage (bare, left)
-- [ ] `MarkdownBlock` over `lib/docsMarkdown.ts` — nodes, never `dangerouslySetInnerHTML`
-- [ ] `ThinkingIndicator`, `MessageActions` (copy · retry), `AssistantError`, `EmptyState`
-- [ ] `AssistantComposer` with auto-grow Textarea + CharCounter + AccentButton
-- [ ] ✅ **Verify:** full exchange renders; copy lands on the clipboard; retry re-sends; a fenced code block renders as a code block
+- [x] Header, MessageList/MessageRow, UserBubble (tinted, right), AssistantMessage (bare, left)
+- [x] `MarkdownBlock` over `lib/docsMarkdown.ts` — nodes, never `dangerouslySetInnerHTML`
+- [x] `ThinkingIndicator`, `MessageActions` (copy · retry), `AssistantError`, `EmptyState`
+- [x] `AssistantComposer` with auto-grow Textarea + CharCounter + AccentButton
+- [x] ✅ **Verify:** full exchange renders; copy lands on the clipboard; retry re-sends; a fenced code block renders as a code block
 
 ### Phase 8 — key UI
-- [ ] `KeyDialog` on DS `Modal`; `Input type="password"`; masked row; `ConfirmDialog` before delete
-- [ ] `KeyMissingNotice` on `NO_KEY`, opening the dialog
-- [ ] ✅ **Verify:** save → mask shown, field cleared; delete → confirm required; devtools shows no plaintext in any response
+- [x] `KeyDialog` on DS `Modal`; `Input type="password"`; masked row; `ConfirmDialog` before delete
+- [x] `KeyMissingNotice` on `NO_KEY`, opening the dialog
+- [x] ✅ **Verify:** save → mask shown, field cleared; delete → confirm required; devtools shows no plaintext in any response
 
 ### Phase 9 — polish & proof
-- [ ] Keyboard: `Esc` closes and restores focus; tab order sane; `role="log"` announces (REQ-U6)
-- [ ] `prefers-reduced-motion` respected
-- [ ] Dark mode across every new surface
-- [ ] Token audit: zero hex literals in `components/assistant/*` (REQ-U1)
-- [ ] `npm run build` in the client — **`tsc --noEmit` is not sufficient**, `erasableSyntaxOnly` errors only surface in the real build
-- [ ] ✅ **Verify:** ten user stories walked end to end, each observed
+- [x] Keyboard: `Esc` closes and restores focus; tab order sane; `role="log"` announces (REQ-U6)
+- [x] `prefers-reduced-motion` respected
+- [x] Dark mode across every new surface
+- [x] Token audit: zero hex literals in `components/assistant/*` (REQ-U1)
+- [x] `npm run build` in the client — **`tsc --noEmit` is not sufficient**, `erasableSyntaxOnly` errors only surface in the real build
+- [x] ✅ **Verify:** ten user stories walked end to end, each observed
 
 ### Gate 10 — land
-- [ ] Update `.agents/docs/product/user-flow.md`
-- [ ] PR body: decisions D1–D6, the accepted risk in D1, and what v2 owes
+- [x] Update `.agents/docs/product/user-flow.md` — inventory row, nav paragraph, sequencing item 5 and the flow diagram all now describe the panel that shipped rather than the entry point this doc originally guessed at
+- [ ] PR body: decisions D1–D6, the accepted risk in D1, and what v2 owes — **not done.** The branch is pushed, but `ci.yml` runs only on `pull_request` and `push: [main]`, so opening the PR is also what first puts this feature through CI.
+
+---
+
+## 4a. As-built corrections — where this document was wrong
+
+Kept rather than quietly edited away. Each was found by a verification step failing, and each is the
+kind of thing the next person would otherwise rediscover the expensive way.
+
+**1. `prisma migrate dev` would have offered to reset the database.** Phase 2 said to run it. This
+repo has **no `database/prisma/migrations/` directory** and has never used `prisma migrate` — the
+prior sprint applied schema changes with `db push`. Prisma would have read the populated database as
+drifted. Applied with `db push` after previewing the exact SQL via `prisma migrate diff --script`
+and confirming it was purely additive: one `CREATE TABLE`, one unique index, one cascade FK, zero
+`DROP`. **Every schema change in this repo goes through `db push` until somebody deliberately
+introduces a migrations history.**
+
+**2. The provider key travels in a header, not the query string.** Google documents `?key=…`, and
+`api/ai.ts` already carried a comment warning that a fetch error's message can embed the request
+URL — i.e. the key. Both `ai.ts` and `ai-key.ts` now send `x-goog-api-key` instead, which removes
+that leak class rather than defending against it.
+
+**3. A rejected Gemini key answers HTTP 400, not 401/403** — and is otherwise identical to a
+malformed payload (both `INVALID_ARGUMENT`). Routing on status alone reported a user's bad key as
+"Invalid request to AI service", which tells them nothing actionable. Detection is keyed on
+`error.details[].reason === 'API_KEY_INVALID'`. A rejected **user** key returns `INVALID_KEY` ("fix
+your key"); a rejected **org env** key returns `PROVIDER_ERROR`, because the user can do nothing
+about it and must not be told to delete their own credential.
+
+**4. CI runs ESLint; the sprint's own gates did not.** Typecheck, tests and build were run at every
+step and all stayed green while `services/assistant.ts` accumulated five `no-explicit-any` errors
+that would have failed CI. A local gate that is a subset of the real gate reports green for the
+wrong reason.
+
+### As-built name map
+
+The §3 hierarchy above is the *plan*. Four names in it do not exist in the tree — kept as planned
+names with the map below, because renaming shipped code to match a sketch is the wrong direction.
+Grep the right-hand column.
+
+| Planned name (§3) | What actually shipped |
+|---|---|
+| `MarkdownBlock` | `components/assistant/AssistantMarkdown.tsx` |
+| `AssistantError` | `components/assistant/AssistantErrorRow.tsx` (also exports `KeyMissingNotice`) |
+| `AssistantToggle` | **no component** — the trigger is ~10 lines inline in `components/layout/Topbar.tsx`, an `FiCpu` button carrying `aria-expanded` / `aria-controls="assistant-panel"`. A one-instance component would have added a file and a prop hop for nothing. |
+| `ThinkingIndicator`, `MessageActions`, `MessageRow`, `EmptyState` | all inside `components/assistant/MessageList.tsx`; only `ThinkingIndicator` is exported, the rest are private to the list |
+
+`AssistantPanel` lives in `components/layout/`, **not** `components/assistant/`, and deliberately
+never entered the design-system barrel — it is layout chrome, not a primitive.
+
+### Verification gaps carried forward
+
+Recorded here because the harness gets archived and these do not. All three are limits of the
+headless browser pane used during the build, not known defects:
+
+| Gap | Why it could not be observed | Re-check by |
+|---|---|---|
+| F010 — panel swaps rail↔drawer on a **live resize** | The CDP viewport override fires neither `resize` nor a matchMedia `change` event (counted 0 of each while `matchMedia` itself flipped). The mount decision *is* verified at both widths via fresh loads; the listener path is not. | Dragging a real window across 1280px |
+| F013 — `prefers-reduced-motion: reduce` | The pane offers no way to emulate the media query. `useReducedMotion` suppresses the thinking-dot animation entirely, but that branch has never executed. | OS-level reduced motion, then open the panel and send |
+| F016 — clipboard **success** path | `navigator.clipboard.writeText` rejects with `NotAllowedError` — a synthetic click carries no user activation. The *failure* path is verified: blocked clipboard stays silent and leaves the icon unchanged. | A real click in a focused window; expect check → copy after ~1.6s |
 
 ---
 

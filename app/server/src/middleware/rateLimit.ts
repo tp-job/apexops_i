@@ -75,8 +75,15 @@ export const aiChatLimiter = rateLimit({
     max: AI_MAX,
     message: {
         error: 'AI request limit reached',
+        // Matches the `AiErrorCode` union in `api/ai.ts` so the client branches on
+        // one vocabulary. This 429 is produced by the limiter, before the route
+        // runs, so the code has to be declared here or the shape is inconsistent
+        // with every other failure from the same endpoint.
+        code: 'RATE_LIMITED',
         detail: `Up to ${AI_MAX} requests per hour. Try again later.`,
     },
+    // `standardHeaders` is what makes the wait renderable: it emits RateLimit-Reset,
+    // so the client can say when to come back rather than "try again later".
     standardHeaders: true,
     legacyHeaders: false,
     keyGenerator: (req) => (req.user?.id ? `ai:${req.user.id}` : `ai-ip:${req.ip}`),
