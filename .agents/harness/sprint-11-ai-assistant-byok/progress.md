@@ -4,25 +4,46 @@ Newest session first. Written at teardown, read at bootstrap.
 Written for a reader with zero memory of this build — because that is who reads it.
 
 **Harness:** `.agents/harness/sprint-11-ai-assistant-byok/` (spec · ledger · this log)
-**Branch:** `sprint-11/ai-assistant-byok` — **not yet created**
+**Branch:** `sprint-11/ai-assistant-byok` — checked out, 6 commits ahead of `main`, **pushed** (origin level with HEAD at 867ac02); no PR opened
 
 ---
 
 ## Current state
 
-- **Status:** Gate 3 open. Inner loop running.
-- **Passing:** 18 / 20 features (F001–F014, F016–F019)
-- **Remaining:** **F015** (final gate — steps already written) and **F020** (docs update — still a stub, needs steps first).
+- **Status:** **inner loop complete — 20 / 20 passing.** Gate 3 satisfied; Stage 4 (Integration QA / UAT) is the next stage boundary.
 - **The feature is functionally complete end to end**: open the rail, add your own key, send a message, get a rendered Markdown reply.
 - **Acceptance criterion 2 (no key material anywhere) is verified** — see F006.
-- **Two open gaps**, both environment-limited, both to re-check in a real browser before Stage 4:
-  1. F010 — the live resize swap between rail and drawer (this pane fires no `resize`/matchMedia `change` events).
+- **Three open gaps**, all environment-limited (headless pane, not known defects), all to re-check in a real browser before Stage 4 sign-off. They are also written into `.agents/docs/features/ai-assistant-byok.md` so archiving this harness does not lose them:
+  1. F010 — the live resize swap between rail and drawer (this pane fires no `resize`/matchMedia `change` events; the mount decision itself IS verified at both widths).
   2. F013 — `prefers-reduced-motion` (this pane cannot emulate the media query).
+  3. F016 — the clipboard SUCCESS path (`writeText` rejects with `NotAllowedError`; the failure path is verified).
+- **CI has not actually run.** F015 reproduced every step of `.github/workflows/ci.yml` locally and green, but `ci.yml` fires only on `pull_request` and `push: [main]`, so the pushed feature branch runs nothing. Opening the PR is what would trigger it, and that is the user's call. Local Node is v24 where CI pins 22.
 - **DB workflow:** `prisma db push` only. **Never `prisma migrate dev`** — see the F003 note.
-- **Open gap:** F010's live resize swap is unproven — this browser pane fires no `resize`/matchMedia `change` events. Re-check on a real browser resize before Stage 4.
-- **Branch:** `sprint-11/ai-assistant-byok` — **already existed and is checked out**, level with `main` (0 ahead / 0 behind)
+- **Run ESLint in every gate.** F015 found 5 `no-explicit-any` errors that typecheck + test + build all missed. A local gate that is a subset of CI reports green for the wrong reason.
+- **Branch:** `sprint-11/ai-assistant-byok`, checked out, 6 commits ahead of `main`, **pushed** (`origin/sprint-11/ai-assistant-byok` level with HEAD at 867ac02). No PR opened - unverifiable here, `gh` is not installed.
 - **Blocked on:** nothing
-- **Next session should:** **F003** — the `UserAiKey` migration. Stop anything on `:3000` first (Windows EPERM).
+
+> ### SECURITY FINDING (2026-08-16) - outside this sprint, found by its secret scan
+>
+> **The Gemini API key in `app/server/.env` is present in this repository's git history and has
+> been pushed to `origin/main`.** It sits in `server/.env.example` in the **first commit**
+> (`dba43ca`, 2026-02-10) and was replaced with a placeholder eleven days later in `3c5fe1a`.
+> Blob `4759fa0`, line 16. It is NOT at HEAD, and no file in the current tree contains it - which
+> is why every earlier scan this sprint read clean: they all scanned the working tree.
+>
+> This changes the standing advice from "rotate it, pasting it into chat was the exposure" to
+> **"rotate it, it has been in a pushed `.env.example` for roughly six months."** Whether the
+> repo is public was never confirmed (`gh` is not installed here) and is now the question that
+> decides urgency.
+>
+> Rotating is the only step that actually closes this. Rewriting history (`git filter-repo`) is a
+> separate, destructive, force-push decision for the user - and pointless before rotation, since
+> anyone who already has the key keeps it either way.
+>
+> *Method note for the next scan:* `git grep` over the tree is not a history scan. This was found
+> by reading every blob reachable from `--all`. Add the history pass to the secret-scan gate.
+
+- **Next session should:** close the three gaps in a real browser, then open the PR (its body is the one unticked box in the feature doc: decisions D1–D6, the accepted risk in D1, what v2 owes). Separately — **the Gemini key the user pasted into chat on 2026-08-15 should be rotated**; pasting it was the exposure, and it lives only in gitignored `app/server/.env`.
 
 > **Correction (2026-08-15).** The first version of this log claimed the working tree carried
 > unrelated pre-existing modifications from Projects/Notes/Daily work. It does not — `git status`
@@ -55,6 +76,50 @@ Then, before any Prisma work:
 ---
 
 ## Sessions
+
+### 2026-08-16 — F015 + F020 (inner loop closed, 20/20)
+
+
+**F015 — both workspaces build and test clean.** Ran every step of `.github/workflows/ci.yml`
+locally, in workflow order, rather than re-running the ad-hoc gate script from previous sessions.
+
+**That distinction immediately paid for itself.** `npm run lint --workspace app/client` FAILED —
+five `@typescript-eslint/no-explicit-any` errors in `services/assistant.ts`. Every gate in this
+sprint ran typecheck + test + build and never ran ESLint, so the branch would have gone red on CI
+at a step my own checks did not cover. **A local gate that is a subset of the real gate reports
+green for the wrong reason.**
+
+The `any`s were not cosmetic. `toError`, `sendMessage`, `fetchStoredKey`, `saveKey` and `toKeyInfo`
+all parsed untrusted JSON as `any` — which switches OFF the exact `typeof` discipline the module's
+own comments claim to follow. `data.text.toUpperCase()` on a body with no `text` would have
+compiled. Replaced with `type JsonRecord = Record<string, unknown>` plus an `asRecord()` narrowing
+helper; each field is read through a real check and the *narrowed local* is what gets returned.
+Fixed, not suppressed — no `eslint-disable` was added.
+
+All six steps green after the fix: db:generate · typecheck ×2 · lint · 206 tests · build ×2.
+FAILURE CASE holds — `git diff main...HEAD` over test paths is **588 insertions, 0 deletions**
+across two NEW files, and `.skip`/`.only`/`.todo`/`xit`/`xdescribe` grep to zero. Nothing loosened.
+
+**F020 — docs.** Steps written *before* either doc was opened, so they were a target rather than a
+description of whatever got typed. The path audit (FAILURE CASE 1) earned its keep: four component
+names in the §3 hierarchy do not exist — `MarkdownBlock`, `AssistantError`, `AssistantToggle` (no
+component at all; ~10 lines inline in `Topbar`), and the four symbols private to `MessageList`.
+Resolved with an as-built name map, because renaming shipped code to match a sketch is the wrong
+direction. The detector was proven to fire before trusting its OKs: it reports MISS on
+`hooks/useNoteAiChat.ts`.
+
+`user-flow.md`'s guess that the assistant would be "an entry point from either Notes or Dashboard"
+was **corrected rather than deleted** — the reasoning that produced it ("an assistant, not a
+destination") actually argues for the persistent Topbar panel that shipped, so the record is worth
+more intact.
+
+**Left undone, deliberately:** "CI passes on the branch" is recorded as reproduced-locally, not as
+observed. The branch *is* pushed, but `ci.yml` fires only on `pull_request` and `push: [main]`, so a
+feature branch alone runs nothing - the PR is what would trigger it. No doc claims otherwise.
+
+**Status:** 20 / 20 passing (100%)
+
+---
 
 ### 2026-08-15 — F016 → F019 (message actions, counter, new chat, error surfaces)
 

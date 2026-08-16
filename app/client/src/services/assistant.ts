@@ -30,6 +30,20 @@ const KNOWN_CODES: AssistantErrorCode[] = [
 ];
 
 /**
+ * A parsed JSON body, before anything has been proven about it.
+ *
+ * `unknown` values rather than `any`: every field below is read through a
+ * `typeof` check anyway, and `any` would silently switch those checks off — the
+ * compiler would accept `data.text.toUpperCase()` on a body that has no `text`.
+ * The lint rule banning `any` is enforcing exactly the discipline this module
+ * already claims to follow.
+ */
+type JsonRecord = Record<string, unknown>;
+
+const asRecord = (value: unknown): JsonRecord =>
+    typeof value === 'object' && value !== null ? (value as JsonRecord) : {};
+
+/**
  * Turn any failed response into exactly one `AssistantError`.
  *
  * An unrecognised `code` degrades to `UNKNOWN` rather than being passed through:
@@ -37,19 +51,22 @@ const KNOWN_CODES: AssistantErrorCode[] = [
  * through every case and render nothing at all.
  */
 async function toError(res: Response): Promise<AssistantError> {
-    let body: any = {};
+    let body: JsonRecord = {};
     try {
-        body = await res.json();
+        body = asRecord(await res.json());
     } catch {
         /* empty or non-JSON body — the status still tells us something */
     }
 
-    const code: AssistantErrorCode = KNOWN_CODES.includes(body?.code) ? body.code : 'UNKNOWN';
+    const raw = body.code;
+    const code: AssistantErrorCode = KNOWN_CODES.includes(raw as AssistantErrorCode)
+        ? (raw as AssistantErrorCode)
+        : 'UNKNOWN';
     const retryAfterHeader = res.headers.get('ratelimit-reset') || res.headers.get('retry-after');
 
     return {
         code,
-        message: typeof body?.error === 'string' ? body.error : `Request failed (${res.status})`,
+        message: typeof body.error === 'string' ? body.error : `Request failed (${res.status})`,
         ...(retryAfterHeader ? { retryAfter: Number(retryAfterHeader) || undefined } : {}),
     };
 }
@@ -110,15 +127,16 @@ export async function sendMessage(prompt: string, history: AssistantMessage[]): 
 
     if (!res.ok) throw new AssistantRequestError(await toError(res));
 
-    const data: any = await res.json().catch(() => ({}));
+    const data = asRecord(await res.json().catch(() => ({})));
     // Every field is treated as absent-able. A 200 with a body we did not expect
     // is a bug somewhere, but it must not throw inside a render.
-    if (typeof data?.text !== 'string' || !data.text) {
+    const text = data.text;
+    if (typeof text !== 'string' || !text) {
         throw new AssistantRequestError({ code: 'EMPTY_RESPONSE', message: 'The assistant returned nothing' });
     }
 
     return {
-        text: data.text,
+        text,
         model: typeof data.model === 'string' ? data.model : 'unknown',
         finishReason: typeof data.finishReason === 'string' ? data.finishReason : 'STOP',
         keySource: data.keySource === 'user' ? 'user' : 'env',
@@ -132,13 +150,15 @@ const toDate = (v: unknown): Date | null => {
     return Number.isNaN(d.getTime()) ? null : d;
 };
 
-const toKeyInfo = (raw: any): StoredKeyInfo | null => {
-    if (!raw || typeof raw.maskedKey !== 'string') return null;
+const toKeyInfo = (raw: unknown): StoredKeyInfo | null => {
+    const key = asRecord(raw);
+    const maskedKey = key.maskedKey;
+    if (typeof maskedKey !== 'string') return null;
     return {
         provider: 'gemini',
-        maskedKey: raw.maskedKey,
-        verifiedAt: toDate(raw.verifiedAt),
-        updatedAt: toDate(raw.updatedAt) ?? new Date(),
+        maskedKey,
+        verifiedAt: toDate(key.verifiedAt),
+        updatedAt: toDate(key.updatedAt) ?? new Date(),
     };
 };
 
@@ -151,8 +171,8 @@ export async function fetchStoredKey(): Promise<StoredKeyInfo | null> {
         throw networkError(err);
     }
     if (!res.ok) throw new AssistantRequestError(await toError(res));
-    const data: any = await res.json().catch(() => ({}));
-    return toKeyInfo(data?.key);
+    const data = asRecord(await res.json().catch(() => ({})));
+    return toKeyInfo(data.key);
 }
 
 export async function saveKey(apiKey: string): Promise<StoredKeyInfo> {
@@ -168,8 +188,8 @@ export async function saveKey(apiKey: string): Promise<StoredKeyInfo> {
     }
     if (!res.ok) throw new AssistantRequestError(await toError(res));
 
-    const data: any = await res.json().catch(() => ({}));
-    const info = toKeyInfo(data?.key);
+    const data = asRecord(await res.json().catch(() => ({})));
+    const info = toKeyInfo(data.key);
     if (!info) throw new AssistantRequestError({ code: 'UNKNOWN', message: 'The key was saved but could not be read back' });
     return info;
 }
