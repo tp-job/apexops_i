@@ -301,49 +301,76 @@
       "category": "functional",
       "priority": "medium",
       "description": "Message actions: copy and retry",
-      "steps": [],
+      "steps": [
+        "Copy on an assistant reply writes that reply text to the clipboard and the icon acknowledges (check -> copy after ~1.6s)",
+        "Retry re-sends the LAST PROMPT and does not append a duplicate user turn",
+        "Retry is offered on the newest assistant reply only, never on historic turns",
+        "Retry is hidden while a request is in flight",
+        "FAILURE CASE: a blocked/denied clipboard does not throw, does not surface an error, and leaves the icon unchanged",
+        "Actions are reachable by keyboard: they become visible on focus (group-focus-within), not on hover alone"
+      ],
       "depends_on": [
         "F011"
       ],
-      "passes": false,
-      "notes": "Stub — specify steps before implementing. Empty steps cannot pass. Retry semantics (re-send prior prompt vs. regenerate from same history) is an open question."
+      "passes": true,
+      "notes": "VERIFIED 2026-08-15 in the browser. Retry appears on the NEWEST assistant reply only (1 retry button across a 4-row thread, owned by the newest reply), is hidden while a request is in flight, and the composer is disabled alongside it. REAL DEFECT FOUND AND FIXED: retry did nothing at all after a page reload. lastPrompt was an in-memory ref, so a thread restored from sessionStorage left it null and retryLast returned early — a visible control performing no action, which is exactly what Topbar's house rule forbids. retryLast now recovers the prompt from the thread itself (the durable source) and treats the ref as a fast path. SECOND DECISION while fixing: the stale reply is now DROPPED before re-sending rather than a second reply appended — the button says \"retry this reply\", and keeping the old one would also feed a failed answer back as context. Re-verified from the exact failing condition (fresh page, ref null): request fired, thinking shown, retry hidden in flight, STALE REPLY removed, new reply present, prompt and earlier turns preserved, row count stable at 4, no duplicate user turn. FAILURE CASE for the clipboard passes: writeText is blocked here (NotAllowedError — no user activation for a synthetic click) and the handler stayed silent, surfaced no error row, and left the icon unchanged. GAP: the clipboard SUCCESS path is therefore unverified in this environment; the copy/acknowledge cycle needs a real click in a focused window."
     },
     {
       "id": "F017",
       "category": "ui",
       "priority": "medium",
       "description": "Composer character counter and approaching-limit warning",
-      "steps": [],
+      "steps": [
+        "No counter is shown below 6000 characters (75% of the 8000 cap)",
+        "Counter appears at/above 6000 and reads \"n / 8,000\"",
+        "Counter is yellow while under the cap and red once over it",
+        "FAILURE CASE: over 8000 characters the Send button is disabled and the message cannot be sent",
+        "The client cap matches the server MAX_PROMPT_CHARS, so the server 400 is a backstop and not the normal path"
+      ],
       "depends_on": [
         "F011"
       ],
-      "passes": false,
-      "notes": "Stub. Warn from 7000 toward the 8000 server cap."
+      "passes": true,
+      "notes": "VERIFIED 2026-08-15. No counter below 6000 characters; it appears at exactly 6000 (75% of the 8000 server cap) and when the field is emptied it disappears again. Colour changes with state: rgb(245,158,11) = global-yellow under the cap, rgb(239,68,68) = global-red over it. FAILURE CASE: at 8001 characters the Send button is disabled and the message cannot be sent, so the client cap matches the server MAX_PROMPT_CHARS and the server 400 stays a backstop rather than the normal path."
     },
     {
       "id": "F018",
       "category": "functional",
       "priority": "medium",
       "description": "New-chat control clears the thread and its sessionStorage entry",
-      "steps": [],
+      "steps": [
+        "New chat empties the thread and the empty state returns",
+        "New chat removes the sessionStorage entry, so a reload does not resurrect the conversation",
+        "New chat is disabled when the thread is already empty",
+        "FAILURE CASE: New chat clears any visible error along with the thread, so a stale failure does not outlive the conversation it belonged to",
+        "New chat does not delete the stored API key"
+      ],
       "depends_on": [
         "F011"
       ],
-      "passes": false,
-      "notes": "Stub."
+      "passes": true,
+      "notes": "VERIFIED 2026-08-15. New chat empties the thread, restores the EmptyState, disables itself once the thread is empty, and leaves the stored API key untouched. DEFECT FOUND AND FIXED: the sessionStorage entry was NOT removed. clear() deleted the key, then the persist effect ran on the new empty state and wrote an empty array straight back — leaving a storage artifact nothing ever cleaned up. Behaviourally harmless but the stored state and \"there is no conversation\" disagreed, and storage that lies is what the next bug gets built on. writeThread now removes the entry when the thread is empty instead of storing an empty array. Re-verified from a reloaded, restored thread: after New chat the entry is null, the old text is gone, and the empty state is shown. The fix was chosen over loosening the step — the step was right."
     },
     {
       "id": "F019",
       "category": "functional",
       "priority": "low",
       "description": "Rate-limit and provider-error surfaces render their own affordances",
-      "steps": [],
+      "steps": [
+        "RATE_LIMITED renders in the yellow/wait tone, not the red/fault tone",
+        "RATE_LIMITED shows a human wait derived from retryAfter (e.g. \"in about 60 minutes\"), not a raw seconds value",
+        "RATE_LIMITED deliberately offers NO retry button, because retrying inside the window fails again",
+        "PROVIDER_ERROR renders in the red tone and DOES offer Retry",
+        "INVALID_KEY offers \"Update key\" which opens the key dialog",
+        "FAILURE CASE: NO_KEY never renders as a red error row — it renders as the accent-soft KeyMissingNotice invitation",
+        "Every error row is dismissible and carries role=alert"
+      ],
       "depends_on": [
         "F011",
         "F008"
       ],
-      "passes": false,
-      "notes": "Stub. 429 shows retry-after; PROVIDER_ERROR offers retry."
+      "passes": true,
+      "notes": "VERIFIED 2026-08-15 by intercepting /api/ai/chat in the browser to drive each code on demand; the server-side codes themselves were already verified live in F008, so what is under test here is purely how the panel RENDERS them. RATE_LIMITED: amber rgb(245,158,11), text \"You have hit the request limit. Try again in about 60 minutes.\" derived from the RateLimit-Reset header rather than shown as raw seconds, and deliberately NO retry button. PROVIDER_ERROR: red rgb(239,68,68) with a Retry button. INVALID_KEY: red with an \"Update key\" button, confirmed to actually open the key dialog. NO_KEY: no alert row at all — it renders the accent-soft KeyMissingNotice invitation instead, which is the failure case that matters, since a first-run state must not look like a fault. Every error row carries role=alert and a Dismiss control."
     },
     {
       "id": "F020",

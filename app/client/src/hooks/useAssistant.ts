@@ -54,7 +54,16 @@ function readThread(): AssistantMessage[] {
 
 function writeThread(messages: AssistantMessage[]): void {
     try {
-        sessionStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
+        // An empty thread REMOVES the entry rather than storing `[]`.
+        //
+        // `clear()` deletes the key, but this effect runs immediately afterwards
+        // on the new empty state and would write an empty array straight back —
+        // so "new chat" left a storage artifact behind that nothing ever cleaned
+        // up. Behaviourally harmless, but it meant the stored state and "there is
+        // no conversation" disagreed, and storage that lies is how the next bug
+        // gets built.
+        if (messages.length === 0) sessionStorage.removeItem(STORAGE_KEY);
+        else sessionStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
     } catch {
         /* over quota or disabled — the thread simply does not survive reload */
     }
@@ -150,16 +159,42 @@ export function useAssistant(enabled: boolean): UseAssistant {
     );
 
     /**
-     * Re-send the last prompt.
+     * Re-send the last prompt and replace the reply it produced.
      *
-     * The failed turn produced no assistant message, so the user's turn is
-     * already in the thread and must NOT be appended again — this sends the same
-     * prompt with the history that preceded it.
+     * Two things here were learned the hard way:
+     *
+     * **The prompt is recovered from the thread, not only from a ref.**
+     * `lastPrompt` lives in memory, so after a reload restored the conversation
+     * from `sessionStorage` it was `null` and Retry silently did nothing — a
+     * visible control that performs no action, which is the failure this
+     * codebase explicitly refuses elsewhere. The thread is the durable source;
+     * the ref is just the fast path.
+     *
+     * **The stale reply is dropped before re-sending.** The button says "retry
+     * this reply", so leaving the old one and appending a second is not what it
+     * claims to do — and it would send the failed answer back as context on the
+     * next turn.
      */
     const retryLast = useCallback(async () => {
-        const prompt = lastPrompt.current;
-        if (!prompt || inFlight.current) return;
-        const priorHistory = messages.filter((m) => m.text !== prompt || m.role !== 'user').slice(-MAX_HISTORY_MESSAGES);
+        if (inFlight.current) return;
+
+        // Index of the newest user turn — the prompt to re-send.
+        let promptIdx = -1;
+        for (let i = messages.length - 1; i >= 0; i--) {
+            if (messages[i].role === 'user') {
+                promptIdx = i;
+                break;
+            }
+        }
+
+        const prompt = promptIdx >= 0 ? messages[promptIdx].text : lastPrompt.current;
+        if (!prompt) return;
+
+        // Everything before the prompt is the context; the prompt travels
+        // separately, and anything after it is the reply being replaced.
+        const priorHistory = (promptIdx >= 0 ? messages.slice(0, promptIdx) : messages).slice(-MAX_HISTORY_MESSAGES);
+
+        if (promptIdx >= 0) setMessages(messages.slice(0, promptIdx + 1));
         await runSend(prompt, priorHistory);
     }, [messages, runSend]);
 

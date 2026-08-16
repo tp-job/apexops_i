@@ -11,8 +11,8 @@ Written for a reader with zero memory of this build — because that is who read
 ## Current state
 
 - **Status:** Gate 3 open. Inner loop running.
-- **Passing:** 14 / 20 features (F001–F014)
-- **Next:** **F015** (final build/test gate), then the F016–F020 stubs (message actions, char counter, new-chat, error surfaces, docs) — several of which are already implemented and need steps written before they can be marked.
+- **Passing:** 18 / 20 features (F001–F014, F016–F019)
+- **Remaining:** **F015** (final gate — steps already written) and **F020** (docs update — still a stub, needs steps first).
 - **The feature is functionally complete end to end**: open the rail, add your own key, send a message, get a rendered Markdown reply.
 - **Acceptance criterion 2 (no key material anywhere) is verified** — see F006.
 - **Two open gaps**, both environment-limited, both to re-check in a real browser before Stage 4:
@@ -55,6 +55,36 @@ Then, before any Prisma work:
 ---
 
 ## Sessions
+
+### 2026-08-15 — F016 → F019 (message actions, counter, new chat, error surfaces)
+
+**Process note: these were stubs, so steps came first**
+- All four carried `"steps": []`, and a feature with no steps cannot be marked passing. Verification steps were written *before* any of them was examined — otherwise the steps get quietly shaped to fit whatever the code already does, which is how a ledger stops being evidence.
+
+**Two real defects, both found because the steps were written first**
+1. **Retry did nothing after a reload.** `lastPrompt` was an in-memory ref; a thread restored from `sessionStorage` left it `null`, so `retryLast` returned early. The button was visible and inert — precisely what `Topbar`'s house rule forbids. Fixed by recovering the prompt from the thread (the durable source) and treating the ref as a fast path. While fixing, a second decision: the stale reply is now **dropped** before re-sending rather than a second reply appended — the button says "retry *this reply*", and keeping the old one would also feed a failed answer back as context. Re-verified from the exact failing condition (fresh page, ref null).
+2. **New chat left a storage artifact.** `clear()` removed the key, then the persist effect ran on the new empty state and wrote an empty array straight back. Harmless behaviourally, but the stored state and "there is no conversation" disagreed — and storage that lies is what the next bug gets built on. `writeThread` now removes the entry when the thread is empty. **The step was right, so the code changed, not the step.**
+
+**A third environment artifact, same family as the previous two**
+- Focus-reveal on the message actions measured as `opacity: 0` even though `:focus-within` matched and the CSS rule existed. Removing `transition-opacity` made it resolve to `1` instantly — a hidden tab **throttles CSS transitions** so they never tick. Together with frozen `AnimatePresence` exits, the rule for this pane is now clear: **anything gated on a transition or an exit animation cannot be measured here; read the underlying state instead.**
+
+**Verified**
+- **F016** retry on the newest reply only, hidden in flight, no duplicate user turn, earlier turns preserved.
+- **F017** counter hidden below 6000, appears at 6000, yellow → red across the cap, Send disabled at 8001.
+- **F018** thread cleared, empty state restored, button self-disables, storage entry removed, API key untouched.
+- **F019** driven by intercepting `/api/ai/chat` to render each code on demand (the codes themselves were already proven live in F008): `RATE_LIMITED` amber with a human wait and **no** retry button; `PROVIDER_ERROR` red with Retry; `INVALID_KEY` red with "Update key" that actually opens the dialog; `NO_KEY` renders the accent-soft invitation and **no** alert row.
+
+**Gaps**
+- **Clipboard success path unverified.** `writeText` is blocked here (`NotAllowedError` — a synthetic click carries no user activation). The *failure* case passes: blocked clipboard stays silent, surfaces no error, leaves the icon unchanged. The copy/acknowledge cycle needs a real click in a focused window.
+
+**Status:** 18 / 20 passing (90%)
+
+**Next session should**
+1. **F015** — the final gate: both builds, both suites, CI green on the branch.
+2. **F020** — write steps, then update `user-flow.md` and the feature doc to match what shipped.
+3. Close the three environment-limited gaps (F010 resize, F013 reduced motion, F016 clipboard) in a real browser.
+
+---
 
 ### 2026-08-15 — F011 → F014 (the UI half)
 
