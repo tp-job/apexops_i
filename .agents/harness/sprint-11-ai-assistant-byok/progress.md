@@ -11,10 +11,13 @@ Written for a reader with zero memory of this build — because that is who read
 ## Current state
 
 - **Status:** Gate 3 open. Inner loop running.
-- **Passing:** 10 / 20 features (F001–F005, F006, F007, F008, F009, F010)
-- **Next:** **F011** (conversation UI) → F012 (KeyDialog) → F013 (a11y) → F014 (token audit) → F015 (build/test gate).
-- **Server half complete and proven. Client data layer complete and proven headless.** What remains is UI only.
+- **Passing:** 14 / 20 features (F001–F014)
+- **Next:** **F015** (final build/test gate), then the F016–F020 stubs (message actions, char counter, new-chat, error surfaces, docs) — several of which are already implemented and need steps written before they can be marked.
+- **The feature is functionally complete end to end**: open the rail, add your own key, send a message, get a rendered Markdown reply.
 - **Acceptance criterion 2 (no key material anywhere) is verified** — see F006.
+- **Two open gaps**, both environment-limited, both to re-check in a real browser before Stage 4:
+  1. F010 — the live resize swap between rail and drawer (this pane fires no `resize`/matchMedia `change` events).
+  2. F013 — `prefers-reduced-motion` (this pane cannot emulate the media query).
 - **DB workflow:** `prisma db push` only. **Never `prisma migrate dev`** — see the F003 note.
 - **Open gap:** F010's live resize swap is unproven — this browser pane fires no `resize`/matchMedia `change` events. Re-check on a real browser resize before Stage 4.
 - **Branch:** `sprint-11/ai-assistant-byok` — **already existed and is checked out**, level with `main` (0 ahead / 0 behind)
@@ -52,6 +55,44 @@ Then, before any Prisma work:
 ---
 
 ## Sessions
+
+### 2026-08-15 — F011 → F014 (the UI half)
+
+**Completed**
+- **[F011]** Conversation surface ✅ · **[F012]** KeyDialog ✅ · **[F013]** Accessibility ✅ · **[F014]** Token audit ✅
+- New: `components/assistant/{AssistantMarkdown,MessageList,AssistantComposer,AssistantErrorRow,KeyDialog}.tsx`; `AssistantPanel` rewritten to compose them.
+- End-to-end through the real provider: typed a prompt → thinking indicator → composer disabled in flight → reply appended with a **rendered** Markdown list and fenced code block → composer cleared and re-enabled.
+
+**The XSS property, proven rather than hoped for**
+- Rather than wait for a model to emit markup, a hostile reply was planted directly into the thread: `<img src=x onerror=…>`, `<script>`, and a `javascript:` link. Result: the payload never executed, **zero** `<img>` and `<script>` elements were created, the markup rendered as literal visible text, and the `javascript:` link lost its href while the adjacent `https:` link kept its anchor.
+- That property is *inherited*, not re-derived: `AssistantMarkdown` reuses `lib/docsMarkdown`'s parser and its href allowlist. A second Markdown path would have been a second place for an escaping bug to live — and this input is model output, which the app cannot vouch for.
+
+**Decisions**
+- **The user's turn is a tinted bubble; the assistant's is bare text with no surface.** The reply is the content and gets the full column; the prompt is an aside and gets a container. The bubble is neutral `surface-2`, not lime — `.ds-glow` reserves the accent for one focal element per view, and that budget belongs to the send button.
+- **No attachment control.** The reference has a paperclip; there is nothing to attach it to, and the house rule in `Topbar` is that a control which does nothing is worse than no control.
+- **Retry is offered on the newest reply only.** On a historic turn it would imply regenerating *that* message, which is not what it does.
+- **Errors get per-code affordances**, not one red box: `NO_KEY` is an accent-soft invitation, `RATE_LIMITED` is yellow with no retry button (retrying now just fails again), `INVALID_KEY` offers "Update key", everything else offers "Retry".
+- **Message actions reveal on `group-focus-within` as well as hover.** Hover-only reveal is a keyboard trap in disguise — the control exists, tab reaches it, and it is invisible while focused.
+
+**A wrong call I made and corrected**
+- I reported a "real defect": a stale *"The provider rejected that API key"* persisting beside a freshly verified mask. It is **not** a product defect. DS `Field` wraps its error in `AnimatePresence`, and this browser pane runs at `visibilityState: "hidden"`, so motion exit animations never complete and the node stays mounted forever — the same reason dialogs "fail to close" here. The panel's own error row, which has no exit animation, correctly showed nothing, proving the state had already cleared. Worth remembering: **in this pane, anything inside `AnimatePresence` never unmounts.**
+- Related false alarm: the `ACTIVE` badge "missing" was a case-sensitive regex meeting a CSS `text-transform`.
+
+**F014's audit is itself verified**
+- The five-gate audit strips comment lines first, so a rule named inside the doc comment explaining it is not counted as a violation. Then it was **mutation-checked**: injecting `text-[#ff0000]` and `text-muted-foreground` made it fail exactly those two gates with the offending line, and it passed again once restored. Computed styles confirm the Luxe scale in both themes, with `brand-accent` correctly theme-invariant.
+
+**Left undone**
+- `prefers-reduced-motion` is written but **unproven** — this pane cannot emulate the query.
+- The client dev server had to be restarted; it was collateral from the earlier over-broad process kill.
+- Uncommitted: the five new assistant components, the rewritten `AssistantPanel`, harness.
+
+**Status:** 14 / 20 passing (70%)
+
+**Next session should**
+1. **F015** — the final gate (both builds, both suites, CI on the branch).
+2. Write steps for the F016–F020 stubs; several (copy/retry, char counter, new chat, error surfaces) are already built and only need verification steps before they may be marked.
+
+---
 
 ### 2026-08-15 — F006 + F009 (leak scan + client data layer)
 

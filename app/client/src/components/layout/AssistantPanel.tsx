@@ -1,15 +1,19 @@
 import type { FC } from 'react';
-import { useEffect, useRef } from 'react';
-import { FiChevronsRight, FiCpu } from 'react-icons/fi';
-import { EmptyState } from '@/components/design-system';
+import { useEffect, useState } from 'react';
+import { FiChevronsRight, FiCpu, FiEdit3, FiKey } from 'react-icons/fi';
+import { useAssistant } from '@/hooks/useAssistant';
+import MessageList from '@/components/assistant/MessageList';
+import AssistantComposer from '@/components/assistant/AssistantComposer';
+import AssistantErrorRow, { KeyMissingNotice } from '@/components/assistant/AssistantErrorRow';
+import KeyDialog from '@/components/assistant/KeyDialog';
 
 /**
- * The AI assistant rail (spec F010).
+ * The AI assistant rail (spec F010–F014).
  *
  * **This is layout chrome, not a design-system primitive.** It deliberately does
  * not live in `components/design-system` and must never be added to that barrel:
- * the barrel is the one door for reusable primitives, and a panel that only ever
- * appears once, in one shell, is not one.
+ * the barrel is the one door for reusable primitives, and a panel that appears
+ * once, in one shell, is not one.
  *
  * ## Why it looks like the Sidebar
  *
@@ -20,23 +24,14 @@ import { EmptyState } from '@/components/design-system';
  * floating over it. `.ds-frost` and `.ds-menu` are both wrong here, for the
  * reasons each carries in its own comment in `globals.css`.
  *
- * Below `xl` it *is* floating, so the drawer variant earns `.ds-elev-3`. The
- * scrim and its timing are `AppLayout`'s existing nav-drawer values reused
- * verbatim rather than a second near-identical set.
+ * Below `xl` it *is* floating, so the drawer variant earns `.ds-elev-3`.
  *
  * ## Tokens
  *
  * This repo carries two token systems. Everything here uses the Luxe `@theme`
- * scale (`brand-*`, `light/dark-*`). The shadcn neutral set (`bg-background`,
- * `text-muted-foreground`, …) backs `components/ui/*` only — a directory that
- * does not exist — and must not appear in this subtree.
- *
- * ## Why there is no composer yet
- *
- * `Topbar`'s own comment states the rule: a control that does nothing is worse
- * than no control. The conversation surface and its composer arrive with F011,
- * wired to `useAssistant`. Until then this renders an honest empty state rather
- * than an input that swallows what you type.
+ * scale (`brand-*`, `light/dark-*`, `global-*`). The shadcn neutral set
+ * (`bg-background`, `text-muted-foreground`, …) backs `components/ui/*` only — a
+ * directory that does not exist — and must not appear in this subtree.
  */
 
 interface AssistantPanelProps {
@@ -45,25 +40,26 @@ interface AssistantPanelProps {
     variant?: 'rail' | 'drawer';
 }
 
-/**
- * There is deliberately no `open` prop: `AppLayout` mounts this only while the
- * panel is open, so a boolean here could only ever be `true`. A prop that cannot
- * vary is a prop that will eventually be read as meaningful and get a branch
- * built on it.
- */
 const AssistantPanel: FC<AssistantPanelProps> = ({ onClose, variant = 'rail' }) => {
-    const closeRef = useRef<HTMLButtonElement>(null);
+    const assistant = useAssistant(true);
+    const [keyDialogOpen, setKeyDialogOpen] = useState(false);
 
-    // Esc closes from anywhere in the panel. Focus return to the trigger is
-    // `AppLayout`'s job — it owns the trigger, and a component that cannot see
-    // an element should not claim to restore focus to it.
+    // Esc closes from anywhere in the panel — but not while the key dialog is
+    // open, where Radix owns Esc and should close only itself. Two handlers
+    // firing on one keypress would shut both.
     useEffect(() => {
+        if (keyDialogOpen) return;
         const onKey = (e: KeyboardEvent) => {
             if (e.key === 'Escape') onClose();
         };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
-    }, [onClose]);
+    }, [onClose, keyDialogOpen]);
+
+    const noKey = assistant.error?.code === 'NO_KEY';
+    const iconBtn =
+        'grid h-9 w-9 shrink-0 place-items-center rounded-xl text-gray-600 transition-colors ' +
+        'hover:bg-black/5 dark:text-gray-300 dark:hover:bg-white/10';
 
     return (
         <aside
@@ -88,29 +84,56 @@ const AssistantPanel: FC<AssistantPanelProps> = ({ onClose, variant = 'rail' }) 
                         Assistant
                     </span>
                     <span className="truncate text-[11px] text-light-text-secondary dark:text-dark-text-secondary">
-                        Not configured
+                        {assistant.storedKey ? `Your key · ${assistant.storedKey.maskedKey}` : 'Gemini'}
                     </span>
                 </div>
 
-                <button
-                    ref={closeRef}
-                    type="button"
-                    onClick={onClose}
-                    aria-label="Close assistant"
-                    className="ml-auto grid h-9 w-9 shrink-0 place-items-center rounded-xl text-gray-600 transition-colors hover:bg-black/5 dark:text-gray-300 dark:hover:bg-white/10"
-                >
-                    <FiChevronsRight size={17} />
-                </button>
+                <div className="ml-auto flex items-center gap-0.5">
+                    <button type="button" onClick={() => setKeyDialogOpen(true)} aria-label="Manage API key" className={iconBtn}>
+                        <FiKey size={16} />
+                    </button>
+                    <button
+                        type="button"
+                        onClick={assistant.clear}
+                        disabled={assistant.messages.length === 0}
+                        aria-label="New chat"
+                        className={`${iconBtn} disabled:cursor-not-allowed disabled:opacity-40`}
+                    >
+                        <FiEdit3 size={16} />
+                    </button>
+                    <button type="button" onClick={onClose} aria-label="Close assistant" className={iconBtn}>
+                        <FiChevronsRight size={17} />
+                    </button>
+                </div>
             </div>
 
-            <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto">
-                <EmptyState
-                    size="sm"
-                    icon={<FiCpu size={18} />}
-                    title="Assistant not wired up yet"
-                    description="The conversation surface and your own API key arrive next. This rail is the shell it mounts into."
-                />
+            <div className="min-h-0 flex-1 overflow-y-auto">
+                <MessageList messages={assistant.messages} sending={assistant.sending} onRetry={() => void assistant.retryLast()} />
             </div>
+
+            {/* NO_KEY is an invitation, not a failure — so it gets its own surface. */}
+            {noKey && <KeyMissingNotice onOpenKeyDialog={() => setKeyDialogOpen(true)} />}
+
+            {assistant.error && !noKey && (
+                <AssistantErrorRow
+                    error={assistant.error}
+                    onRetry={() => void assistant.retryLast()}
+                    onDismiss={assistant.dismissError}
+                    onOpenKeyDialog={() => setKeyDialogOpen(true)}
+                />
+            )}
+
+            <AssistantComposer onSend={(text) => void assistant.send(text)} sending={assistant.sending} />
+
+            <KeyDialog
+                open={keyDialogOpen}
+                onOpenChange={setKeyDialogOpen}
+                storedKey={assistant.storedKey}
+                busy={assistant.keyLoading}
+                error={assistant.error}
+                onSubmit={assistant.submitKey}
+                onRemove={assistant.removeKey}
+            />
         </aside>
     );
 };
