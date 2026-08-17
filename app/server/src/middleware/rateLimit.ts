@@ -1,4 +1,21 @@
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
+
+/**
+ * The IP half of every custom key below.
+ *
+ * **Never use `req.ip` directly in a `keyGenerator`.** A single IPv6 customer is
+ * routinely handed a /64 — on the order of 10^19 addresses — so keying on the
+ * full address lets one client rotate to a fresh address per request and never
+ * meet a limit at all. `ipKeyGenerator` masks IPv6 down to its subnet so the
+ * budget lands on the allocation rather than the address, and leaves IPv4
+ * untouched. `express-rate-limit` v7+ flags the raw form as `ERR_ERL_KEY_GEN_IPV6`
+ * precisely because the limiter still *looks* like it is working.
+ *
+ * The limiters with no `keyGenerator` at all (login, register) are already safe:
+ * the library's built-in default applies this masking itself. Only the ones that
+ * override it had to opt back in.
+ */
+export const ipKey = (req: { ip?: string }): string => ipKeyGenerator(req.ip ?? '');
 
 const AUTH_WINDOW_MS = parseInt(process.env.RATE_LIMIT_AUTH_WINDOW_MS || '900000', 10); // 15 min
 const AUTH_MAX_LOGIN = parseInt(process.env.RATE_LIMIT_AUTH_MAX_LOGIN || '10', 10);
@@ -50,7 +67,7 @@ export const inviteLimiter = rateLimit({
     keyGenerator: (req) =>
         typeof req.params.slug === 'string' && req.params.slug
             ? `invite:${req.params.slug}`
-            : `invite-ip:${req.ip}`,
+            : `invite-ip:${ipKey(req)}`,
 });
 
 const AI_WINDOW_MS = parseInt(process.env.AI_RATE_LIMIT_WINDOW_MS || '3600000', 10); // 1 hour
@@ -86,7 +103,7 @@ export const aiChatLimiter = rateLimit({
     // so the client can say when to come back rather than "try again later".
     standardHeaders: true,
     legacyHeaders: false,
-    keyGenerator: (req) => (req.user?.id ? `ai:${req.user.id}` : `ai-ip:${req.ip}`),
+    keyGenerator: (req) => (req.user?.id ? `ai:${req.user.id}` : `ai-ip:${ipKey(req)}`),
 });
 
 const SCAN_WINDOW_MS = parseInt(process.env.URL_SCAN_WINDOW_MS || '3600000', 10); // 1 hour
@@ -106,5 +123,5 @@ export const urlScanLimiter = rateLimit({
     message: { error: 'Too many URL scans. Please try again later.' },
     standardHeaders: true,
     legacyHeaders: false,
-    keyGenerator: (req) => (req.user?.id ? `scan:${req.user.id}` : `scan-ip:${req.ip}`),
+    keyGenerator: (req) => (req.user?.id ? `scan:${req.user.id}` : `scan-ip:${ipKey(req)}`),
 });

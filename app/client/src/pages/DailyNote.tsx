@@ -13,6 +13,8 @@ import {
     FiCheckCircle,
     FiChevronLeft,
     FiChevronRight,
+    FiEdit3,
+    FiFileText,
     FiList,
     FiLoader,
     FiPlus,
@@ -45,6 +47,7 @@ import {
     type DailyTodo,
     type TodoFilter,
 } from '@/lib/dailyTodos';
+import { isEmptyRichDoc } from '@/lib/richText';
 import { fadeUp, stagger } from '@/lib/motion';
 
 /**
@@ -185,30 +188,40 @@ const TodoRow: FC<{
     );
 };
 
-// ── One lane ──────────────────────────────────────────────────
+// ── One group within the todo column ──────────────────────────
 
-const Lane: FC<{
+/**
+ * A labelled run of rows — **a heading, not a card**.
+ *
+ * These used to be two `Surface` panels sitting side by side in the page grid.
+ * Once the todos moved into a single column beside the note, a card inside a
+ * card is one frame too many: the eye reads three nested borders before it
+ * reaches a checkbox. The group is now a small caps label with a count, which
+ * separates "to do" from "done" using type instead of chrome.
+ */
+const TodoGroup: FC<{
     title: string;
     count: number;
-    emptyTitle: string;
-    emptyDescription: string;
+    emptyLabel: string;
     children: React.ReactNode;
-}> = ({ title, count, emptyTitle, emptyDescription, children }) => (
-    <Surface variant="panel" radius="3xl" padding="lg" className="h-full">
-        <div className="flex h-full flex-col gap-4">
-            <div className="flex items-center gap-2.5">
-                <h2 className="text-base font-bold font-heading text-brand-dark dark:text-white">{title}</h2>
-                <Badge tone="neutral">{count}</Badge>
-            </div>
-            {count === 0 ? (
-                <EmptyState size="sm" icon={<FiList size={20} />} title={emptyTitle} description={emptyDescription} />
-            ) : (
-                <motion.ul variants={stagger(0.03)} initial="hidden" animate="show" className="flex flex-col gap-2.5">
-                    {children}
-                </motion.ul>
-            )}
+}> = ({ title, count, emptyLabel, children }) => (
+    <section className="flex flex-col gap-2.5">
+        <div className="flex items-center gap-2">
+            <h3 className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+                {title}
+            </h3>
+            <Badge tone="neutral">{count}</Badge>
         </div>
-    </Surface>
+        {count === 0 ? (
+            <p className="rounded-2xl border border-dashed border-gray-200 px-3 py-4 text-center text-xs text-gray-400 dark:border-white/10 dark:text-gray-500">
+                {emptyLabel}
+            </p>
+        ) : (
+            <motion.ul variants={stagger(0.03)} initial="hidden" animate="show" className="flex flex-col gap-2.5">
+                {children}
+            </motion.ul>
+        )}
+    </section>
 );
 
 // ── Save state ────────────────────────────────────────────────
@@ -325,6 +338,86 @@ const DailyNote: FC = () => {
     const shiftDay = (delta: number) => setDayKey(day.add(delta, 'day').format('YYYY-MM-DD'));
 
     /**
+     * Does this day have something written down?
+     *
+     * `richDoc` first, `body` only as the fallback for notes written before rich
+     * text existed. A document holding nothing but an image has no plain text at
+     * all, so testing `body` alone would call a written day empty.
+     */
+    const hasEntry = useMemo(
+        () => (richDoc ? !isEmptyRichDoc(richDoc) : body.trim().length > 0),
+        [richDoc, body],
+    );
+
+    /**
+     * The same question asked of the **stored note** rather than of the editor's
+     * mirror of it.
+     *
+     * These are not interchangeable and the difference is a one-render race.
+     * `useDailyTodos` sets `notes` and clears `loading` together, but copies the
+     * note into `richDoc`/`body` from a *separate* effect keyed on `note` — so in
+     * the very commit where `loading` first turns false, `richDoc` is still null
+     * and `hasEntry` is still false. Deciding the opening mode from it opened a
+     * day with a note straight into the editor, every reload.
+     */
+    const storedHasEntry = useMemo(() => {
+        if (!note) return false;
+        if (note.contentRich) return !isEmptyRichDoc(note.contentRich);
+        return (note.content ?? '').trim().length > 0;
+    }, [note]);
+
+    const wordCount = useMemo(() => body.trim().split(/\s+/).filter(Boolean).length, [body]);
+
+    /**
+     * When the entry was last written.
+     *
+     * `savedAt` covers a save made in this session; `note.updatedAt` covers a day
+     * loaded fresh, which is why the stamp carries a date as well as a time.
+     *
+     * That fallback was disabled for a while and is deliberately back. The stored
+     * value used to be seven hours in the future — Prisma's `@updatedAt` was
+     * serialised with a `UTC` suffix, Postgres converted it into the session
+     * timezone before storing it in a `timestamp without time zone` column, and
+     * it came back labelled `Z`. This card was the first surface in the app to
+     * *display* `updatedAt` rather than sort by it, which is the only reason
+     * anyone noticed. `lib/prisma.ts` now pins the session to UTC and
+     * `scripts/repair-updated-at-skew.ts` corrected the rows already written.
+     */
+    const entrySavedAt = useMemo(() => {
+        if (savedAt) return savedAt;
+        const t = note?.updatedAt ? new Date(note.updatedAt).getTime() : NaN;
+        return Number.isNaN(t) ? null : t;
+    }, [savedAt, note]);
+
+    /**
+     * Writing mode vs. the saved entry.
+     *
+     * A day that already has a note opens as a **card** — the entry read back,
+     * the way a journal shows you what you wrote. A blank day opens straight
+     * into the editor, because making someone press "Write" before they can type
+     * on an empty page is a click that buys nothing.
+     *
+     * The decision is made **once per day**, not derived from `hasEntry` on every
+     * render. `richDoc` updates on each keystroke, so a live `!hasEntry` would
+     * flip an empty day out of the editor the instant the first character landed
+     * — mid-word.
+     */
+    const [editing, setEditing] = useState(false);
+    const decidedFor = useRef<string | null>(null);
+
+    useEffect(() => {
+        if (loading || decidedFor.current === dayKey) return;
+        decidedFor.current = dayKey;
+        setEditing(!storedHasEntry);
+    }, [loading, dayKey, storedHasEntry]);
+
+    /** Leaving the editor flushes first — the card must never show stale text. */
+    const finishEditing = () => {
+        void flushDocument();
+        setEditing(false);
+    };
+
+    /**
      * Ctrl/Cmd+S flushes the pending write.
      *
      * Strictly unnecessary — autosave has already scheduled it — but the reflex
@@ -352,7 +445,19 @@ const DailyNote: FC = () => {
     };
 
     return (
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-7">
+        /*
+         * `@container`, so the split below measures THIS column rather than the
+         * window.
+         *
+         * A viewport breakpoint is wrong here and measurably so. Two things eat
+         * width before this page sees any of it: the nav rail, and the assistant
+         * panel, which is 380px and remembers being open. On a 1280px window with
+         * the panel out, `xl:` matched and split a **570px** container in two —
+         * the editor got 338px, and its toolbar (17 controls, 655px of them)
+         * wrapped into **seven rows**, a 156px-tall block of buttons above a
+         * three-line note. Measured, not guessed.
+         */
+        <div className="@container mx-auto flex w-full max-w-6xl flex-col gap-7">
             <PageHeader
                 title="Daily note"
                 subtitle="One day, one list. Everything here is scheduled for the day you're looking at."
@@ -381,8 +486,8 @@ const DailyNote: FC = () => {
             />
 
             {/* ── Day header: navigation + the day's numbers ── */}
-            <Surface variant="panel" radius="3xl" padding="lg" reveal>
-                <div className="flex flex-col gap-6">
+            <Surface variant="panel" radius="3xl" padding="md" reveal>
+                <div className="flex flex-col gap-4">
                     <div className="flex flex-wrap items-center gap-3">
                         <button
                             type="button"
@@ -421,97 +526,32 @@ const DailyNote: FC = () => {
                         />
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-gray-500 dark:text-gray-400">
-                        <span className="flex items-center gap-1.5">
-                            <FiList size={13} /> {progress.total} todo{progress.total === 1 ? '' : 's'}
-                        </span>
-                        <span className="flex items-center gap-1.5">
-                            <FiCheckCircle size={13} /> {progress.done} done
-                        </span>
-                        <span className="flex items-center gap-1.5">
-                            <FiList size={13} /> {progress.remaining} remaining
-                        </span>
-                        <span className="font-numbers ml-auto text-sm font-semibold text-brand-dark dark:text-white">
-                            {progress.percent}%
-                        </span>
-                    </div>
-
-                    {/* Knob off on purpose: it glows, and this view's one accent
-                        belongs to the Add button. */}
-                    <Meter value={progress.percent} knob={false} height={8} />
-                </div>
-            </Surface>
-
-            {/* ── The day's document ── */}
-            <Surface variant="panel" radius="3xl" padding="lg">
-                <div className="flex flex-col gap-4">
-                    <div className="flex flex-col gap-2">
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                            <h2 className="text-base font-bold font-heading text-brand-dark dark:text-white">Day note</h2>
-                            <p className="text-xs text-gray-400 dark:text-gray-500">
-                                Written up for {day.format('D MMM')}. There is no save button — it saves as you type.
-                            </p>
-                            {/* `aria-live` so the state change is announced, not just
-                                shown. This is the one piece of feedback the whole
-                                editor rests on. */}
-                            <span className="ml-auto" aria-live="polite">
-                                <SaveStatus
-                                    state={saveState}
-                                    savedAt={savedAt}
-                                    hasNote={note !== null}
-                                    onRetry={() => { void flushDocument(); }}
-                                />
+                    {/*
+                      * Progress on one line instead of three.
+                      *
+                      * This was a stat row of "N todos / N done / N remaining"
+                      * above a full-width bar — four ways of saying the same
+                      * number, stacked, in the widest element on the page. The
+                      * bar carries the proportion, so the text only has to carry
+                      * the count. Knob off on purpose: it glows, and this view's
+                      * one accent belongs to the Add button.
+                      */}
+                    <div className="flex items-center gap-4">
+                        <Meter value={progress.percent} knob={false} height={6} className="flex-1" />
+                        <span className="flex shrink-0 items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+                            <FiCheckCircle size={13} aria-hidden />
+                            <span className="font-numbers font-semibold text-brand-dark dark:text-white">
+                                {progress.done}/{progress.total}
                             </span>
-                        </div>
-
-                        {/*
-                          * Where the note actually goes.
-                          *
-                          * A day note *is* a note — same table, tagged `daily` and
-                          * scheduled on this day — so it already appears in Notes &
-                          * Calendar. Nothing said so, and the reasonable conclusion
-                          * from that silence was that the two screens were separate
-                          * and everything had to be written twice.
-                          */}
-                        <p className="flex items-center gap-1.5 text-xs text-gray-400 dark:text-gray-500">
-                            <FiCalendar size={12} aria-hidden />
-                            This is a note, not a separate scratchpad — find it in{' '}
-                            <Link
-                                to="/notes"
-                                className="rounded font-medium text-brand-dark underline underline-offset-2 outline-none hover:no-underline focus-visible:ring-2 focus-visible:ring-brand-dark/30 dark:text-gray-200 dark:focus-visible:ring-brand-accent/40"
-                            >
-                                Notes &amp; Calendar
-                            </Link>{' '}
-                            on {day.format('D MMM')}.
-                        </p>
+                            done
+                        </span>
                     </div>
-
-                    <Suspense
-                        fallback={<div className="h-64 animate-pulse rounded-2xl bg-black/5 dark:bg-white/5" aria-hidden />}
-                    >
-                    <RichTextEditor
-                        // Remounting per day is deliberate: a document editor holds
-                        // undo history and a selection, and carrying Monday's undo
-                        // stack into Tuesday would let Ctrl-Z paste Monday's text
-                        // into Tuesday's note.
-                        key={dayKey}
-                        doc={(richDoc as JSONContent | null) ?? null}
-                        plainFallback={body}
-                        // `readOnly`, **not** `busy`. `busy` includes `saving`,
-                        // and the whole point of autosave is that a save in
-                        // flight is invisible — disabling the editor mid-save
-                        // dropped focus and the selection every 1.5 seconds, so
-                        // no toolbar control could ever be applied. Only a day
-                        // that failed to load makes this read-only.
-                        editable={!readOnly}
-                        placeholder="What is this day about?"
-                        onChange={queueDocument}
-                        onBlur={() => { void flushDocument(); }}
-                    />
-                    </Suspense>
                 </div>
             </Surface>
 
+
+            {/* Connection trouble and one-off notices belong above both columns:
+                they are about the day, not about one half of it. */}
             {error && (
                 <Surface variant="panel" radius="2xl" padding="sm">
                     <p className="flex items-center gap-2.5 text-sm text-gray-600 dark:text-gray-400">
@@ -541,112 +581,334 @@ const DailyNote: FC = () => {
                 )}
             </AnimatePresence>
 
-            {/* ── Add + filter ── */}
-            <div className="flex flex-wrap items-center gap-3">
-                <form className="flex min-w-[18rem] flex-1 items-center gap-2" onSubmit={submitTodo}>
-                    <Input
-                        ref={addRef}
-                        value={draft}
-                        onChange={(e) => setDraft(e.target.value)}
-                        disabled={busy}
-                        placeholder={`Add a todo for ${day.format('D MMM')}…`}
-                        aria-label="New todo"
-                    />
-                    <AccentButton type="submit" size="sm" icon={<FiPlus size={14} />} disabled={busy || !draft.trim()}>
-                        Add
-                    </AccentButton>
-                </form>
-
-                <SegmentedControl
-                    segments={FILTERS}
-                    value={filter}
-                    onChange={(v) => setFilter(v as TodoFilter)}
-                />
-
-                <AccentButton
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => commitTodos(clearCompleted(todos))}
-                    disabled={busy || progress.done === 0}
-                >
-                    Clear done
-                </AccentButton>
-            </div>
-
-            {/* ── Board ── */}
-            {loading ? (
-                <div className="grid gap-5 lg:grid-cols-2" aria-hidden>
-                    {Array.from({ length: 2 }).map((_, i) => (
-                        <div key={i} className="h-64 animate-pulse rounded-3xl bg-black/5 dark:bg-white/5" />
-                    ))}
-                </div>
-            ) : todos.length === 0 ? (
+            {/*
+              * The day's two halves, side by side.
+              *
+              * They used to be one full-width column: note, then a bare row of
+              * controls floating between two cards, then the board. Three
+              * problems came out of that stack. The add-a-todo field and the
+              * filter belonged to the list but sat outside every card, so they
+              * read as page chrome rather than as part of anything. The note and
+              * the todos could never be seen at once, which is the one thing a
+              * day view is for. And every section ran the full 72rem, so a
+              * one-line todo was given the same width as a document.
+              *
+              * Now each function is exactly one card, and the grid gives the
+              * writing surface the larger share. `items-start` keeps a short
+              * note from being stretched to match a long list.
+              *
+              * The threshold is a **container** width of 56rem, picked from a
+              * measurement rather than a guess: the editor toolbar's controls
+              * total 655px, so the writing column must clear that plus the
+              * card's padding or the toolbar starts stacking. At 56rem the
+              * editor gets ~491px of content — the toolbar takes two tidy rows —
+              * and the todo column ~289px, which comfortably holds a checkbox, a
+              * label and three icon buttons. Below that, one column is honestly
+              * better than two cramped ones.
+              */}
+            <div className="grid items-start gap-5 @4xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+                {/* ── The day's document ── */}
                 <Surface variant="panel" radius="3xl" padding="lg">
-                    <EmptyState
-                        icon={<FiList size={22} />}
-                        title={`Nothing planned for ${day.format('D MMM')}`}
-                        description={
-                            note
-                                ? 'This day has a note but no todos left. Add the first one above.'
-                                : 'Add a todo and this day starts a note of its own — it will show up in the calendar too.'
-                        }
-                        action={
+                    <div className="flex flex-col gap-4">
+                        <div className="flex flex-col gap-2">
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                                <h2 className="text-base font-bold font-heading text-brand-dark dark:text-white">
+                                    Day note
+                                </h2>
+
+                                {/* `aria-live` so the state change is announced, not
+                                    just shown. This is the one piece of feedback the
+                                    whole editor rests on. It wraps the status alone —
+                                    a button inside a live region gets re-announced
+                                    every time the status beside it changes. */}
+                                <span className="ml-auto" aria-live="polite">
+                                    <SaveStatus
+                                        state={saveState}
+                                        savedAt={savedAt}
+                                        hasNote={note !== null}
+                                        onRetry={() => { void flushDocument(); }}
+                                    />
+                                </span>
+
+                                {editing ? (
+                                    <AccentButton
+                                        size="sm"
+                                        variant="ghost"
+                                        icon={<FiCheck size={14} />}
+                                        onClick={finishEditing}
+                                        disabled={readOnly}
+                                    >
+                                        Done
+                                    </AccentButton>
+                                ) : (
+                                    <AccentButton
+                                        size="sm"
+                                        variant="ghost"
+                                        icon={<FiEdit3 size={14} />}
+                                        onClick={() => setEditing(true)}
+                                        disabled={readOnly}
+                                    >
+                                        {hasEntry ? 'Edit' : 'Write'}
+                                    </AccentButton>
+                                )}
+                            </div>
+
+                            {/* The "no save button" line is only true of the editor,
+                                so it only appears there. Over the saved card it
+                                would be explaining a control the reader is not
+                                looking at. */}
+                            {editing && (
+                                <p className="text-xs text-gray-400 dark:text-gray-500">
+                                    Written up for {day.format('D MMM')}. There is no save button — it saves as you
+                                    type.
+                                </p>
+                            )}
+                        </div>
+
+                        {loading ? (
+                            <div className="h-64 animate-pulse rounded-2xl bg-black/5 dark:bg-white/5" aria-hidden />
+                        ) : editing ? (
+                            <Suspense
+                                fallback={
+                                    <div
+                                        className="h-64 animate-pulse rounded-2xl bg-black/5 dark:bg-white/5"
+                                        aria-hidden
+                                    />
+                                }
+                            >
+                                <RichTextEditor
+                                    // Remounting per day is deliberate: a document
+                                    // editor holds undo history and a selection, and
+                                    // carrying Monday's undo stack into Tuesday would
+                                    // let Ctrl-Z paste Monday's text into Tuesday's
+                                    // note. The mode is in the key for the same
+                                    // reason — reader and editor configure the
+                                    // instance differently at mount.
+                                    key={`edit-${dayKey}`}
+                                    doc={(richDoc as JSONContent | null) ?? null}
+                                    plainFallback={body}
+                                    // `readOnly`, **not** `busy`. `busy` includes
+                                    // `saving`, and the whole point of autosave is
+                                    // that a save in flight is invisible — disabling
+                                    // the editor mid-save dropped focus and the
+                                    // selection every 1.5 seconds, so no toolbar
+                                    // control could ever be applied. Only a day that
+                                    // failed to load makes this read-only.
+                                    editable={!readOnly}
+                                    placeholder="What is this day about?"
+                                    onChange={queueDocument}
+                                    onBlur={() => { void flushDocument(); }}
+                                />
+                            </Suspense>
+                        ) : hasEntry ? (
+                            /*
+                             * The saved entry.
+                             *
+                             * The same component in `reader` mode, so what is read
+                             * back is rendered by the same schema and the same prose
+                             * rules that wrote it. A second renderer would drift,
+                             * and a saved note would slowly stop looking like the
+                             * note that was typed.
+                             */
+                            <motion.article
+                                variants={fadeUp}
+                                initial="hidden"
+                                animate="show"
+                                className="rounded-2xl border border-gray-200 bg-white/70 px-4 py-3 dark:border-white/10 dark:bg-white/5"
+                            >
+                                <Suspense
+                                    fallback={
+                                        <div
+                                            className="h-24 animate-pulse rounded-xl bg-black/5 dark:bg-white/5"
+                                            aria-hidden
+                                        />
+                                    }
+                                >
+                                    <RichTextEditor
+                                        key={`read-${dayKey}`}
+                                        variant="reader"
+                                        doc={(richDoc as JSONContent | null) ?? null}
+                                        plainFallback={body}
+                                        onChange={() => {}}
+                                    />
+                                </Suspense>
+
+                                <p className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-gray-200 pt-2.5 text-[11px] text-gray-400 dark:border-white/10 dark:text-gray-500">
+                                    <span className="font-numbers">
+                                        {wordCount} word{wordCount === 1 ? '' : 's'}
+                                    </span>
+                                    {entrySavedAt && (
+                                        <>
+                                            <span aria-hidden>·</span>
+                                            <span>saved {dayjs(entrySavedAt).format('D MMM, HH:mm')}</span>
+                                        </>
+                                    )}
+                                </p>
+                            </motion.article>
+                        ) : (
+                            /* Written, then emptied — not the same as a day that was
+                               never opened, so the editor does not silently reopen.
+                               That would fight the user who just closed it. */
+                            <EmptyState
+                                size="sm"
+                                icon={<FiFileText size={20} />}
+                                title={`Nothing written for ${day.format('D MMM')}`}
+                                description="This day has no note yet."
+                                action={
+                                    <AccentButton
+                                        size="sm"
+                                        icon={<FiEdit3 size={14} />}
+                                        onClick={() => setEditing(true)}
+                                        disabled={readOnly}
+                                    >
+                                        Write the note
+                                    </AccentButton>
+                                }
+                            />
+                        )}
+
+                        {/*
+                          * Where the note actually goes.
+                          *
+                          * A day note *is* a note — same table, tagged `daily` and
+                          * scheduled on this day — so it already appears in Notes &
+                          * Calendar. Nothing said so, and the reasonable conclusion
+                          * from that silence was that the two screens were separate
+                          * and everything had to be written twice.
+                          */}
+                        <p className="flex items-center gap-1.5 text-xs text-gray-400 dark:text-gray-500">
+                            <FiCalendar size={12} aria-hidden />
+                            This is a note, not a separate scratchpad — find it in{' '}
+                            <Link
+                                to="/notes"
+                                className="rounded font-medium text-brand-dark underline underline-offset-2 outline-none hover:no-underline focus-visible:ring-2 focus-visible:ring-brand-dark/30 dark:text-gray-200 dark:focus-visible:ring-brand-accent/40"
+                            >
+                                Notes &amp; Calendar
+                            </Link>{' '}
+                            on {day.format('D MMM')}.
+                        </p>
+                    </div>
+                </Surface>
+
+                {/* ── The day's todos ── */}
+                <Surface variant="panel" radius="3xl" padding="lg">
+                    <div className="flex flex-col gap-4">
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                            <h2 className="text-base font-bold font-heading text-brand-dark dark:text-white">Todos</h2>
+                            <Badge tone="neutral">{progress.total}</Badge>
                             <AccentButton
+                                variant="ghost"
+                                size="sm"
+                                className="ml-auto"
+                                onClick={() => commitTodos(clearCompleted(todos))}
+                                disabled={busy || progress.done === 0}
+                            >
+                                Clear done
+                            </AccentButton>
+                        </div>
+
+                        {/* The add field and the filter live INSIDE this card.
+                            Floating between two cards, they belonged to neither. */}
+                        <form className="flex items-center gap-2" onSubmit={submitTodo}>
+                            <Input
+                                ref={addRef}
+                                value={draft}
+                                onChange={(e) => setDraft(e.target.value)}
+                                disabled={busy}
+                                placeholder={`Add a todo for ${day.format('D MMM')}…`}
+                                aria-label="New todo"
+                            />
+                            <AccentButton
+                                type="submit"
                                 size="sm"
                                 icon={<FiPlus size={14} />}
-                                onClick={() => addRef.current?.focus()}
-                                disabled={busy}
+                                disabled={busy || !draft.trim()}
                             >
-                                Add a todo
+                                Add
                             </AccentButton>
-                        }
-                    />
-                </Surface>
-            ) : (
-                <div className="grid items-start gap-5 lg:grid-cols-2">
-                    {filter !== 'done' && (
-                        <Lane
-                            title="To do"
-                            count={open.length}
-                            emptyTitle="All clear"
-                            emptyDescription="Every todo on this day is done."
-                        >
-                            {open.map((t) => (
-                                <TodoRow
-                                    key={t.id}
-                                    todo={t}
-                                    readOnly={busy}
-                                    onToggle={() => commitTodos(toggleTodo(todos, t.id))}
-                                    onRename={(text) => commitTodos(renameTodo(todos, t.id, text))}
-                                    onMove={(d) => commitTodos(moveTodo(todos, t.id, d))}
-                                    onRemove={() => commitTodos(removeTodo(todos, t.id))}
-                                />
-                            ))}
-                        </Lane>
-                    )}
+                        </form>
 
-                    {filter !== 'open' && (
-                        <Lane
-                            title="Done"
-                            count={done.length}
-                            emptyTitle="Nothing finished yet"
-                            emptyDescription="Tick a todo and it moves over here."
-                        >
-                            {done.map((t) => (
-                                <TodoRow
-                                    key={t.id}
-                                    todo={t}
-                                    readOnly={busy}
-                                    onToggle={() => commitTodos(toggleTodo(todos, t.id))}
-                                    onRename={(text) => commitTodos(renameTodo(todos, t.id, text))}
-                                    onMove={(d) => commitTodos(moveTodo(todos, t.id, d))}
-                                    onRemove={() => commitTodos(removeTodo(todos, t.id))}
-                                />
-                            ))}
-                        </Lane>
-                    )}
-                </div>
-            )}
+                        <SegmentedControl
+                            segments={FILTERS}
+                            value={filter}
+                            size="sm"
+                            fullWidth
+                            onChange={(v) => setFilter(v as TodoFilter)}
+                        />
+
+                        {loading ? (
+                            <div className="flex flex-col gap-2.5" aria-hidden>
+                                {Array.from({ length: 3 }).map((_, i) => (
+                                    <div key={i} className="h-14 animate-pulse rounded-2xl bg-black/5 dark:bg-white/5" />
+                                ))}
+                            </div>
+                        ) : todos.length === 0 ? (
+                            <EmptyState
+                                size="sm"
+                                icon={<FiList size={20} />}
+                                title={`Nothing planned for ${day.format('D MMM')}`}
+                                description={
+                                    note
+                                        ? 'This day has a note but no todos left.'
+                                        : 'Add a todo and this day starts a note of its own — it will show up in the calendar too.'
+                                }
+                                action={
+                                    <AccentButton
+                                        size="sm"
+                                        icon={<FiPlus size={14} />}
+                                        onClick={() => addRef.current?.focus()}
+                                        disabled={busy}
+                                    >
+                                        Add a todo
+                                    </AccentButton>
+                                }
+                            />
+                        ) : (
+                            <div className="flex flex-col gap-5">
+                                {filter !== 'done' && (
+                                    <TodoGroup
+                                        title="To do"
+                                        count={open.length}
+                                        emptyLabel="Every todo on this day is done."
+                                    >
+                                        {open.map((t) => (
+                                            <TodoRow
+                                                key={t.id}
+                                                todo={t}
+                                                readOnly={busy}
+                                                onToggle={() => commitTodos(toggleTodo(todos, t.id))}
+                                                onRename={(text) => commitTodos(renameTodo(todos, t.id, text))}
+                                                onMove={(d) => commitTodos(moveTodo(todos, t.id, d))}
+                                                onRemove={() => commitTodos(removeTodo(todos, t.id))}
+                                            />
+                                        ))}
+                                    </TodoGroup>
+                                )}
+
+                                {filter !== 'open' && (
+                                    <TodoGroup
+                                        title="Done"
+                                        count={done.length}
+                                        emptyLabel="Tick a todo and it moves down here."
+                                    >
+                                        {done.map((t) => (
+                                            <TodoRow
+                                                key={t.id}
+                                                todo={t}
+                                                readOnly={busy}
+                                                onToggle={() => commitTodos(toggleTodo(todos, t.id))}
+                                                onRename={(text) => commitTodos(renameTodo(todos, t.id, text))}
+                                                onMove={(d) => commitTodos(moveTodo(todos, t.id, d))}
+                                                onRemove={() => commitTodos(removeTodo(todos, t.id))}
+                                            />
+                                        ))}
+                                    </TodoGroup>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                </Surface>
+            </div>
         </div>
     );
 };

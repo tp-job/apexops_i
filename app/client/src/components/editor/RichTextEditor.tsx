@@ -51,6 +51,18 @@ export interface RichTextEditorProps {
     onBlur?: () => void;
     /** Minimum body height, e.g. `min-h-[18rem]`. */
     minHeightClass?: string;
+    /**
+     * `reader` renders the same document with no toolbar, no input shell and no
+     * caret — a saved entry, not a field waiting for input.
+     *
+     * It is a variant of this component rather than a separate `NoteReader`
+     * because the alternative is duplicating the extension list and the whole
+     * `PROSE` block, and the moment those two copies drift a saved note renders
+     * differently from the note being written. There is also no
+     * `generateHTML` + `dangerouslySetInnerHTML` shortcut available here: that
+     * rule holds for stored documents exactly as it does in `DocsMarkdown`.
+     */
+    variant?: 'editor' | 'reader';
 }
 
 /** The extension set. Exactly the marks the toolbar exposes — no more. */
@@ -127,8 +139,13 @@ const RichTextEditor: FC<RichTextEditorProps> = ({
     onChange,
     onBlur,
     minHeightClass = 'min-h-[16rem]',
+    variant = 'editor',
 }) => {
     const [fullscreen, setFullscreen] = useState(false);
+
+    const isReader = variant === 'reader';
+    /** A reader is never editable, whatever the caller passed. */
+    const canEdit = editable && !isReader;
 
     /** The toolbar + body together — used to tell "left the document" from "reached for the toolbar". */
     const shellRef = useRef<HTMLDivElement>(null);
@@ -176,13 +193,15 @@ const RichTextEditor: FC<RichTextEditorProps> = ({
         immediatelyRender: false,
         extensions: buildExtensions(),
         content: initial,
-        editable,
+        editable: canEdit,
         editorProps: {
             attributes: {
-                class: `${PROSE} ${minHeightClass}`,
-                role: 'textbox',
-                'aria-multiline': 'true',
-                'aria-label': 'Note document',
+                class: `${PROSE} ${isReader ? '' : minHeightClass}`,
+                // A reader is not a textbox. Announcing one would send a screen
+                // reader looking for a caret that does not exist.
+                ...(isReader
+                    ? { 'aria-label': 'Saved note' }
+                    : { role: 'textbox', 'aria-multiline': 'true', 'aria-label': 'Note document' }),
             },
         },
         onUpdate: ({ editor: ed }) => {
@@ -235,9 +254,9 @@ const RichTextEditor: FC<RichTextEditorProps> = ({
     // The identity check matters for the same reason: React re-runs this effect
     // whenever `editor` is re-read, and a no-op toggle would still emit.
     useEffect(() => {
-        if (!editor || editor.isDestroyed || editor.isEditable === editable) return;
-        editor.setEditable(editable, false);
-    }, [editor, editable]);
+        if (!editor || editor.isDestroyed || editor.isEditable === canEdit) return;
+        editor.setEditable(canEdit, false);
+    }, [editor, canEdit]);
 
     // ESC leaves fullscreen. Registered on the window because focus is inside
     // ProseMirror, which handles its own keymap first.
@@ -264,6 +283,18 @@ const RichTextEditor: FC<RichTextEditorProps> = ({
         [fullscreen],
     );
 
+    // A saved entry is prose on the card, not a field. No border, no fill and no
+    // padding of its own — the card it sits in already provides those, and a
+    // second inset frame is what makes a read-only editor look broken rather
+    // than finished.
+    if (isReader) {
+        return (
+            <div ref={shellRef}>
+                <EditorContent editor={editor} className="text-sm text-brand-dark dark:text-white" />
+            </div>
+        );
+    }
+
     return shell(
         <div
             ref={shellRef}
@@ -271,7 +302,7 @@ const RichTextEditor: FC<RichTextEditorProps> = ({
         >
             <EditorToolbar
                 editor={editor as Editor | null}
-                disabled={!editable}
+                disabled={!canEdit}
                 fullscreen={fullscreen}
                 onToggleFullscreen={() => setFullscreen((v) => !v)}
             />

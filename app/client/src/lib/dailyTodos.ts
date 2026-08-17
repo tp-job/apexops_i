@@ -197,8 +197,21 @@ export const dayKeyOf = (iso: string | null | undefined): string | null => {
     return d.isValid() ? d.format('YYYY-MM-DD') : null;
 };
 
+/**
+ * The title every daily note carries in Notes &amp; Calendar.
+ *
+ * Fixed to the spec's `Daily Note - [Date]`: capital N, and a plain hyphen
+ * rather than an em dash. The old form (`Daily note — …`) is renamed in place by
+ * `scripts/rename-daily-notes.ts`, because a generator change on its own leaves
+ * two formats sitting next to each other in the same list forever.
+ *
+ * **Nothing looks a daily note up by this string.** `findDailyNote` matches on
+ * `type`, the `daily` tag and `scheduledFor`, so the title is presentation only
+ * and renaming one cannot orphan its todos. Keep it that way — the moment a
+ * lookup keys on the title, changing the wording becomes a data migration.
+ */
 export const dailyNoteTitle = (dayKey: string): string =>
-    `Daily note — ${dayjs(dayKey).format('D MMM YYYY')}`;
+    `Daily Note - ${dayjs(dayKey).format('D MMM YYYY')}`;
 
 /**
  * Picks the day's todo note out of the full note list.
