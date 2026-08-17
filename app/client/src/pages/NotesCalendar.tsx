@@ -1,5 +1,6 @@
 import type { FC } from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import dayjs, { type Dayjs } from 'dayjs';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -467,6 +468,30 @@ const NotesCalendar: FC = () => {
     const [activeTag, setActiveTag] = useState<string | null>(null);
     const [editing, setEditing] = useState<Note | null>(null);
     const [pendingDelete, setPendingDelete] = useState<Note | null>(null);
+
+    /**
+     * `?note=<id>` opens that note directly.
+     *
+     * The daily-note badge promises to take you to *the note*, not to a list you
+     * then have to search — a link that lands you on a page of thirty cards has
+     * not kept that promise. The parameter is consumed once and then removed, so
+     * closing the dialog does not leave a URL that reopens it on the next
+     * refresh, and the back button behaves.
+     */
+    const [searchParams, setSearchParams] = useSearchParams();
+    const requestedNoteId = searchParams.get('note');
+
+    useEffect(() => {
+        if (!requestedNoteId || loading) return;
+        const found = notesList.find((n) => String(n.id) === requestedNoteId);
+        if (found) setEditing(found);
+        // Consumed either way: a stale id must not keep retrying on every render.
+        setSearchParams((prev) => {
+            const next = new URLSearchParams(prev);
+            next.delete('note');
+            return next;
+        }, { replace: true });
+    }, [requestedNoteId, loading, notesList, setSearchParams]);
 
     /**
      * Two menus, because there are two kinds of target — a note and an empty day —

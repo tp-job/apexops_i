@@ -2,6 +2,7 @@ import type { FC, ReactNode } from 'react';
 import { NavLink } from 'react-router-dom';
 import { motion } from 'motion/react';
 import {
+    FiList,
     FiActivity,
     FiAlertTriangle,
     FiBookOpen,
@@ -42,6 +43,7 @@ const PRIMARY: NavItem[] = [
     { to: '/projects', label: 'Projects', icon: <FiFolder size={18} />, ready: true },
     { to: '/bug-tracker', label: 'Bug Tracker', icon: <FiAlertTriangle size={18} />, ready: true },
     { to: '/daily', label: 'Daily Note', icon: <FiCheckSquare size={18} />, ready: true },
+    { to: '/tasks', label: 'Tasks', icon: <FiList size={18} />, ready: true },
     { to: '/notes', label: 'Notes & Calendar', icon: <FiCalendar size={18} />, ready: true },
     { to: '/chat', label: 'Chat', icon: <FiMessageSquare size={18} />, ready: true },
 ];

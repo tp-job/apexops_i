@@ -121,8 +121,15 @@ export interface TaskQuery {
     offset?: number;
 }
 
+/** A task as the master list needs it: the todo plus where it sits in time. */
+export type MasterTask = DailyTodo & {
+    taskId: number;
+    scheduledFor: string | null;
+    dueDate: string | null;
+};
+
 export interface TaskPage {
-    todos: Array<DailyTodo & { taskId: number; scheduledFor: string | null; dueDate: string | null }>;
+    todos: MasterTask[];
     total: number;
 }
 
@@ -152,4 +159,36 @@ export async function fetchTasks(query: TaskQuery = {}): Promise<TaskPage> {
         })),
         total: typeof body.total === 'number' ? body.total : rows.length,
     };
+}
+
+/**
+ * Change one task.
+ *
+ * Addressed by the numeric `taskId`, not the `clientId` the daily page works in:
+ * the master list spans many days and a client id is only unique per user, so
+ * the row id is the unambiguous handle here.
+ *
+ * `completedAt` is never sent — the server derives it from `isDone`, so ticking
+ * a task cannot record a completion time the client invented (EC-05).
+ */
+export async function updateTask(
+    taskId: number,
+    patch: { text?: string; isDone?: boolean; scheduledFor?: string; dueDate?: string | null },
+): Promise<void> {
+    const res = await fetchWithAuth(`/api/tasks/${taskId}`, {
+        method: 'PATCH',
+        json: true,
+        body: JSON.stringify(patch),
+    });
+    if (!res.ok) {
+        const body = asRecord(await res.json().catch(() => ({})));
+        throw new Error(typeof body.error === 'string' ? body.error : 'Could not save that change.');
+    }
+}
+
+/** Soft delete on the server — the row is recoverable for 30 days (D5). */
+export async function deleteTask(taskId: number): Promise<void> {
+    const res = await fetchWithAuth(`/api/tasks/${taskId}`, { method: 'DELETE' });
+    // 204 on a task that was already gone: deleting twice is not an error.
+    if (!res.ok && res.status !== 404) throw new Error('Could not delete that task.');
 }

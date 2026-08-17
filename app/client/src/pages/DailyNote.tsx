@@ -1,14 +1,11 @@
 import type { FC } from 'react';
 import { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { motion, AnimatePresence } from 'motion/react';
 import {
     FiAlertOctagon,
     FiAlertTriangle,
-    FiArrowDown,
-    FiArrowUp,
-    FiCalendar,
     FiCheck,
     FiCheckCircle,
     FiChevronLeft,
@@ -20,12 +17,10 @@ import {
     FiPlus,
     FiRefreshCw,
     FiSun,
-    FiTrash2,
 } from 'react-icons/fi';
 import {
     AccentButton,
     Badge,
-    Checkbox,
     EmptyState,
     Input,
     Meter,
@@ -37,6 +32,7 @@ import type { JSONContent } from '@tiptap/react';
 import { useDailyTodos, type SaveState } from '@/hooks/useDailyTodos';
 import {
     addTodo,
+    dailyNoteTitle,
     clearCompleted,
     filterTodos,
     moveTodo,
@@ -44,11 +40,13 @@ import {
     renameTodo,
     todayKey,
     toggleTodo,
-    type DailyTodo,
     type TodoFilter,
 } from '@/lib/dailyTodos';
 import { isEmptyRichDoc } from '@/lib/richText';
-import { fadeUp, stagger } from '@/lib/motion';
+import { fadeUp } from '@/lib/motion';
+import TaskRow from '@/components/tasks/TaskRow';
+import TaskGroup from '@/components/tasks/TaskGroup';
+import DailyNoteBadge from '@/components/tasks/DailyNoteBadge';
 
 /**
  * Daily note & todos — one day at a time.
@@ -80,149 +78,6 @@ const FILTERS = [
     { value: 'open', label: 'To do' },
     { value: 'done', label: 'Done' },
 ];
-
-// ── One todo row ──────────────────────────────────────────────
-
-const TodoRow: FC<{
-    todo: DailyTodo;
-    readOnly: boolean;
-    onToggle: () => void;
-    onRename: (text: string) => void;
-    onMove: (direction: 'up' | 'down') => void;
-    onRemove: () => void;
-}> = ({ todo, readOnly, onToggle, onRename, onMove, onRemove }) => {
-    const [editing, setEditing] = useState(false);
-    const [draft, setDraft] = useState(todo.text);
-
-    // A rename that lost its race with a refetch would otherwise keep showing the
-    // stale text in the editor.
-    useEffect(() => setDraft(todo.text), [todo.text]);
-
-    const commit = () => {
-        setEditing(false);
-        if (draft.trim() && draft.trim() !== todo.text) onRename(draft);
-        else setDraft(todo.text);
-    };
-
-    return (
-        <motion.li variants={fadeUp} layout>
-            <Surface variant="frost" radius="2xl" padding="sm">
-                <div className="flex items-start gap-3">
-                    <Checkbox
-                        checked={todo.checked}
-                        disabled={readOnly}
-                        onChange={onToggle}
-                        aria-label={todo.checked ? `Mark "${todo.text}" as not done` : `Mark "${todo.text}" as done`}
-                        className="mt-0.5"
-                    />
-
-                    <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-                        {editing ? (
-                            <Input
-                                autoFocus
-                                value={draft}
-                                onChange={(e) => setDraft(e.target.value)}
-                                onBlur={commit}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Enter') commit();
-                                    if (e.key === 'Escape') { setDraft(todo.text); setEditing(false); }
-                                }}
-                                aria-label={`Rename "${todo.text}"`}
-                            />
-                        ) : (
-                            <button
-                                type="button"
-                                disabled={readOnly}
-                                onClick={() => setEditing(true)}
-                                title="Click to rename"
-                                className={[
-                                    'text-left text-sm font-medium transition-colors disabled:cursor-default',
-                                    todo.checked
-                                        ? 'text-gray-400 line-through dark:text-gray-500'
-                                        : 'text-brand-dark hover:text-gray-600 dark:text-white dark:hover:text-gray-300',
-                                ].join(' ')}
-                            >
-                                {todo.text}
-                            </button>
-                        )}
-
-                        {todo.checked && todo.completedAt && (
-                            <span className="text-[11px] text-gray-400 dark:text-gray-500">
-                                done {dayjs(todo.completedAt).format('HH:mm')}
-                            </span>
-                        )}
-                    </div>
-
-                    <div className="flex shrink-0 items-center gap-0.5">
-                        <button
-                            type="button"
-                            disabled={readOnly}
-                            onClick={() => onMove('up')}
-                            aria-label={`Move "${todo.text}" up`}
-                            className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-black/5 hover:text-brand-dark disabled:opacity-40 dark:hover:bg-white/10 dark:hover:text-white"
-                        >
-                            <FiArrowUp size={13} />
-                        </button>
-                        <button
-                            type="button"
-                            disabled={readOnly}
-                            onClick={() => onMove('down')}
-                            aria-label={`Move "${todo.text}" down`}
-                            className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-black/5 hover:text-brand-dark disabled:opacity-40 dark:hover:bg-white/10 dark:hover:text-white"
-                        >
-                            <FiArrowDown size={13} />
-                        </button>
-                        <button
-                            type="button"
-                            disabled={readOnly}
-                            onClick={onRemove}
-                            aria-label={`Delete "${todo.text}"`}
-                            className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-global-red/10 hover:text-global-red disabled:opacity-40"
-                        >
-                            <FiTrash2 size={13} />
-                        </button>
-                    </div>
-                </div>
-            </Surface>
-        </motion.li>
-    );
-};
-
-// ── One group within the todo column ──────────────────────────
-
-/**
- * A labelled run of rows — **a heading, not a card**.
- *
- * These used to be two `Surface` panels sitting side by side in the page grid.
- * Once the todos moved into a single column beside the note, a card inside a
- * card is one frame too many: the eye reads three nested borders before it
- * reaches a checkbox. The group is now a small caps label with a count, which
- * separates "to do" from "done" using type instead of chrome.
- */
-const TodoGroup: FC<{
-    title: string;
-    count: number;
-    emptyLabel: string;
-    children: React.ReactNode;
-}> = ({ title, count, emptyLabel, children }) => (
-    <section className="flex flex-col gap-2.5">
-        <div className="flex items-center gap-2">
-            <h3 className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
-                {title}
-            </h3>
-            <Badge tone="neutral">{count}</Badge>
-        </div>
-        {count === 0 ? (
-            <p className="rounded-2xl border border-dashed border-gray-200 px-3 py-4 text-center text-xs text-gray-400 dark:border-white/10 dark:text-gray-500">
-                {emptyLabel}
-            </p>
-        ) : (
-            <motion.ul variants={stagger(0.03)} initial="hidden" animate="show" className="flex flex-col gap-2.5">
-                {children}
-            </motion.ul>
-        )}
-    </section>
-);
 
 // ── Save state ────────────────────────────────────────────────
 
@@ -316,7 +171,20 @@ const SaveStatus: FC<{
 // ── Page ──────────────────────────────────────────────────────
 
 const DailyNote: FC = () => {
-    const [dayKey, setDayKey] = useState<string>(() => todayKey());
+    /**
+     * `?date=YYYY-MM-DD` opens that day.
+     *
+     * The master list links here per day group, and "Open that day" has to land
+     * on the day it names rather than on today. Read once at mount: after that
+     * the in-page controls own the date, and re-reading the URL would fight them.
+     */
+    const [searchParams] = useSearchParams();
+    const [dayKey, setDayKey] = useState<string>(() => {
+        const requested = searchParams.get('date');
+        return requested && /^\d{4}-\d{2}-\d{2}$/.test(requested) && dayjs(requested).isValid()
+            ? requested
+            : todayKey();
+    });
     const [filter, setFilter] = useState<TodoFilter>('all');
     const [draft, setDraft] = useState('');
 
@@ -768,25 +636,18 @@ const DailyNote: FC = () => {
                         )}
 
                         {/*
-                          * Where the note actually goes.
+                          * Where the note actually goes (US-01).
                           *
                           * A day note *is* a note — same table, tagged `daily` and
                           * scheduled on this day — so it already appears in Notes &
-                          * Calendar. Nothing said so, and the reasonable conclusion
-                          * from that silence was that the two screens were separate
-                          * and everything had to be written twice.
+                          * Calendar. This used to be a grey footnote below the
+                          * editor, which reads as small print; it now names the
+                          * exact note and links straight to it.
                           */}
-                        <p className="flex items-center gap-1.5 text-xs text-gray-400 dark:text-gray-500">
-                            <FiCalendar size={12} aria-hidden />
-                            This is a note, not a separate scratchpad — find it in{' '}
-                            <Link
-                                to="/notes"
-                                className="rounded font-medium text-brand-dark underline underline-offset-2 outline-none hover:no-underline focus-visible:ring-2 focus-visible:ring-brand-dark/30 dark:text-gray-200 dark:focus-visible:ring-brand-accent/40"
-                            >
-                                Notes &amp; Calendar
-                            </Link>{' '}
-                            on {day.format('D MMM')}.
-                        </p>
+                        <DailyNoteBadge
+                            title={dailyNoteTitle(dayKey)}
+                            noteId={note?.id != null ? Number(note.id) : null}
+                        />
                     </div>
                 </Surface>
 
@@ -866,13 +727,13 @@ const DailyNote: FC = () => {
                         ) : (
                             <div className="flex flex-col gap-5">
                                 {filter !== 'done' && (
-                                    <TodoGroup
+                                    <TaskGroup
                                         title="To do"
                                         count={open.length}
                                         emptyLabel="Every todo on this day is done."
                                     >
                                         {open.map((t) => (
-                                            <TodoRow
+                                            <TaskRow
                                                 key={t.id}
                                                 todo={t}
                                                 readOnly={busy}
@@ -882,17 +743,17 @@ const DailyNote: FC = () => {
                                                 onRemove={() => commitTodos(removeTodo(todos, t.id))}
                                             />
                                         ))}
-                                    </TodoGroup>
+                                    </TaskGroup>
                                 )}
 
                                 {filter !== 'open' && (
-                                    <TodoGroup
+                                    <TaskGroup
                                         title="Done"
                                         count={done.length}
                                         emptyLabel="Tick a todo and it moves down here."
                                     >
                                         {done.map((t) => (
-                                            <TodoRow
+                                            <TaskRow
                                                 key={t.id}
                                                 todo={t}
                                                 readOnly={busy}
@@ -902,7 +763,7 @@ const DailyNote: FC = () => {
                                                 onRemove={() => commitTodos(removeTodo(todos, t.id))}
                                             />
                                         ))}
-                                    </TodoGroup>
+                                    </TaskGroup>
                                 )}
                             </div>
                         )}

@@ -7,6 +7,7 @@ import Dashboard from '@/pages/Dashboard';
 import BugTracker from '@/pages/BugTracker';
 import NotesCalendar from '@/pages/NotesCalendar';
 import DailyNote from '@/pages/DailyNote';
+import Tasks from '@/pages/Tasks';
 import Chat from '@/pages/Chat';
 import Projects from '@/pages/Projects';
 import ProjectIssues from '@/pages/ProjectIssues';
@@ -78,6 +79,7 @@ const AppRoutes: FC = () => (
                         written" versus "what am I doing today" — and the day is
                         worth being a bookmarkable URL of its own. */}
                     <Route path="/daily" element={<DailyNote />} />
+                    <Route path="/tasks" element={<Tasks />} />
                     <Route path="/chat" element={<Chat />} />
 
                     {/* Project workspaces. The project lives in the URL, not a
