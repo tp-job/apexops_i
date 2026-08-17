@@ -50,6 +50,7 @@ model User {
   notifications      Notification[]
   editedDocPages     DocPage[]           @relation("docPageEditor")
   aiKey              UserAiKey?
+  tasks              Task[]
 
   @@map("users")
 }
@@ -173,13 +174,99 @@ model Note {
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @default(now()) @updatedAt @map("updated_at")
 
-  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user  User?  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tasks Task[]
 
   @@index([userId])
   @@index([isPinned])
   @@index([userId, scheduledFor])
   @@index([userId, dueDate])
   @@map("notes")
+}
+
+/// A single to-do, owned by one user and planned for one day.
+///
+/// **Why this is a table and not the `checklistItems` JSON it grew out of.**
+/// Todos began life inside the daily note, which was the right call while a todo
+/// only ever had to be read back on the day it was written. The moment the
+/// product needed a cross-day master list, an overdue view, or a task shown
+/// individually on the calendar, that shape stopped working: none of those are
+/// expressible as a query against a JSON blob, so every one of them would have
+/// meant loading every note and filtering in memory.
+///
+/// `checklistItems` is deliberately still on `Note` — it is read-only during the
+/// transition and is dropped once nothing reads it (blueprint phase 4).
+model Task {
+  id           Int       @id @default(autoincrement())
+  userId       Int       @map("user_id")
+
+  /// The id the browser generated (`t-<uuid>`, or `legacy-<n>-<slug>` for a row
+  /// migrated out of `checklistItems`).
+  ///
+  /// It exists so the daily page can keep handing the server a whole array and
+  /// have it reconciled: without a stable client-side identity, an unsaved item
+  /// has nothing to match on and every save would delete and recreate the list,
+  /// losing `createdAt` and remounting every row. Unique per user, not globally —
+  /// two users' browsers can and will generate the same legacy id.
+  clientId     String    @map("client_id")
+
+  text         String
+  isDone       Boolean   @default(false) @map("is_done")
+  /// Must be null whenever `isDone` is false. Enforced in the API, because a
+  /// stale value here makes "finished today" counts wrong.
+  completedAt  DateTime? @map("completed_at")
+
+  /// The day this task is planned for, stored as local **noon** for the same
+  /// reason `Note.scheduledFor` is — midnight is within one UTC offset of the
+  /// neighbouring day.
+  scheduledFor DateTime  @map("scheduled_for")
+  /// Optional deadline, independent of `scheduledFor`.
+  dueDate      DateTime? @map("due_date")
+
+  /// Order within the day. Sparse and rewritten on reorder.
+  position     Int       @default(0)
+  priority     String?
+
+  /// The daily note this task was written on, when there is one.
+  ///
+  /// **Optional and `SetNull` on purpose.** Deleting a day's note must not delete
+  /// the work recorded against that day, or the calendar loses history that can
+  /// never be recovered.
+  noteId       Int?      @map("note_id")
+  note         Note?     @relation(fields: [noteId], references: [id], onDelete: SetNull)
+
+  /// Soft delete: the row stays for 30 days so a mistaken delete is recoverable.
+  deletedAt    DateTime? @map("deleted_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, clientId])
+  @@index([userId, scheduledFor])
+  @@index([userId, isDone, dueDate])
+  @@index([noteId])
+  @@map("tasks")
+}
+
+/// Ledger for the one-off `+7h updated_at` repair.
+///
+/// **This is in the schema so that `prisma db push` does not drop it.** The
+/// table is created and read by `scripts/repair-updated-at-skew.ts`, which
+/// refuses to write a second time if a row exists — running that repair twice
+/// subtracts another seven hours from rows that were already correct. Prisma
+/// plans a `DROP TABLE` for anything it does not know about, and the script's
+/// own `create table if not exists` would then bring it back **empty**, silently
+/// re-arming a destructive operation.
+///
+/// Not used by the application at runtime.
+model TimestampRepair {
+  id           Int      @id @default(autoincrement())
+  ranAt        DateTime @default(now()) @map("ran_at")
+  offsetHours  Int      @map("offset_hours")
+  rowsAffected Int      @map("rows_affected")
+
+  @@map("_timestamp_repairs")
 }
 
 // ── Projects / workspaces ────────────────────────────────────

@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Note } from '@/types/notes';
 import { createNote, fetchNotes, updateNote } from '@/services/notes';
+import { fetchDayTasks, syncDayTasks } from '@/services/tasks';
 import {
     DAILY_TAG,
     dailyNoteTitle,
     dayAnchorIso,
     findDailyNote,
     normalizeTodos,
-    serializeTodos,
     todoProgress,
     type DailyTodo,
     type TodoProgress,
@@ -112,14 +112,40 @@ export function useDailyTodos(dayKey: string): UseDailyTodosResult {
         refetch();
     }, [refetch]);
 
-    // The note list is the source of truth; local todo/document state mirrors
-    // whichever note the current day resolves to, and is replaced whenever that
-    // changes.
+    // The note still owns the document; todos now come from the `tasks` table.
     useEffect(() => {
-        setTodos(normalizeTodos(note?.checklistItems));
         setBody(note?.content ?? '');
         setRichDoc(note?.contentRich ?? null);
     }, [note]);
+
+    /**
+     * Todos for the day, read from `tasks` with `checklistItems` as the fallback.
+     *
+     * The fallback is keyed on the server's `migrated` flag, **not** on the list
+     * being empty. Those are different states that look identical from here: a
+     * day nobody has migrated yet, and a day whose todos the user deleted.
+     * Falling back on the second would resurrect deleted todos on every load.
+     *
+     * A failure here is not fatal — the day still renders from whatever the note
+     * carries, which is the same thing the page showed before tasks existed.
+     */
+    useEffect(() => {
+        let cancelled = false;
+        const requested = dayKey;
+
+        (async () => {
+            try {
+                const { todos: fromTasks, migrated } = await fetchDayTasks(requested);
+                if (cancelled || activeDay.current !== requested) return;
+                setTodos(migrated ? fromTasks : normalizeTodos(note?.checklistItems));
+            } catch {
+                if (cancelled || activeDay.current !== requested) return;
+                setTodos(normalizeTodos(note?.checklistItems));
+            }
+        })();
+
+        return () => { cancelled = true; };
+    }, [dayKey, note]);
 
     /** Folds a saved note back into the list so `findDailyNote` sees it next render. */
     const mergeNote = useCallback((saved: Note) => {
@@ -133,18 +159,21 @@ export function useDailyTodos(dayKey: string): UseDailyTodosResult {
     }, []);
 
     /**
-     * Writes to the day's note, creating it on first use.
-     *
-     * `patch` carries only what changed; the other half is read from current
-     * state so a todo write never clobbers a document edit and vice versa.
+     * Writes the day's **document** to its note, creating the note on first use.
      *
      * `content` and `contentRich` always move together — that pairing is the
      * whole contract described in `lib/richText.ts`, and splitting them here is
      * how the plain projection would go stale against the document.
+     *
+     * **This no longer touches `checklistItems`.** Todos live in the `tasks`
+     * table now, and writing them here as well would give one day two sources of
+     * truth for the same list — the exact failure D3 exists to prevent. Whichever
+     * of the two was written last would win, so a todo ticked in one place would
+     * reappear unticked after a document save. The column stays on the model as a
+     * read-only fallback until phase 4 drops it.
      */
     const persist = useCallback(
-        async (patch: { todos?: DailyTodo[]; document?: { doc: unknown; text: string } }): Promise<boolean> => {
-            const nextTodos = patch.todos ?? todos;
+        async (patch: { document?: { doc: unknown; text: string } }): Promise<boolean> => {
             const nextBody = patch.document ? patch.document.text : body;
             const nextDoc = patch.document ? patch.document.doc : richDoc;
 
@@ -152,7 +181,6 @@ export function useDailyTodos(dayKey: string): UseDailyTodosResult {
             try {
                 if (note) {
                     const res = await updateNote(note.id, {
-                        ...(patch.todos !== undefined && { checklistItems: serializeTodos(nextTodos) }),
                         ...(patch.document !== undefined && { content: nextBody, contentRich: nextDoc }),
                     });
                     if (!res.success || !res.data) {
@@ -163,7 +191,7 @@ export function useDailyTodos(dayKey: string): UseDailyTodosResult {
                 } else {
                     // Nothing to create a note *for* yet — an empty edit on an empty
                     // day should leave no trace.
-                    if (nextTodos.length === 0 && !nextBody.trim() && isEmptyRichDoc(nextDoc)) return true;
+                    if (!nextBody.trim() && isEmptyRichDoc(nextDoc)) return true;
 
                     const res = await createNote({
                         title: dailyNoteTitle(dayKey),
@@ -171,7 +199,6 @@ export function useDailyTodos(dayKey: string): UseDailyTodosResult {
                         ...(nextDoc !== null && { contentRich: nextDoc }),
                         type: 'list',
                         tags: [DAILY_TAG],
-                        checklistItems: serializeTodos(nextTodos),
                         scheduledFor: dayAnchorIso(dayKey),
                     });
                     if (!res.success || !res.data) {
@@ -189,17 +216,60 @@ export function useDailyTodos(dayKey: string): UseDailyTodosResult {
                 setSaving(false);
             }
         },
-        [note, todos, body, richDoc, dayKey, mergeNote],
+        [note, body, richDoc, dayKey, mergeNote],
     );
 
+    /**
+     * Write the day's todos to the `tasks` table.
+     *
+     * Still optimistic and still takes a whole array, so every caller in
+     * `DailyNote.tsx` and every pure function in `lib/dailyTodos.ts` is unchanged
+     * — the array is simply reconciled server-side now instead of being stamped
+     * into the note's JSON.
+     *
+     * **The daily note is still created when the first todo appears.** Tasks do
+     * not need a note to exist — `noteId` is optional precisely so deleting a
+     * note cannot delete the work. But the calendar is still driven by notes
+     * until phase 3, so skipping this would silently stop days appearing there
+     * the moment someone only added todos.
+     */
     const commitTodos = useCallback(
         async (next: DailyTodo[]) => {
             const previous = todos;
             setTodos(next);
-            const ok = await persist({ todos: next });
-            if (!ok) setTodos(previous);
+
+            try {
+                // `Note.id` is typed `string` here but is numeric on the wire —
+                // see the comment on `findDailyNote`. The tasks API wants the
+                // number, so the conversion happens once, at this boundary.
+                let noteId: number | null = note?.id != null ? Number(note.id) : null;
+
+                if (noteId === null && next.length > 0) {
+                    const created = await createNote({
+                        title: dailyNoteTitle(dayKey),
+                        content: body,
+                        ...(richDoc !== null && { contentRich: richDoc }),
+                        type: 'list',
+                        tags: [DAILY_TAG],
+                        scheduledFor: dayAnchorIso(dayKey),
+                    });
+                    if (created.success && created.data) {
+                        mergeNote(created.data);
+                        noteId = Number(created.data.id);
+                    }
+                    // A failed note create is not fatal to the todo: the task can
+                    // stand on its own and the note is recoverable next write.
+                }
+
+                const saved = await syncDayTasks(dayKey, next, noteId);
+                if (activeDay.current === dayKey) setTodos(saved);
+                setNotice(null);
+            } catch (err) {
+                setTodos(previous);
+                setNotice(err instanceof Error ? err.message : 'Could not save that change.');
+            }
         },
-        [todos, persist],
+        [todos, note, dayKey, body, richDoc, mergeNote],
     );
 
     // ── Document autosave ────────────────────────────────────
