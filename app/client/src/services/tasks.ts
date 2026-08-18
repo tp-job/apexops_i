@@ -212,3 +212,44 @@ export async function deleteTask(taskId: number): Promise<void> {
     // 204 on a task that was already gone: deleting twice is not an error.
     if (!res.ok && res.status !== 404) throw new Error('Could not delete that task.');
 }
+
+/**
+ * Create one task, from the master list.
+ *
+ * The daily page reconciles a whole day in one `PUT`, which is right when you
+ * are editing a list you can see in full. The master list is the opposite case:
+ * it shows a filtered slice across many days, so reconciling from it would send
+ * a "day" that omits every task the current filter hid — and the server would
+ * dutifully delete them. This route touches exactly one row.
+ *
+ * `scheduledFor` is anchored with `taskDayAnchor`, never a bare `YYYY-MM-DD`:
+ * midnight is within one timezone offset of the neighbouring day.
+ */
+export async function createTask(input: {
+    text: string;
+    dayKey: string;
+    dueDate?: string | null;
+}): Promise<MasterTask> {
+    const res = await fetchWithAuth('/api/tasks', {
+        method: 'POST',
+        json: true,
+        body: JSON.stringify({
+            text: input.text,
+            scheduledFor: taskDayAnchor(input.dayKey),
+            ...(input.dueDate ? { dueDate: input.dueDate } : {}),
+        }),
+    });
+    if (!res.ok) {
+        const body = asRecord(await res.json().catch(() => ({})));
+        throw new Error(typeof body.error === 'string' ? body.error : 'Could not add that task.');
+    }
+
+    const t = asRecord(asRecord(await res.json().catch(() => ({}))).task) as WireTask &
+        Record<string, unknown>;
+    return {
+        ...toTodo(t),
+        taskId: t.taskId,
+        scheduledFor: typeof t.scheduledFor === 'string' ? t.scheduledFor : null,
+        dueDate: typeof t.dueDate === 'string' ? t.dueDate : null,
+    };
+}

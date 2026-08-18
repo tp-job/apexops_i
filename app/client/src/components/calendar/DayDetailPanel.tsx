@@ -1,10 +1,8 @@
 import type { FC, ReactNode } from 'react';
-import { Link } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { motion } from 'motion/react';
 import {
-    FiArrowUpRight,
-    FiCalendar,
+    FiEdit3,
     FiCheckSquare,
     FiClock,
     FiFileText,
@@ -38,6 +36,15 @@ export interface DayDetailPanelProps {
     onToggleTask: (task: DayTask) => void;
     onAddEvent: () => void;
     onEditEvent: (event: CalendarEvent) => void;
+    /**
+     * Open this day's note for writing.
+     *
+     * Used to be a link to `/daily?date=…`. That page is gone — the note is now
+     * written on this page, in the same form every other note uses — so the
+     * panel asks its parent to open the editor rather than navigating away from
+     * the calendar the reader is standing in.
+     */
+    onWriteNote: () => void;
 }
 
 const Section: FC<{
@@ -78,7 +85,7 @@ const eventTime = (e: CalendarEvent): string => {
 };
 
 const DayDetailPanel: FC<DayDetailPanelProps> = ({
-    day, dayKey, loading, busy, onClose, onToggleTask, onAddEvent, onEditEvent,
+    day, dayKey, loading, busy, onClose, onToggleTask, onAddEvent, onEditEvent, onWriteNote,
 }) => {
     const heading = dayjs(dayKey);
     const events = day?.events ?? [];
@@ -232,14 +239,15 @@ const DayDetailPanel: FC<DayDetailPanelProps> = ({
 
                             {/* Always offered, note or not — a day with nothing
                                 written is precisely when someone wants to open it. */}
-                            <Link
-                                to={`/daily?date=${dayKey}`}
-                                className="flex items-center justify-center gap-1.5 rounded-xl border border-gray-200 px-3 py-2 text-xs font-semibold text-brand-dark outline-none transition-colors hover:bg-black/[0.03] focus-visible:ring-2 focus-visible:ring-brand-dark/30 dark:border-white/10 dark:text-white dark:hover:bg-white/[0.04] dark:focus-visible:ring-brand-accent/40"
+                            <button
+                                type="button"
+                                onClick={onWriteNote}
+                                disabled={busy}
+                                className="flex items-center justify-center gap-1.5 rounded-xl border border-gray-200 px-3 py-2 text-xs font-semibold text-brand-dark outline-none transition-colors hover:bg-black/[0.03] focus-visible:ring-2 focus-visible:ring-brand-dark/30 disabled:opacity-50 dark:border-white/10 dark:text-white dark:hover:bg-white/[0.04] dark:focus-visible:ring-brand-accent/40"
                             >
-                                <FiCalendar size={12} aria-hidden />
-                                {note ? 'Open this day' : 'Write this day'}
-                                <FiArrowUpRight size={12} aria-hidden />
-                            </Link>
+                                <FiEdit3 size={12} aria-hidden />
+                                {note ? 'Edit this note' : 'Write this day'}
+                            </button>
                         </>
                     )}
                 </div>

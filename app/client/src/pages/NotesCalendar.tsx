@@ -2,10 +2,12 @@ import type { FC } from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import dayjs, { type Dayjs } from 'dayjs';
+import type { JSONContent } from '@tiptap/react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
     FiAlertOctagon,
     FiCalendar,
+    FiCheck,
     FiChevronLeft,
     FiChevronRight,
     FiClock,
@@ -27,12 +29,10 @@ import {
     ConfirmDialog,
     ContextMenu,
     EmptyState,
-    Field,
     Input,
     Modal,
     PageHeader,
     SegmentedControl,
-    Textarea,
     useContextMenu,
     type ContextMenuItem,
 } from '@/components/design-system';
@@ -48,6 +48,11 @@ import { useCalendarEvents } from '@/hooks/useCalendarEvents';
 import { createNote, deleteNote, toggleNotePin, updateNote } from '@/services/notes';
 import type { Note } from '@/types/notes';
 import { DAILY_TAG } from '@/lib/dailyTodos';
+import { NOTE_COLORS, colorFor } from '@/lib/noteColors';
+import NoteForm, { type NoteDraft } from '@/components/notes/NoteForm';
+
+/** A blank note, shared by the create form and the edit dialog's reset. */
+const EMPTY_DRAFT: NoteDraft = { title: '', doc: null, text: '', color: null, tags: '' };
 import { fadeUp, stagger } from '@/lib/motion';
 
 /**
@@ -77,68 +82,6 @@ const NOTE_ACCENT: Record<string, string> = {
     link: 'bg-amber-500',
 };
 
-/**
- * The colour palette a note can be tagged with.
- *
- * Stored as the **name**, not a hex value — `Note.color` already holds bare names
- * in existing rows (`'red'`), and a column carrying both idioms could never be
- * grouped or filtered reliably. It also keeps theming in the client, where the
- * light/dark pair for each hue lives.
- *
- * Six entries including "none" is a deliberate ceiling: this is a colour *label*,
- * not a spectrum, and a right-click menu stops being scannable past about ten
- * items.
- */
-interface NoteColor {
-    /** Value persisted to `Note.color`. `null` for the uncoloured default. */
-    id: string | null;
-    label: string;
-    dot: string;
-    chip: string;
-}
-
-const NOTE_COLORS: NoteColor[] = [
-    {
-        id: null,
-        label: 'No colour',
-        dot: 'bg-gray-300 dark:bg-gray-600',
-        chip: 'bg-white/70 text-brand-dark dark:bg-white/10 dark:text-white',
-    },
-    {
-        id: 'red',
-        label: 'Red',
-        dot: 'bg-red-500',
-        chip: 'bg-red-500/15 text-red-700 dark:bg-red-500/25 dark:text-red-200',
-    },
-    {
-        id: 'amber',
-        label: 'Amber',
-        dot: 'bg-amber-500',
-        chip: 'bg-amber-500/15 text-amber-700 dark:bg-amber-500/25 dark:text-amber-200',
-    },
-    {
-        id: 'emerald',
-        label: 'Emerald',
-        dot: 'bg-emerald-500',
-        chip: 'bg-emerald-500/15 text-emerald-700 dark:bg-emerald-500/25 dark:text-emerald-200',
-    },
-    {
-        id: 'sky',
-        label: 'Sky',
-        dot: 'bg-sky-500',
-        chip: 'bg-sky-500/15 text-sky-700 dark:bg-sky-500/25 dark:text-sky-200',
-    },
-    {
-        id: 'violet',
-        label: 'Violet',
-        dot: 'bg-violet-500',
-        chip: 'bg-violet-500/15 text-violet-700 dark:bg-violet-500/25 dark:text-violet-200',
-    },
-];
-
-/** Unknown colours from older rows fall back to the default rather than vanishing. */
-const colorOf = (note: Note): NoteColor =>
-    NOTE_COLORS.find((c) => c.id === (note.color ?? null)) ?? NOTE_COLORS[0];
 
 /** Case-insensitive match across the fields a person would expect to search. */
 const matchesQuery = (note: Note, q: string): boolean => {
@@ -191,7 +134,7 @@ const NoteCard: FC<{
                             by a default derived from the note's kind. */}
                         <span
                             className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
-                                note.color ? colorOf(note).dot : (NOTE_ACCENT[note.type] ?? 'bg-gray-400')
+                                note.color ? colorFor(note.color).dot : (NOTE_ACCENT[note.type] ?? 'bg-gray-400')
                             }`}
                             aria-hidden
                         />
@@ -287,26 +230,41 @@ const NoteCard: FC<{
  * pinned, scheduled and deleted, but never corrected. `Modal` gives focus
  * trapping and restore for free, which a click-to-edit-in-place card would have
  * had to earn.
+ *
+ * **It edits the document, not a flattened copy of it.** The earlier version put
+ * a plain `<textarea>` here, so saving a note that carried formatting had to
+ * throw the formatting away — it warned first, which is better than losing it
+ * silently, but the warning was only ever needed because the dialog was weaker
+ * than the note. Now the same `NoteForm` used to write a note is used to correct
+ * one, and `contentRich` survives the round trip.
  */
 const EditNoteDialog: FC<{
     note: Note | null;
     busy: boolean;
     onClose: () => void;
-    onSave: (patch: { title: string; content: string; tags: string[] }) => void;
+    onSave: (patch: {
+        title: string;
+        content: string;
+        contentRich: unknown | null;
+        color: string | null;
+        tags: string[];
+    }) => void;
 }> = ({ note, busy, onClose, onSave }) => {
-    const [title, setTitle] = useState('');
-    const [content, setContent] = useState('');
-    const [tags, setTags] = useState('');
+    const [draft, setDraft] = useState<NoteDraft>(EMPTY_DRAFT);
 
     // Reset from the note each time a different one is opened, so the dialog
     // never shows the previous note's text for a frame.
     useEffect(() => {
-        setTitle(note?.title ?? '');
-        setContent(note?.content ?? '');
-        setTags((note?.tags ?? []).join(', '));
+        setDraft({
+            title: note?.title ?? '',
+            doc: (note?.contentRich as JSONContent | null) ?? null,
+            text: note?.content ?? '',
+            color: note?.color ?? null,
+            tags: (note?.tags ?? []).join(', '),
+        });
     }, [note]);
 
-    const valid = title.trim() || content.trim();
+    const valid = draft.title.trim() || draft.text.trim();
 
     return (
         <Modal
@@ -324,7 +282,13 @@ const EditNoteDialog: FC<{
                         size="sm"
                         disabled={busy || !valid}
                         onClick={() =>
-                            onSave({ title: title.trim(), content: content.trim(), tags: parseTags(tags) })
+                            onSave({
+                                title: draft.title.trim(),
+                                content: draft.text.trim(),
+                                contentRich: draft.doc,
+                                color: draft.color,
+                                tags: parseTags(draft.tags),
+                            })
                         }
                     >
                         {busy ? 'Saving…' : 'Save changes'}
@@ -332,30 +296,15 @@ const EditNoteDialog: FC<{
                 </>
             }
         >
-            <div className="flex flex-col gap-4">
-                <Field label="Title" id="edit-note-title">
-                    <Input value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
-                </Field>
-                <Field
-                    label="Content"
-                    hint={
-                        note?.contentRich
-                            ? 'This note was written with formatting. Saving here keeps the text and drops the formatting.'
-                            : 'Title or content — one of them is required.'
-                    }
-                    id="edit-note-content"
-                >
-                    <Textarea rows={6} value={content} onChange={(e) => setContent(e.target.value)} />
-                </Field>
-                <Field label="Categories" hint="Comma separated. These are the tags you can filter by." id="edit-note-tags">
-                    <Input
-                        value={tags}
-                        onChange={(e) => setTags(e.target.value)}
-                        placeholder="research, roadmap"
-                        icon={<FiTag size={14} />}
-                    />
-                </Field>
-            </div>
+            <NoteForm
+                // Keyed on the note so the undo stack never crosses notes.
+                editorKey={`edit-${note?.id ?? 'none'}`}
+                value={draft}
+                onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))}
+                plainFallback={note?.content ?? ''}
+                busy={busy}
+                autoFocus
+            />
         </Modal>
     );
 };
@@ -448,7 +397,7 @@ const MonthGrid: FC<{
                                         key={n.id}
                                         onContextMenu={(e) => onNoteMenu(e, n)}
                                         title={n.title || 'Untitled'}
-                                        className={`truncate rounded px-1 py-0.5 text-[10px] ${colorOf(n).chip}`}
+                                        className={`truncate rounded px-1 py-0.5 text-[10px] ${colorFor(n.color).chip}`}
                                     >
                                         {n.title || 'Untitled'}
                                     </span>
@@ -478,8 +427,15 @@ const NotesCalendar: FC = () => {
     const [creating, setCreating] = useState(false);
     const [busy, setBusy] = useState(false);
     const [notice, setNotice] = useState<string | null>(null);
-    const [title, setTitle] = useState('');
-    const [content, setContent] = useState('');
+    const [draft, setDraft] = useState<NoteDraft>(EMPTY_DRAFT);
+    /**
+     * Bumped after a successful create so the editor remounts empty.
+     *
+     * Clearing `draft` alone is not enough: TipTap keeps its own undo history,
+     * and without a new key one Ctrl-Z after saving would resurrect the note you
+     * just filed into the *next* blank one.
+     */
+    const [draftSeq, setDraftSeq] = useState(0);
     const [query, setQuery] = useState('');
     const [activeTag, setActiveTag] = useState<string | null>(null);
     const [editing, setEditing] = useState<Note | null>(null);
@@ -508,6 +464,36 @@ const NotesCalendar: FC = () => {
             return next;
         }, { replace: true });
     }, [requestedNoteId, loading, notesList, setSearchParams]);
+
+    /**
+     * `?day=YYYY-MM-DD` opens the calendar on that day.
+     *
+     * The master list links here per day group, and a day is only meaningful in
+     * calendar mode, so the parameter sets the mode as well as the date rather
+     * than landing on the notes grid with an invisible selection. Consumed once,
+     * for the same reason `?note=` is: a URL that keeps reopening a day on every
+     * refresh takes the page away from whoever is using it.
+     */
+    const requestedDay = searchParams.get('day');
+
+    useEffect(() => {
+        if (!requestedDay) return;
+        // Shape-checked before parsing: `dayjs`'s strict mode needs the
+        // `customParseFormat` plugin, which this app does not load, so without
+        // the regex a value like "tomorrow" would parse to something plausible.
+        const d = dayjs(requestedDay);
+        if (/^\d{4}-\d{2}-\d{2}$/.test(requestedDay) && d.isValid()) {
+            setMode('calendar');
+            setMonth(d.startOf('month'));
+            setSelectedDay(requestedDay);
+        }
+        setSearchParams((prev) => {
+            const next = new URLSearchParams(prev);
+            next.delete('day');
+            next.delete('view');
+            return next;
+        }, { replace: true });
+    }, [requestedDay, setSearchParams]);
 
     /**
      * Two menus, because there are two kinds of target — a note and an empty day —
@@ -588,22 +574,56 @@ const NotesCalendar: FC = () => {
 
     const submitNote = (e: React.FormEvent) => {
         e.preventDefault();
-        if (!title.trim() && !content.trim()) return;
+        if (!draft.title.trim() && !draft.text.trim()) return;
         run(
             () =>
                 createNote({
-                    title: title.trim(),
-                    content: content.trim(),
+                    title: draft.title.trim(),
+                    // Both projections of the document, written together. `content`
+                    // is what search and the card preview read; `contentRich` is
+                    // what the editor reads back.
+                    content: draft.text.trim(),
+                    contentRich: draft.doc,
+                    tags: parseTags(draft.tags),
+                    // Omitted rather than sent as null: the API reads an explicit
+                    // null as "clear it", and a create has nothing to clear.
+                    ...(draft.color ? { color: draft.color } : {}),
                     // Creating from a picked calendar day schedules it there — that's
                     // the whole reason `scheduledFor` exists.
                     ...(selectedDay && mode === 'calendar' ? { scheduledFor: selectedDay } : {}),
                 }),
             'Could not create that note.',
-        ).then(() => { setTitle(''); setContent(''); setCreating(false); });
+        ).then(() => {
+            setDraft(EMPTY_DRAFT);
+            setDraftSeq((n) => n + 1);
+            setCreating(false);
+        });
     };
 
     // Opening one menu closes the other. The chips live *inside* the day cells, so
     // without this a right-click could leave both surfaces open at once.
+    /**
+     * Write, or correct, the note for one day — the job `/daily` used to hold.
+     *
+     * An existing note opens in the edit dialog; a day with nothing written
+     * opens the create form already pointed at that day, so the note lands where
+     * the reader was looking rather than on today. Either way the calendar stays
+     * on screen: the panel that raised the question keeps its context.
+     */
+    const writeDayNote = (dayKey: string) => {
+        const existingId = dayDetail.day?.note?.id;
+        const found =
+            existingId != null ? notesList.find((n) => String(n.id) === String(existingId)) : undefined;
+        if (found) {
+            setEditing(found);
+            return;
+        }
+        setSelectedDay(dayKey);
+        setDraft(EMPTY_DRAFT);
+        setDraftSeq((n) => n + 1);
+        setCreating(true);
+    };
+
     const openNoteMenu = (event: React.MouseEvent, note: Note) => {
         dayMenu.close();
         noteMenu.openAtCursor(event, note);
@@ -779,48 +799,69 @@ const NotesCalendar: FC = () => {
                     <motion.div variants={fadeUp} initial="hidden" animate="show" exit="hidden">
                         <Surface variant="panel" radius="3xl" padding="lg">
                             <form className="flex flex-col gap-4" onSubmit={submitNote}>
-                                <h2 className="text-base font-bold font-heading text-brand-dark dark:text-white">
-                                    New note
-                                    {selectedDay && mode === 'calendar' && (
-                                        <span className="ml-2 text-sm font-medium text-gray-500 dark:text-gray-400">
-                                            for {dayjs(selectedDay).format('D MMM YYYY')}
-                                        </span>
-                                    )}
-                                </h2>
-                                <Field label="Title">
-                                    <Input
-                                        value={title}
-                                        onChange={(e) => setTitle(e.target.value)}
-                                        placeholder="What's this about?"
-                                        autoFocus
-                                    />
-                                </Field>
-                                <Field label="Content" hint="Title or content — one of them is required.">
-                                    <Textarea
-                                        rows={4}
-                                        value={content}
-                                        onChange={(e) => setContent(e.target.value)}
-                                        placeholder="Optional"
-                                    />
-                                </Field>
-                                <div className="flex items-center gap-2">
-                                    <AccentButton
-                                        type="submit"
-                                        size="sm"
-                                        disabled={busy || (!title.trim() && !content.trim())}
-                                    >
-                                        {busy ? 'Saving…' : 'Create note'}
-                                    </AccentButton>
-                                    <AccentButton
-                                        type="button"
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => setCreating(false)}
-                                        disabled={busy}
-                                    >
-                                        Cancel
-                                    </AccentButton>
+                                <div className="flex flex-col gap-2">
+                                    <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                                        <h2 className="text-base font-bold font-heading text-brand-dark dark:text-white">
+                                            New note
+                                            {selectedDay && mode === 'calendar' && (
+                                                <span className="ml-2 text-sm font-medium text-gray-500 dark:text-gray-400">
+                                                    for {dayjs(selectedDay).format('D MMM YYYY')}
+                                                </span>
+                                            )}
+                                        </h2>
+
+                                        <div className="ml-auto flex items-center gap-2">
+                                            <AccentButton
+                                                type="button"
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() => setCreating(false)}
+                                                disabled={busy}
+                                            >
+                                                Cancel
+                                            </AccentButton>
+                                            <AccentButton
+                                                type="submit"
+                                                size="sm"
+                                                icon={<FiCheck size={14} />}
+                                                disabled={busy || (!draft.title.trim() && !draft.text.trim())}
+                                            >
+                                                {busy ? 'Saving…' : 'Save note'}
+                                            </AccentButton>
+                                        </div>
+                                    </div>
+
+                                    <p className="text-xs text-gray-400 dark:text-gray-500">
+                                        Title or content — one of them is required. Formatting is kept.
+                                    </p>
                                 </div>
+
+                                <NoteForm
+                                    editorKey={`create-${draftSeq}`}
+                                    value={draft}
+                                    onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))}
+                                    busy={busy}
+                                    autoFocus
+                                    footer={
+                                        <p className="flex flex-wrap items-center gap-1.5 rounded-xl bg-black/[0.03] px-3 py-2 text-[11px] text-gray-500 dark:bg-white/5 dark:text-gray-400">
+                                            <FiCalendar size={12} aria-hidden className="shrink-0" />
+                                            {selectedDay && mode === 'calendar' ? (
+                                                <>
+                                                    This note lands on{' '}
+                                                    <strong className="font-semibold text-brand-dark dark:text-white">
+                                                        {dayjs(selectedDay).format('D MMM YYYY')}
+                                                    </strong>{' '}
+                                                    in the calendar.
+                                                </>
+                                            ) : (
+                                                <>
+                                                    Unscheduled notes appear in the calendar on the day they were
+                                                    written.
+                                                </>
+                                            )}
+                                        </p>
+                                    }
+                                />
                             </form>
                         </Surface>
                     </motion.div>
@@ -1036,6 +1077,7 @@ const NotesCalendar: FC = () => {
                             onToggleTask={(t) => { void dayDetail.toggleTask(t); }}
                             onAddEvent={() => setEventDraft({ dayKey: selectedDay, event: null })}
                             onEditEvent={(e) => setEventDraft({ dayKey: selectedDay, event: e })}
+                            onWriteNote={() => writeDayNote(selectedDay)}
                         />
                     )}
 
@@ -1080,7 +1122,7 @@ const NotesCalendar: FC = () => {
                                             >
                                                 <div className="flex items-center gap-2">
                                                     <span
-                                                        className={`h-2 w-2 shrink-0 rounded-full ${colorOf(n).dot}`}
+                                                        className={`h-2 w-2 shrink-0 rounded-full ${colorFor(n.color).dot}`}
                                                         aria-hidden
                                                     />
                                                     <span className="truncate text-sm font-semibold text-brand-dark dark:text-white">
@@ -1141,9 +1183,9 @@ const NotesCalendar: FC = () => {
             {/*
               * One edit dialog, not two. Both branches of the merge grew one: this
               * side had an inline Modal over title/content, the daily-note branch
-              * had `EditNoteDialog`. This one wins because it also carries tags and
-              * knows what to do when a note holds a rich document — an inline text
-              * Modal would silently desync `content` from `contentRich`.
+              * had `EditNoteDialog`. This one wins because it carries tags and
+              * colour and edits the rich document in place, rather than flattening
+              * it and leaving `content` and `contentRich` to disagree.
               */}
             <EditNoteDialog
                 note={editing}
@@ -1152,13 +1194,11 @@ const NotesCalendar: FC = () => {
                 onSave={(patch) => {
                     const target = editing;
                     if (!target) return;
-                    // This dialog edits plain text. On a note that carries a rich
-                    // document, saving here has to *drop* it — leaving it would make
-                    // `content` and `contentRich` disagree, and the editor on
-                    // `/daily` would keep showing text this dialog just replaced.
-                    // The dialog warns before it comes to this.
-                    const withRich = target.contentRich ? { ...patch, contentRich: null } : patch;
-                    run(() => updateNote(target.id, withRich), 'Could not save that note.').then(() =>
+                    // `contentRich` and `content` are written together, always. They
+                    // are two projections of one document, and a save that moved
+                    // only one of them would leave the note reading differently
+                    // depending on which field a surface happened to render.
+                    run(() => updateNote(target.id, patch), 'Could not save that note.').then(() =>
                         setEditing(null),
                     );
                 }}

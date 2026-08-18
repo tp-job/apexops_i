@@ -16,7 +16,16 @@ import {
 import TaskRow from '@/components/tasks/TaskRow';
 import TaskGroup from '@/components/tasks/TaskGroup';
 import RescheduleControl from '@/components/tasks/RescheduleControl';
-import { deleteTask, fetchTasks, taskDayAnchor, updateTask, type MasterTask, type TaskStatus } from '@/services/tasks';
+import TaskComposer from '@/components/tasks/TaskComposer';
+import {
+    createTask,
+    deleteTask,
+    fetchTasks,
+    taskDayAnchor,
+    updateTask,
+    type MasterTask,
+    type TaskStatus,
+} from '@/services/tasks';
 import { fadeUp } from '@/lib/motion';
 
 /**
@@ -113,6 +122,30 @@ const Tasks: FC = () => {
         [load],
     );
 
+    /**
+     * Add a task and show it, whatever filter is on.
+     *
+     * A new task is open and not overdue, so filing one while "Done" or
+     * "Overdue" is selected would store it correctly and then show nothing —
+     * indistinguishable from a failed save. Switching to the filter that
+     * contains it is the honest response.
+     */
+    const addTask = useCallback(
+        async (text: string, dayKey: string): Promise<boolean> => {
+            setError(null);
+            try {
+                await createTask({ text, dayKey });
+                if (status === 'done' || status === 'overdue') setStatus('open');
+                else await load();
+                return true;
+            } catch (err) {
+                setError(err instanceof Error ? err.message : 'Could not add that task.');
+                return false;
+            }
+        },
+        [status, load],
+    );
+
     const grouped = useMemo(() => {
         const byDay = new Map<string, MasterTask[]>();
         for (const t of tasks) {
@@ -147,6 +180,13 @@ const Tasks: FC = () => {
                     </AccentButton>
                 }
             />
+
+            {/* Adding sits above filtering, because it is the thing this page was
+                missing: every other verb — tick, rename, reschedule, delete —
+                already lived here. */}
+            <Surface variant="panel" radius="3xl" padding="md">
+                <TaskComposer onAdd={addTask} disabled={busy} />
+            </Surface>
 
             <Surface variant="panel" radius="3xl" padding="md">
                 <div className="flex flex-col gap-3">
@@ -215,11 +255,11 @@ const Tasks: FC = () => {
                                 ? 'Try a different word, or clear the search.'
                                 : status === 'overdue'
                                   ? 'No task has passed its due date. '
-                                  : 'Tasks you add on a daily note show up here.'
+                                  : 'Add the first one above.'
                         }
                         action={
                             <AccentButton size="sm" icon={<FiArrowRight size={14} />}>
-                                <Link to="/daily">Go to today</Link>
+                                <Link to="/notes">Open Notes &amp; Calendar</Link>
                             </AccentButton>
                         }
                     />
@@ -236,7 +276,7 @@ const Tasks: FC = () => {
                                     <Badge tone="neutral">{rows.length}</Badge>
                                     {dayIso !== 'unscheduled' && (
                                         <Link
-                                            to={`/daily?date=${dayIso}`}
+                                            to={`/notes?view=calendar&day=${dayIso}`}
                                             className="ml-auto flex items-center gap-1 rounded text-xs font-medium text-gray-500 underline underline-offset-2 outline-none hover:no-underline focus-visible:ring-2 focus-visible:ring-brand-dark/30 dark:text-gray-400 dark:focus-visible:ring-brand-accent/40"
                                         >
                                             <FiCalendar size={12} aria-hidden />

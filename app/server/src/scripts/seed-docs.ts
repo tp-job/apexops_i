@@ -58,16 +58,19 @@ const PAGES: SeedPage[] = [
      *
      * Every other page here is written for someone wiring up the SDK. None of
      * them answered "how do I use the app", and the gap showed: a user
-     * concluded the daily note had no way to save and that notes had to be
-     * written twice, in two places, because nothing said otherwise.
+     * concluded that notes had to be written twice, in two places, because
+     * nothing said otherwise.
+     *
+     * This script never deletes, so retiring a page here leaves its published
+     * row behind — unpublish it from `/admin/docs`.
      */
     {
-        slug: 'daily-notes',
-        title: 'Daily notes & todos',
+        slug: 'tasks',
+        title: 'Tasks',
         group: 'Using ApexOps',
         groupOrder: 1,
         order: 0,
-        summary: 'How the day note saves itself, how to read the save status, and where the note ends up.',
+        summary: 'Adding, filtering, rescheduling and completing tasks across every day.',
     },
     {
         slug: 'notes-and-calendar',
