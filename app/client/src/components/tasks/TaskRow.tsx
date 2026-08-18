@@ -32,9 +32,16 @@ export interface TaskRowProps {
     onMove?: (direction: 'up' | 'down') => void;
     /** Extra line under the title — the master list puts the date and status here. */
     meta?: ReactNode;
+    /**
+     * Row-level controls rendered before Delete — the master list puts
+     * rescheduling here. Kept as a slot rather than a `onReschedule` prop so this
+     * component stays ignorant of what a surface wants to offer; it owns the row,
+     * not the feature set.
+     */
+    actions?: ReactNode;
 }
 
-const TaskRow: FC<TaskRowProps> = ({ todo, readOnly, onToggle, onRename, onRemove, onMove, meta }) => {
+const TaskRow: FC<TaskRowProps> = ({ todo, readOnly, onToggle, onRename, onRemove, onMove, meta, actions }) => {
     const [editing, setEditing] = useState(false);
     const [draft, setDraft] = useState(todo.text);
 
@@ -100,6 +107,7 @@ const TaskRow: FC<TaskRowProps> = ({ todo, readOnly, onToggle, onRename, onRemov
                     </div>
 
                     <div className="flex shrink-0 items-center gap-0.5">
+                        {actions}
                         {onMove && (
                             <>
                                 <button

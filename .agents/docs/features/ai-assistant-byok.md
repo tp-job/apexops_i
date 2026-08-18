@@ -1,6 +1,6 @@
 # AI Assistant (BYOK) — right-sidebar copilot
 
-**Status:** **built and verified 2026-08-16** — 20/20 features in the ledger; branch pushed, no PR opened ·
+**Status:** **shipped** — 20/20 features in the ledger; merged to `main` via PR #5 on 2026-08-16 ·
 **Branch:** `sprint-11/ai-assistant-byok`
 **Written:** 2026-08-15 · **Method:** Promethean Parthenon — Task pillar (extract → brief), Role pillar at D1/D2.
 **Build record:** `.agents/harness/sprint-11-ai-assistant-byok/` (`build-spec.md`, `feature-list.json`, `progress.md`) —
@@ -297,7 +297,7 @@ Each step ends in a verified commit. **"Implemented" is not "verified" — do no
 
 ### Gate 10 — land
 - [x] Update `.agents/docs/product/user-flow.md` — inventory row, nav paragraph, sequencing item 5 and the flow diagram all now describe the panel that shipped rather than the entry point this doc originally guessed at
-- [ ] PR body: decisions D1–D6, the accepted risk in D1, and what v2 owes — **not done.** The branch is pushed, but `ci.yml` runs only on `pull_request` and `push: [main]`, so opening the PR is also what first puts this feature through CI.
+- [x] PR body: decisions D1–D6, the accepted risk in D1, and what v2 owes — **done.** Merged into `main` via PR #5 (`64f5755`), which is also what first put this feature through CI.
 
 ---
 

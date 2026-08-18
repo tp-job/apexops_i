@@ -47,6 +47,12 @@ import { fadeUp } from '@/lib/motion';
 import TaskRow from '@/components/tasks/TaskRow';
 import TaskGroup from '@/components/tasks/TaskGroup';
 import DailyNoteBadge from '@/components/tasks/DailyNoteBadge';
+import CarriedOverBand from '@/components/tasks/CarriedOverBand';
+import MiniMonth from '@/components/calendar/MiniMonth';
+import DayAgendaStrip, { AgendaHeading } from '@/components/calendar/DayAgendaStrip';
+import { useMonthMarkers } from '@/hooks/useMonthMarkers';
+import { useDayDetail } from '@/hooks/useDayDetail';
+import { useCarriedOverTasks } from '@/hooks/useCarriedOverTasks';
 
 /**
  * Daily note & todos — one day at a time.
@@ -192,6 +198,38 @@ const DailyNote: FC = () => {
         note, todos, body, richDoc, progress, loading, saving, error, notice, dismissNotice, refetch,
         commitTodos, queueDocument, flushDocument, saveState, savedAt,
     } = useDailyTodos(dayKey);
+
+    /**
+     * Unfinished work from earlier days (EC-11).
+     *
+     * Shown, never moved. The hook refreshes itself after each of its own
+     * writes; the page only has to refetch the *day* when a task moves into it,
+     * because that is the one action that changes both sides.
+     */
+    const {
+        tasks: carriedOver,
+        busy: carriedBusy,
+        toggle: toggleCarried,
+        moveToDay: moveCarriedToDay,
+    } = useCarriedOverTasks(dayKey, !error);
+
+    /**
+     * The mini calendar and the agenda strip (US-08).
+     *
+     * `useDayDetail` is reused rather than a new fetch: it already returns the
+     * day's events, and a second request for the same thing is how two parts of
+     * one page start disagreeing.
+     */
+    const [miniMonth, setMiniMonth] = useState(() => dayjs(dayKey));
+    const monthMarkers = useMonthMarkers(miniMonth, !error);
+
+    const dayDetail = useDayDetail(error ? null : dayKey);
+
+    // Paging the mini calendar is browsing; changing the page's day is not. But
+    // jumping the page to another month should carry the calendar with it.
+    useEffect(() => {
+        setMiniMonth((cur) => (cur.isSame(dayjs(dayKey), 'month') ? cur : dayjs(dayKey)));
+    }, [dayKey]);
 
     const addRef = useRef<HTMLInputElement>(null);
     const day = useMemo(() => dayjs(dayKey), [dayKey]);
@@ -688,6 +726,35 @@ const DailyNote: FC = () => {
                                 Add
                             </AccentButton>
                         </form>
+
+                        {/* Month at a glance + today's appointments (US-08).
+                            Above the todo controls: the question "where am I and
+                            what else is on" comes before "what am I adding". */}
+                        <MiniMonth
+                            month={miniMonth}
+                            selected={dayKey}
+                            taskCounts={monthMarkers.tasksByDay}
+                            eventCounts={monthMarkers.eventsByDay}
+                            noteCounts={monthMarkers.notesByDay}
+                            onPick={setDayKey}
+                            onMonthChange={setMiniMonth}
+                        />
+
+                        <div className="flex flex-col gap-1.5">
+                            <AgendaHeading count={dayDetail.day?.events.length ?? 0} />
+                            <DayAgendaStrip
+                                events={dayDetail.day?.events ?? []}
+                                loading={dayDetail.loading}
+                            />
+                        </div>
+
+                        <CarriedOverBand
+                            tasks={carriedOver}
+                            dayKey={dayKey}
+                            busy={carriedBusy || busy}
+                            onToggle={(t) => { void toggleCarried(t); }}
+                            onMoveToDay={async (t) => { await moveCarriedToDay(t); await refetch(); }}
+                        />
 
                         <SegmentedControl
                             segments={FILTERS}

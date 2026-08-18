@@ -6,6 +6,7 @@ import {
     addTodo,
     clearCompleted,
     dayAnchorIso,
+    dailyNoteTitle,
     dayKeyOf,
     filterTodos,
     findDailyNote,
@@ -222,5 +223,34 @@ describe('findDailyNote', () => {
 
     it('returns null when nothing matches', () => {
         expect(findDailyNote([note()], '2026-08-12')).toBeNull();
+    });
+});
+
+describe('dailyNoteTitle', () => {
+    it('matches the spec form exactly', () => {
+        expect(dailyNoteTitle('2026-08-16')).toBe('Daily Note - 16 Aug 2026');
+    });
+
+    /**
+     * The title is an identifier, not a label — it is what a user searches for and
+     * what makes a list of daily notes read as one series. If it followed the UI
+     * language, localising the interface would silently start writing notes with a
+     * different title from every note already stored, in the same list, with no
+     * migration to reconcile them.
+     *
+     * This test fails if anyone removes `.locale('en')` from the generator.
+     */
+    it('stays English even when dayjs is globally switched to another locale', async () => {
+        await import('dayjs/locale/th');
+        const previous = dayjs.locale();
+        try {
+            dayjs.locale('th');
+            // Proof the switch actually took effect — otherwise the assertion below
+            // would pass for the wrong reason.
+            expect(dayjs('2026-08-16').format('MMM')).not.toBe('Aug');
+            expect(dailyNoteTitle('2026-08-16')).toBe('Daily Note - 16 Aug 2026');
+        } finally {
+            dayjs.locale(previous);
+        }
     });
 });

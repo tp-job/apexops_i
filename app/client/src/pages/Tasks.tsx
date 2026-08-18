@@ -15,7 +15,8 @@ import {
 } from '@/components/design-system';
 import TaskRow from '@/components/tasks/TaskRow';
 import TaskGroup from '@/components/tasks/TaskGroup';
-import { deleteTask, fetchTasks, updateTask, type MasterTask, type TaskStatus } from '@/services/tasks';
+import RescheduleControl from '@/components/tasks/RescheduleControl';
+import { deleteTask, fetchTasks, taskDayAnchor, updateTask, type MasterTask, type TaskStatus } from '@/services/tasks';
 import { fadeUp } from '@/lib/motion';
 
 /**
@@ -258,6 +259,20 @@ const Tasks: FC = () => {
                                                 }
                                                 onRename={(text) => void mutate(() => updateTask(t.taskId, { text }))}
                                                 onRemove={() => void mutate(() => deleteTask(t.taskId))}
+                                                actions={
+                                                    <RescheduleControl
+                                                        value={t.scheduledFor}
+                                                        disabled={busy}
+                                                        taskText={t.text}
+                                                        onPick={(day) =>
+                                                            void mutate(() =>
+                                                                updateTask(t.taskId, {
+                                                                    scheduledFor: taskDayAnchor(day),
+                                                                }),
+                                                            )
+                                                        }
+                                                    />
+                                                }
                                                 meta={
                                                     t.dueDate ? (
                                                         <span

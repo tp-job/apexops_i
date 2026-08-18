@@ -5,6 +5,7 @@ import { authenticate } from '../middleware/auth';
 import { validate } from '../middleware/validate';
 import { createNoteSchema, updateNoteSchema, calendarParamsSchema } from '../schemas/note.schema';
 import { resolveTimeZone, zonedDayOfMonth, zonedMonthRange } from '../utils/timezone';
+import { overlapWhere } from './calendarEvents';
 
 const router = express.Router();
 
@@ -194,7 +195,61 @@ router.get('/calendar/:year/:month', authenticate, async (req: Request, res: Res
                 });
             });
 
-        res.json({ year, month, timeZone, notesByDay, totalNotes: notes.length });
+        /**
+         * Tasks and events for the same window (phase 3, F005).
+         *
+         * **`notesByDay` is untouched.** The two new maps sit beside it, so every
+         * existing reader keeps working unchanged — this is additive, not a
+         * reshape. That matters more than it looks: the calendar grid is the
+         * oldest consumer here and the one most likely to be quietly depended on.
+         *
+         * Events use the overlap predicate, not a match on `startAt`, so a
+         * meeting that crosses midnight is counted on both days it touches
+         * (EC-12). Tasks cannot span days, so a plain range is right for them.
+         */
+        const [dayTasks, dayEvents] = await Promise.all([
+            prisma.task.findMany({
+                where: { userId, deletedAt: null, scheduledFor: inMonth },
+                select: { id: true, text: true, isDone: true, scheduledFor: true, dueDate: true },
+            }),
+            prisma.calendarEvent.findMany({
+                where: { userId, deletedAt: null, ...overlapWhere(start, end) },
+                select: { id: true, title: true, startAt: true, endAt: true, isAllDay: true, color: true },
+            }),
+        ]);
+
+        const tasksByDay: Record<number, any[]> = {};
+        for (const t of dayTasks) {
+            const day = zonedDayOfMonth(t.scheduledFor, timeZone);
+            (tasksByDay[day] ??= []).push({
+                id: t.id, text: t.text, checked: t.isDone,
+                dueDate: t.dueDate, scheduledFor: t.scheduledFor,
+            });
+        }
+
+        const eventsByDay: Record<number, any[]> = {};
+        for (const e of dayEvents) {
+            // One event lands on every day it covers, so this walks the span
+            // rather than bucketing by its start.
+            const last = new Date(Math.min(e.endAt.getTime(), end.getTime() - 1));
+            for (let cursor = new Date(Math.max(e.startAt.getTime(), start.getTime())); cursor <= last; ) {
+                const day = zonedDayOfMonth(cursor, timeZone);
+                const bucket = (eventsByDay[day] ??= []);
+                if (!bucket.some((x) => x.id === e.id)) {
+                    bucket.push({
+                        id: e.id, title: e.title, startAt: e.startAt, endAt: e.endAt,
+                        isAllDay: e.isAllDay, color: e.color,
+                    });
+                }
+                cursor = new Date(cursor.getTime() + 24 * 60 * 60 * 1000);
+            }
+        }
+
+        res.json({
+            year, month, timeZone, notesByDay, totalNotes: notes.length,
+            tasksByDay, eventsByDay,
+            totalTasks: dayTasks.length, totalEvents: dayEvents.length,
+        });
     } catch (err: any) {
         console.error('Error fetching calendar notes:', err);
         res.status(500).json({ error: 'Failed to fetch calendar notes' });

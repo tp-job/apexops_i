@@ -37,6 +37,13 @@ import {
     type ContextMenuItem,
 } from '@/components/design-system';
 import { useNoteList } from '@/hooks/useNoteList';
+import { useDayDetail } from '@/hooks/useDayDetail';
+import DayDetailPanel from '@/components/calendar/DayDetailPanel';
+import DayMarkers from '@/components/calendar/DayMarkers';
+import { describeDay } from '@/lib/dayMarkers';
+import { useMonthMarkers } from '@/hooks/useMonthMarkers';
+import EventDialog from '@/components/calendar/EventDialog';
+import { createEvent, deleteEvent, updateEvent, type CalendarEvent } from '@/services/day';
 import { useCalendarEvents } from '@/hooks/useCalendarEvents';
 import { createNote, deleteNote, toggleNotePin, updateNote } from '@/services/notes';
 import type { Note } from '@/types/notes';
@@ -357,13 +364,16 @@ const EditNoteDialog: FC<{
 const MonthGrid: FC<{
     month: Dayjs;
     notesByDay: Record<string, Note[]>;
+    /** Task and event counts per day-of-month, for the markers (F007). */
+    taskCounts: Record<number, number>;
+    eventCounts: Record<number, number>;
     onPick: (dayKey: string) => void;
     selectedDay: string | null;
     /** Right-click on a note chip. */
     onNoteMenu: (event: React.MouseEvent, note: Note) => void;
     /** Right-click on the day cell itself, away from any chip. */
     onDayMenu: (event: React.MouseEvent, dayKey: string) => void;
-}> = ({ month, notesByDay, onPick, selectedDay, onNoteMenu, onDayMenu }) => {
+}> = ({ month, notesByDay, taskCounts, eventCounts, onPick, selectedDay, onNoteMenu, onDayMenu }) => {
     const cells = useMemo(() => {
         const first = month.startOf('month');
         // `day()` is 0=Sunday; the grid starts Monday, so Sunday becomes the 7th slot.
@@ -393,6 +403,11 @@ const MonthGrid: FC<{
                     const dayNotes = notesByDay[key] ?? [];
                     const isToday = key === today;
                     const isSelected = key === selectedDay;
+                    // Counts only apply to days of *this* month; the leading and
+                    // trailing cells belong to the neighbours and their numbers
+                    // would collide with this month's day keys.
+                    const nTasks = inMonth ? (taskCounts[d.date()] ?? 0) : 0;
+                    const nEvents = inMonth ? (eventCounts[d.date()] ?? 0) : 0;
 
                     return (
                         <button
@@ -400,7 +415,7 @@ const MonthGrid: FC<{
                             type="button"
                             onClick={() => onPick(key)}
                             onContextMenu={(e) => onDayMenu(e, key)}
-                            aria-label={`${d.format('D MMMM YYYY')}, ${dayNotes.length} note${dayNotes.length === 1 ? '' : 's'}`}
+                            aria-label={`${d.format('D MMMM YYYY')}, ${describeDay(dayNotes.length, nTasks, nEvents)}`}
                             aria-current={isToday ? 'date' : undefined}
                             className={[
                                 'flex min-h-[76px] flex-col gap-1 rounded-xl p-2 text-left transition-colors',
@@ -444,6 +459,7 @@ const MonthGrid: FC<{
                                     </span>
                                 )}
                             </div>
+                            <DayMarkers notes={dayNotes.length} tasks={nTasks} events={nEvents} />
                         </button>
                     );
                 })}
@@ -499,6 +515,21 @@ const NotesCalendar: FC = () => {
      * every element of its kind, per `useContextMenu`'s own contract: one portal
      * and one set of document listeners, not one per cell.
      */
+    /**
+     * The composed day behind the detail panel (US-07).
+     *
+     * Only fetched while a day is selected in calendar mode, so browsing the
+     * notes list costs nothing.
+     */
+    const dayDetail = useDayDetail(mode === 'calendar' ? selectedDay : null);
+
+    /** Task and event counts for the visible month, for the day markers (F007). */
+    const monthMarkers = useMonthMarkers(month, mode === 'calendar');
+
+    /** Which event the dialog is editing — null `event` means "create". */
+    const [eventDraft, setEventDraft] = useState<{ dayKey: string; event: CalendarEvent | null } | null>(null);
+    const [savingEvent, setSavingEvent] = useState(false);
+
     const noteMenu = useContextMenu<Note>();
     const dayMenu = useContextMenu<string>();
 
@@ -973,6 +1004,8 @@ const NotesCalendar: FC = () => {
                                 <MonthGrid
                                     month={month}
                                     notesByDay={notesByDay}
+                                    taskCounts={monthMarkers.tasksByDay}
+                                    eventCounts={monthMarkers.eventsByDay}
                                     onPick={(k) => setSelectedDay((cur) => (cur === k ? null : k))}
                                     selectedDay={selectedDay}
                                     onNoteMenu={openNoteMenu}
@@ -987,6 +1020,24 @@ const NotesCalendar: FC = () => {
                             </div>
                         </Surface>
                     </motion.div>
+
+                    <div className="flex flex-col gap-5">
+                    {/* Agenda / Tasks / Daily note for the chosen day (US-07).
+                        Added ABOVE the existing note list rather than replacing
+                        it: that list manages the day's notes and this panel
+                        answers "what is on this day", which are different jobs. */}
+                    {selectedDay && (
+                        <DayDetailPanel
+                            day={dayDetail.day}
+                            dayKey={selectedDay}
+                            loading={dayDetail.loading}
+                            busy={dayDetail.busy}
+                            onClose={() => setSelectedDay(null)}
+                            onToggleTask={(t) => { void dayDetail.toggleTask(t); }}
+                            onAddEvent={() => setEventDraft({ dayKey: selectedDay, event: null })}
+                            onEditEvent={(e) => setEventDraft({ dayKey: selectedDay, event: e })}
+                        />
+                    )}
 
                     <motion.div variants={fadeUp} initial="hidden" animate="show">
                         <Surface variant="panel" radius="3xl" padding="lg" className="h-full">
@@ -1064,6 +1115,7 @@ const NotesCalendar: FC = () => {
                             </div>
                         </Surface>
                     </motion.div>
+                    </div>
                 </div>
             )}
 
@@ -1126,6 +1178,47 @@ const NotesCalendar: FC = () => {
                     if (!target) return;
                     await run(() => deleteNote(target.id), 'Could not delete that note.');
                     setPendingDelete(null);
+                }}
+            />
+
+            {/*
+              * Create / edit an appointment (F009).
+              *
+              * Both the day panel and the month grid open this, so it lives at
+              * page level rather than inside either — one dialog instance, one
+              * piece of state, no chance of two open at once.
+              */}
+            <EventDialog
+                open={eventDraft !== null}
+                dayKey={eventDraft?.dayKey ?? selectedDay ?? dayjs().format('YYYY-MM-DD')}
+                event={eventDraft?.event ?? null}
+                saving={savingEvent}
+                onClose={() => setEventDraft(null)}
+                onSave={async (input) => {
+                    setSavingEvent(true);
+                    try {
+                        if (eventDraft?.event) await updateEvent(eventDraft.event.id, input);
+                        else await createEvent(input);
+                        setEventDraft(null);
+                        // The panel is a read of what the server holds, so it is
+                        // re-read rather than patched in place — see useDayDetail.
+                        await dayDetail.reload();
+                        await refetch();
+                    } finally {
+                        setSavingEvent(false);
+                    }
+                }}
+                onDelete={async () => {
+                    if (!eventDraft?.event) return;
+                    setSavingEvent(true);
+                    try {
+                        await deleteEvent(eventDraft.event.id);
+                        setEventDraft(null);
+                        await dayDetail.reload();
+                        await refetch();
+                    } finally {
+                        setSavingEvent(false);
+                    }
                 }}
             />
         </div>

@@ -92,3 +92,27 @@ export function zonedMonthRange(
             : zonedTimeToUtc(year, month + 1, 1, timeZone);
     return { start, end };
 }
+
+/**
+ * The UTC window covering one calendar day **in the viewer's own zone**.
+ *
+ * Added 2026-08-18 because two endpoints were answering "which day is this on?"
+ * differently, which is exactly what blueprint D4 forbids. The month calendar
+ * bucketed by `zonedDayOfMonth` (the user's timezone) while the day endpoint
+ * used a naive UTC range, so an event running to 00:00Z on the 26th was reported
+ * on the 25th by one and the 26th by the other. A user cannot be told two
+ * different things about the same appointment.
+ *
+ * Tasks did not expose the disagreement because they are anchored at UTC noon,
+ * which lands inside the same day under any ordinary offset. Events carry real
+ * instants and have no such cushion.
+ */
+export function zonedDayRange(dayKey: string, timeZone: string): { start: Date; end: Date } {
+    const [y, m, d] = dayKey.split('-').map(Number);
+    const start = zonedTimeToUtc(y, m, d, timeZone);
+    // Built from the next calendar day rather than start + 24h, so a DST
+    // transition inside the day cannot make the window 23 or 25 hours long.
+    const next = new Date(Date.UTC(y, m - 1, d + 1));
+    const end = zonedTimeToUtc(next.getUTCFullYear(), next.getUTCMonth() + 1, next.getUTCDate(), timeZone);
+    return { start, end };
+}

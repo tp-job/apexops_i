@@ -51,6 +51,7 @@ model User {
   editedDocPages     DocPage[]           @relation("docPageEditor")
   aiKey              UserAiKey?
   tasks              Task[]
+  calendarEvents     CalendarEvent[]
 
   @@map("users")
 }
@@ -249,7 +250,61 @@ model Task {
   @@map("tasks")
 }
 
+/// A scheduled appointment — the entity FR-4's Agenda section rests on.
+///
+/// **Not named `Event`.** That name is already taken in this schema by
+/// Sentry-style error events belonging to Project and Issue. Reusing it, or
+/// re-issuing the name, would collide with the Bug Tracker's most-written table.
+///
+/// **Not folded into `Note` either.** An appointment has a start, an end, an
+/// all-day flag and a place; a note has none of those, and adding them would
+/// leave four columns null on the ~95% of rows that are ordinary notes while
+/// blurring what a note even is. Blueprint D2.
+///
+/// The link to notes and tasks is the **date**, never a foreign key — D3. Every
+/// surface is a view over "what falls on this day", so nothing has to be copied
+/// between tables and nothing can disagree.
+model CalendarEvent {
+  id          Int       @id @default(autoincrement())
+  userId      Int       @map("user_id")
+
+  title       String
+  description String?
+  location    String?
+
+  /// Instants, not day keys: an appointment has a time, and it may cross
+  /// midnight. `endAt` is exclusive of nothing — it is the moment it finishes,
+  /// and the API refuses an `endAt` earlier than `startAt`.
+  startAt     DateTime  @map("start_at")
+  endAt       DateTime  @map("end_at")
+  /// All-day events still carry a start and an end so one range query serves
+  /// both kinds; this only changes how they render.
+  isAllDay    Boolean   @default(false) @map("is_all_day")
+
+  color       String?
+  /// Soft delete, matching Task — a removed appointment stays recoverable and
+  /// history keeps its shape (D5).
+  deletedAt   DateTime? @map("deleted_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Drives the month and day queries. Both filter on `startAt` first, so a
+  /// month view never scans the table.
+  @@index([userId, startAt])
+  @@index([userId, endAt])
+  @@map("calendar_events")
+}
+
 /// Ledger for the one-off `+7h updated_at` repair.
+///
+/// **The table name must not start with an underscore.** Prisma reserves that
+/// prefix for the join tables of implicit many-to-many relations and skips such
+/// tables when it diffs the database, so an underscored name is invisible to it:
+/// every `db push` decided the table was missing, tried to create it along with
+/// its sequence, and failed on `relation "..._id_seq" already exists`. Renamed
+/// from `_timestamp_repairs` on 2026-08-18.
 ///
 /// **This is in the schema so that `prisma db push` does not drop it.** The
 /// table is created and read by `scripts/repair-updated-at-skew.ts`, which
@@ -266,7 +321,7 @@ model TimestampRepair {
   offsetHours  Int      @map("offset_hours")
   rowsAffected Int      @map("rows_affected")
 
-  @@map("_timestamp_repairs")
+  @@map("timestamp_repairs")
 }
 
 // ── Projects / workspaces ────────────────────────────────────

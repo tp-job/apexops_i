@@ -1,0 +1,191 @@
+{
+  "project": {
+    "name": "ApexOps — Notes SSOT, Phase 3",
+    "description": "Calendar events as a first-class entity, a day detail panel on /notes with Agenda + Tasks + Daily Note, and a mini calendar on /daily.",
+    "spec": ".agents/docs/features/notes-ssot-blueprint.md",
+    "branch": "sprint-12/notes-ssot-groundwork",
+    "created_at": "2026-08-18",
+    "last_updated": "2026-08-18"
+  },
+  "house_mechanics": {
+    "schema_changes": "prisma db push — this repo has NO migrations directory; `migrate dev` would offer to reset a populated database",
+    "gates": "client: typecheck lint test build | server: typecheck test build",
+    "ci_triggers": "pull_request and push to main only — a pushed feature branch runs nothing",
+    "commit_triggers": "checks only, never deploys"
+  },
+  "features": [
+    {
+      "id": "F001",
+      "category": "core",
+      "priority": "critical",
+      "description": "CalendarEvent model exists and is scoped to its owner",
+      "steps": [
+        "Model is named CalendarEvent, NOT Event — that name is taken by Bug Tracker error events (projectId/issueId/level/stack)",
+        "prisma migrate diff preview shows a purely additive change: no DROP, no ALTER of an existing table",
+        "calendar_events table exists with start_at, end_at, is_all_day, location, deleted_at",
+        "FAILURE CASE: deleting a user cascades their events away",
+        "Index on (userId, startAt) exists — the month query must not table-scan",
+        "server typecheck green"
+      ],
+      "depends_on": [],
+      "passes": true,
+      "notes": "VERIFIED 2026-08-18. Named CalendarEvent, not Event — that name belongs to Bug Tracker error events. migrate diff previewed BEFORE applying: purely additive (CREATE TABLE + 2 indexes + FK, zero DROP of an existing table). Applied with db push, never migrate dev. All 12 columns present; indexes calendar_events_user_id_start_at_idx and _end_at_idx exist. FAILURE CASE observed inside a rolled-back transaction: a user with 1 event deleted -> 0 events remain (cascade), and a residue count afterwards confirmed 0 stray rows. SIDE QUEST THAT COST TWO PUSHES: the TimestampRepair ledger table blocked db push twice with 'relation ..._id_seq already exists'. My first theory — that Prisma skips tables whose name starts with an underscore, reserving that prefix for implicit m2m join tables — was WRONG: after renaming, Prisma saw the table and still wanted RenamePrimaryKey + Autoincrement, because the raw-SQL original carried its own constraint and sequence names. Fixed deterministically instead of by theory: dumped the single row, dropped the table, let db push create it, restored the row. The table is kept in the schema so a future push cannot silently DROP the guard that stops the +7h repair running twice."
+    },
+    {
+      "id": "F002",
+      "category": "security",
+      "priority": "critical",
+      "description": "Events API is CRUD, validated, and cross-user safe",
+      "steps": [
+        "GET/POST/PATCH/DELETE /api/calendar-events answer 401 unauthenticated",
+        "POST with endAt earlier than startAt is rejected 400 — an event cannot end before it starts",
+        "FAILURE CASE: user A cannot read, patch or delete user B's event; no route accepts a userId",
+        "DELETE is soft (deletedAt) and idempotent — a second DELETE still succeeds",
+        "Soft-deleted events are invisible to every read"
+      ],
+      "depends_on": [
+        "F001"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-08-18 against the running server. 401 unauthenticated. 400 for endAt before startAt AND for a missing title. CROSS-USER ISOLATION proven with two real sessions rather than argued from code: the admin's range query returned 0 of the user's events, admin PATCH answered 404, admin DELETE returned 204 (idempotent by design) but the user's event was still intact afterwards — checked by name, not by count. No route accepts a userId. Soft delete: DELETE 204 then 204 again, and the event disappeared from every read (day query returned 0). PATCH revalidates against the STORED other side, because the schema can only compare fields present in the same request — patching only endAt would otherwise slip past the ordering rule."
+    },
+    {
+      "id": "F003",
+      "category": "functional",
+      "priority": "critical",
+      "description": "An event spanning midnight or several days appears on every day it covers (EC-12)",
+      "steps": [
+        "A 23:00→01:00 event appears on BOTH days, not only its start day",
+        "A three-day event appears on all three days",
+        "The range query uses overlap (startAt < endOfDay AND endAt >= startOfDay), not a match on startAt's day",
+        "FAILURE CASE: an event ending exactly at midnight does not bleed into the following day"
+      ],
+      "depends_on": [
+        "F002"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-08-18, then RE-VERIFIED after a correction that changed what the test meant. Overlap works: a 2-hour meeting crossing local midnight appears on BOTH days (28 and 29 Aug), a three-day event appears on all three (21-23), and the day between is empty. CORRECTION WORTH READING: the first pass created an event ending at 00:00 **UTC** and recorded a PASS for 'does not bleed into the next day'. That was the wrong instrument — the user's zone is Asia/Bangkok, so 00:00Z is 07:00 local and the event never went near a local day boundary. The assertion happened to hold while the day endpoint used naive UTC windows, and inverted the moment that endpoint became timezone-aware. Re-tested with an event ending at 00:00 **local** (26 Aug 17:00Z): it appears on the 26th and NOT the 27th. The comparison is strict on both sides (startAt < end AND endAt > start), so an event finishing at a day boundary does not bleed forward and one starting at it is not claimed by the day before."
+    },
+    {
+      "id": "F004",
+      "category": "core",
+      "priority": "high",
+      "description": "GET /api/day/:date returns the whole day in one call",
+      "steps": [
+        "Returns { note, tasks[], events[] } for the caller only",
+        "One request replaces three — verified by counting network calls when the panel opens",
+        "A day with nothing returns empty collections and 200, not 404 — absence is a normal state",
+        "Bad date shape answers 400"
+      ],
+      "depends_on": [
+        "F002"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-08-18. GET /api/day/:date returns { note, tasks[], events[] } for the caller only. A day with nothing returns 200 with note:null and empty arrays — absence is a normal state, not a 404. Bad date shape answers 400. A day with a daily note returns its title and a 240-char preview rather than the whole document, since the panel renders two or three lines and links to /daily for the rest. The note is matched by type+tag+schedule, the same way the client matches it, so the panel and /daily cannot disagree about which note owns a day. AMENDED: this endpoint originally built its day window from naive UTC (`${dayKey}T00:00:00Z` + 24h) and that made it disagree with the month calendar, which buckets via `zonedDayOfMonth` in the user's timezone — an event was reported on the 25th by one and the 26th by the other. Blueprint D4 says one question gets one answer, so a `zonedDayRange` helper was added to `utils/timezone.ts` and this endpoint now resolves the day in the user's zone. Verified afterwards: for five separate days the day endpoint and the month endpoint return identical event sets. Tasks never exposed the disagreement because they are anchored at UTC noon, which sits inside the same day under any ordinary offset; events carry real instants and have no such cushion."
+    },
+    {
+      "id": "F005",
+      "category": "functional",
+      "priority": "high",
+      "description": "The month endpoint carries tasks and events beside notes",
+      "steps": [
+        "GET /api/notes/calendar/:year/:month returns tasksByDay and eventsByDay alongside the existing notesByDay",
+        "FAILURE CASE: the existing notesByDay shape is unchanged, so the current calendar keeps working",
+        "Counts per day are correct against rows created for known days"
+      ],
+      "depends_on": [
+        "F003"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-08-18. GET /api/notes/calendar/:year/:month now returns tasksByDay and eventsByDay beside the existing notesByDay. FAILURE CASE holds: notesByDay and totalNotes are byte-identical in shape to before — the change is purely additive, which matters because the month grid is the oldest consumer here and the one most likely to be depended on quietly. Events are expanded across every day they cover rather than bucketed by startAt, and de-duplicated per day, so a three-day event contributes one entry to each of three days. Cross-checked against GET /api/day/:date for five days: the two endpoints return the same events for every one of them."
+    },
+    {
+      "id": "F006",
+      "category": "ui",
+      "priority": "critical",
+      "description": "Day detail panel shows Agenda, Tasks and Daily Note (US-07)",
+      "steps": [
+        "Clicking a day in the calendar opens a panel with all three sections ALWAYS present",
+        "An empty section shows an explicit empty message — it is never hidden, so 'nothing today' reads differently from 'this feature does not exist'",
+        "The Daily Note section shows a 2-3 line preview and a button to /daily?date=YYYY-MM-DD",
+        "Ticking a task from the panel writes through and is visible on /daily",
+        "FAILURE CASE: opening the panel does not refetch the month"
+      ],
+      "depends_on": [
+        "F004"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-08-18 in the browser. Clicking 21 Aug opens a panel labelled 'Detail for 21 August 2026' with all three headings present — Agenda, Tasks, Daily note. THE AC THAT MATTERS: the two empty sections render explicit lines ('Nothing planned for this day.', 'Nothing written for this day.') rather than disappearing — a hidden section and an empty one look identical to a user and mean opposite things. The multi-day event renders its real span (21 Aug 16:00 -> 24 Aug 00:00) rather than pretending to be a single-day entry. The note section offers 'Write this day' when there is no note, since a blank day is exactly when someone wants to open it. Fed by ONE /api/day call, so the panel paints once instead of in three stages with three independent ways to be half-true. INTEGRATION NOTE: the panel was ADDED above the existing day-notes card rather than replacing it — that card manages the day's notes and this answers 'what is on this day'. Replacing it would have destroyed working functionality for no gain."
+    },
+    {
+      "id": "F007",
+      "category": "ui",
+      "priority": "high",
+      "description": "Month grid marks what each day holds, distinguishable without colour",
+      "steps": [
+        "A day with a note, a task and an event shows three markers that differ by SHAPE, not colour alone",
+        "Markers carry accessible text so the information is not visual-only",
+        "FAILURE CASE: a day with nothing shows no markers and no empty placeholder box"
+      ],
+      "depends_on": [
+        "F005"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-08-18 by measuring computed styles, not by looking. Three kinds render three SHAPES: note = circle (colored fill, radius >= half its width), task = triangle (transparent background, 3px transparent side borders, 5px coloured bottom border), event = square (colored fill, 1px radius). A classifier run over real cells returned ['circle'] for a note-only day, ['triangle','square'] for a day holding one task and one event, and [] for an empty day — three distinct kinds, so the marks survive colour blindness and would survive a greyscale print. aria-labels agree with the marks: '16 August 2026, 1 note' / '18 August 2026, 1 task, 1 event' / '19 August 2026, nothing planned'. FAILURE CASE holds: an empty day renders no marker and no placeholder box. MEASUREMENT NOTE: the first classifier reported both marks as squares because it tested `getComputedStyle().width === '0px'`. The triangle is `h-0 w-0` with borders, so its *content* box is zero while its border box is 6x5 — the element was correct and the probe was wrong. Re-classified on background transparency plus border width. Also: `describeDay` had to move to `lib/dayMarkers.ts` because a component file may not export functions (react-refresh). Lint caught it."
+    },
+    {
+      "id": "F008",
+      "category": "ui",
+      "priority": "high",
+      "description": "Mini calendar on /daily with the day's agenda (US-08)",
+      "steps": [
+        "Right column shows the current month with the open day highlighted",
+        "Clicking a day changes the whole page's day without a page reload",
+        "Days carrying something are marked, using the same vocabulary as the month grid",
+        "An agenda strip under it lists the day's events by time",
+        "FAILURE CASE: the mini calendar does not break the 60/40 container-query layout at any width"
+      ],
+      "depends_on": [
+        "F005"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-08-18 in the browser. The right column of /daily shows the month with the open day highlighted (aria-pressed=true) and today marked with aria-current. Clicking 16 Aug moved the whole page from 18 to 16 August WITHOUT a reload — proven by planting a DOM node first and confirming it survived. Day markers use the same vocabulary as the month grid, from the same endpoint. An agenda strip under the calendar lists the day's events by time ('16:00 MARK event on 18') and shows 'No appointments today.' when there are none. It is read-only on purpose: appointments are edited from the calendar page's day panel, and a second editor here would be two places to keep in step for no new capability. FAILURE CASE: the 60/40 container-query layout is intact — at container 950px the tracks are 572/358 with no horizontal scroll, and at 375px it collapses to one column with the mini calendar at 277px and still no horizontal scroll. The events come from the SAME useDayDetail the panel uses rather than a second fetch, so two parts of one page cannot disagree."
+    },
+    {
+      "id": "F009",
+      "category": "ui",
+      "priority": "medium",
+      "description": "Events can be created and edited from the day panel",
+      "steps": [
+        "An event can be created for the open day with a title and a time",
+        "All-day is a real option and renders differently from a timed event",
+        "Editing and deleting work from the same panel",
+        "FAILURE CASE: submitting an end time before the start time is refused with a readable message, not a 500"
+      ],
+      "depends_on": [
+        "F006"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-08-18. 'Add' opens a New event dialog on the DS Modal with title, all-day switch, start/end and location. FAILURE CASE OBSERVED: an end time before the start is refused inline with 'The end time cannot be before the start time' and the dialog stays open with the values intact — a typo is fixable rather than requiring a retype. Validated client-side AND server-side; the server also revalidates a PATCH against the STORED other side, since a patch touching only one end would otherwise slip past. Happy path: correcting the end time saved the event, the dialog closed, and the panel's Agenda went 1 -> 2 with the new event present, confirmed against GET /api/day. MEASUREMENT NOTE: the first probe reported 'dialog did not close' because it counted DOM nodes. Radix keeps the node mounted through its exit animation and this browser pane freezes exit animations, so presence is not state — `data-state=\"closed\"` and `offsetParent === null` are. Same instrument trap as the AnimatePresence case earlier in this project."
+    },
+    {
+      "id": "F010",
+      "category": "core",
+      "priority": "critical",
+      "description": "Both workspaces stay green and the design system is respected",
+      "steps": [
+        "typecheck, lint, test and build green in both workspaces",
+        "No hex literals, no shadcn neutral tokens, no deep design-system imports in new files",
+        "Motion values come from @/lib/motion",
+        "FAILURE CASE: no existing test was loosened or skipped"
+      ],
+      "depends_on": [
+        "F007",
+        "F008",
+        "F009"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-08-18. typecheck, lint, test and build green in BOTH workspaces: 117 client tests, 109 server tests, both builds clean. Style audit over every phase-3 file passes all five gates (no hex literals, no shadcn neutral tokens, no deep design-system imports, no dangerouslySetInnerHTML, no inline motion values) — and the audit was MUTATION-CHECKED rather than trusted: injecting `text-[#ff0000]` and `text-muted-foreground` into MiniMonth made it report exactly those two failures, and it passed again once restored. FAILURE CASE holds: the test diff is insertions only, zero deletions, across two files that only gained cases; a grep for .skip/.only/.todo/xit/xdescribe across both suites returns nothing. Nothing was loosened to reach green."
+    }
+  ]
+}

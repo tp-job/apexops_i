@@ -110,6 +110,26 @@ export async function syncDayTasks(
 
 // ── master list (US-06) ───────────────────────────────────────
 
+/**
+ * `YYYY-MM-DD` -> the instant a task's `scheduledFor` is stored at: **UTC noon**.
+ *
+ * This is the one helper for it on the client. Do not reach for `dayAnchorIso`
+ * in `lib/dailyTodos.ts` — it looks interchangeable and is not. That one returns
+ * *local* noon (`12:00` in the browser's zone, converted to UTC), which is right
+ * for `Note.scheduledFor` because the notes calendar resolves days through the
+ * user's stored timezone. The tasks API resolves a day with a naive UTC range
+ * (`api/tasks.ts` `dayRange`), so a task has to be anchored in UTC or the two
+ * sides disagree about which day it belongs to.
+ *
+ * Verified at UTC+7: local noon lands at 05:00Z and UTC noon at 12:00Z, and both
+ * fall inside the server's day window, so the two are interchangeable *here*.
+ * They stop being interchangeable as the offset grows — local noon moves toward
+ * the edges of the UTC day and eventually crosses out of it. That part is
+ * arithmetic, not something this machine could reproduce: the TZ override had no
+ * effect on this Node build, so only the +7 case was actually measured.
+ */
+export const taskDayAnchor = (dayKey: string): string => `${dayKey}T12:00:00.000Z`;
+
 export type TaskStatus = 'all' | 'open' | 'done' | 'overdue';
 
 export interface TaskQuery {
