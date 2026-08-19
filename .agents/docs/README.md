@@ -50,14 +50,18 @@ Scope locks and decision records. Each carries its decisions (`D1`, `D2`, …), 
 exit notes. **This is the folder to read before touching a feature**, and to update after.
 
 - [`bug-tracker.md`](features/bug-tracker.md) — board, detail, comments *(shipped)*
-- [`notes-calendar.md`](features/notes-calendar.md) — one page, calendar toggle *(shipped)*
+- [`notes-calendar.md`](features/notes-calendar.md) — one page, calendar toggle *(shipped; superseded in part by `notes-ssot-blueprint.md`)*
+- [`notes-ssot-blueprint.md`](features/notes-ssot-blueprint.md) — Task + CalendarEvent tables, day detail panel, `/daily` retired into `/notes` + `/tasks` *(phases 0–3.5 shipped 2026-08-19; phase 4 — drop `checklistItems` — pending a full release)*
 - [`chat.md`](features/chat.md) — 1:1 DM, authenticated socket *(shipped; ephemeral by decision)*
-- [`project-workspaces-and-sdk.md`](features/project-workspaces-and-sdk.md) — embeddable console SDK + per-project workspaces *(G1–G2 shipped 2026-07-27; **G3–G5 are Sprint 2**)*
+- [`project-workspaces-and-sdk.md`](features/project-workspaces-and-sdk.md) — embeddable console SDK + per-project workspaces *(shipped)*
 - [`overview-and-regressions.md`](features/overview-and-regressions.md) — cross-project roll-up, project overview, release markers, regression tracking *(shipped)*
 - [`alerting-and-account-settings.md`](features/alerting-and-account-settings.md) — regression alerts (in-app + webhook), account settings, active sessions *(shipped)*
 - [`security-hardening-2026-07-31.md`](features/security-hardening-2026-07-31.md) — JWT secret fail-closed, socket monitors leak, shared fetch/dismiss helpers *(shipped)*
-- [`team-and-roles.md`](features/team-and-roles.md) — project invites, the three-role permission matrix, ownership transfer *(G0 scoped; **Sprint 6**)*
-- [`settings.md`](features/settings.md) — account + function settings *(account half shipped; function settings scheduled Sprint 5)*
+- [`team-and-roles.md`](features/team-and-roles.md) — project invites, the three-role permission matrix, ownership transfer *(shipped 2026-08-03)*
+- [`settings.md`](features/settings.md) — account + function settings, including the idle-window session timeout *(shipped)*
+- [`ai-assistant-byok.md`](features/ai-assistant-byok.md) — Gemini assistant panel, per-user BYOK key with AES-256-GCM envelope encryption *(shipped)*
+- [`admin-docs-and-console.md`](features/admin-docs-and-console.md) — `/admin/console` live monitor + the `/docs` CMS *(shipped)*
+- [`platform-hardening.md`](features/platform-hardening.md) — vitest + CI, tracked `package-lock`, mail drivers, SSRF/open-proxy fixes *(shipped)*
 
 ### [`planning/`](planning/) — what happens next
 Sequencing and capacity. Closed sprints move to `archive/`.

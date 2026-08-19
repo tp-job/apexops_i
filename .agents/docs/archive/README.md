@@ -20,6 +20,7 @@ Archived 2026-07-27. Each entry says what superseded it and how that was verifie
 | [`report-note-system-zh.md`](report-note-system-zh.md) | Chinese-language report on the Word-style note editor, describing the same superseded `execCommand` era. Also the only document in the set written in a third language, which made it unfindable in practice. |
 | [`ui-reset-2026-07-24.md`](ui-reset-2026-07-24.md) | Still **useful history** — it records the day every page except `/design-system` was deleted, which explains the shape of the current rebuild. Archived rather than deleted precisely because that context is hard to reconstruct. |
 | [`sprint-1-thin-slice.md`](sprint-1-thin-slice.md) | Gate artifact for a **completed** sprint. Closed sprints belong in history, not in `planning/`, where they compete for attention with the sprint that is actually open. |
+| [`daily-note-rich-editor.md`](daily-note-rich-editor.md) | Specced and built the `/daily` page's rich-text workspace. `/daily` was **retired 2026-08-19** (`../features/notes-ssot-blueprint.md` §8, phase 3.5) — its two jobs, writing a day's note and adding tasks, moved into `/notes` (via the new `NoteForm`/`NoteColorPicker`) and `/tasks` (via the new `TaskComposer`). The editor component itself (`RichTextEditor.tsx`) was not deleted, only relocated — this document's design reasoning for it still holds, only the page it names is gone. |
 
 ## If you need something from here
 

@@ -1,7 +1,21 @@
 # Daily note — document workspace (rich text editor)
 
+> **Archived 2026-08-19.** `/daily` was retired the same day
+> (`notes-ssot-blueprint.md` §8, phase 3.5) — `DailyNote.tsx` and
+> `useDailyTodos.ts` no longer exist. **The editor this document specifies did
+> not go away with the page.** `components/editor/RichTextEditor.tsx` — the
+> exact component built here, unchanged — is now shared by `/notes` through
+> `components/notes/NoteForm.tsx`, used for both creating and editing a note.
+> Everything below about the editor itself (storage split, no
+> `dangerouslySetInnerHTML`, autosave debounce, 256 KB cap, URL-only images) is
+> still accurate for that shared component. Only the *page* it names — routes,
+> file paths under `pages/DailyNote.tsx`, and the day-specific autosave wiring
+> in `useDailyTodos.ts` — is gone. Read this for the editor's design reasoning;
+> read `notes-ssot-blueprint.md` for where its capabilities live now.
+
 **Status:** built 2026-08-14; verified below the UI, **not yet verified in the
-browser** (see §7). **Surface:** `/daily` (`app/client/src/pages/DailyNote.tsx`).
+browser** (see §7). **Surface (retired 2026-08-19):** was `/daily`
+(`app/client/src/pages/DailyNote.tsx`).
 
 The ask: *"a workspace the same as MS Word has"* on the daily note, shaped like
 the reference screenshot (image 2) — a document header with actions, a labelled

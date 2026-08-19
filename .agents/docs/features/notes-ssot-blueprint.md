@@ -1,11 +1,12 @@
 # Notes SSOT Blueprint — รวม Daily Note, Notes, Calendar, To-do
 
-**สถานะ:** ร่างเพื่อทบทวน · **เขียน:** 2026-08-16 · **ปรับล่าสุด:** 2026-08-17
-**ขอบเขต:** `/daily` · `/notes`
+**สถานะ:** เฟส 0–3.5 เสร็จแล้ว (ดู §8) · **เขียน:** 2026-08-16 · **ปรับล่าสุด:** 2026-08-19
+**ขอบเขต:** `/notes` · `/tasks` — **`/daily` ถูกถอดออกแล้ว 2026-08-19** (§8, เฟส 3.5)
 **ฉบับนำเสนอ (อ่านอย่างเดียว):** https://claude.ai/code/artifact/b5d6d7d5-c8b7-41ae-8d12-b21026e46fbd
 
 > ไฟล์นี้คือ **ฉบับจริงที่ใช้แก้ต่อ** artifact เป็นเพียงภาพนิ่งสำหรับส่งต่อ
-> เมื่อสองฉบับไม่ตรงกัน ให้ยึดไฟล์นี้
+> เมื่อสองฉบับไม่ตรงกัน ให้ยึดไฟล์นี้ **§5.1 (Component Hierarchy ของ `/daily`) เป็นเอกสาร
+> ประวัติหลังเฟส 3.5 แล้ว** — จอที่บรรยายไม่มีอยู่ในโค้ดแล้ว ดู §8 สำหรับตำแหน่งใหม่ของแต่ละความสามารถ
 
 ---
 
@@ -51,7 +52,7 @@ Daily Note **ไม่ใช่** ตารางแยก — มันคื�
 | FR-2 · To-do + ฟิลเตอร์ All/To do/Done | ✅ **เสร็จ** | `SegmentedControl` + กลุ่ม To do / Done อ่านจาก `tasks` แล้ว | — |
 | FR-3 · To-do เข้าปฏิทิน | ✅ **เสร็จ** | month endpoint คืน `tasksByDay` + `eventsByDay` · marker บนกริดแยกชนิดได้ | — |
 | FR-3 · To-do Master List | ✅ **เสร็จ** | `/tasks` กรอง open/done/overdue + ค้นหา จัดกลุ่มตามวัน ใช้ index · `RescheduleControl` เลื่อนงานไปวันอื่นได้จากรายการ | — |
-| EC-11 · งานค้างข้ามวัน | ✅ **เสร็จ** | `CarriedOverBand` บน `/daily` แสดงงานเปิดของวันก่อนหน้า พร้อมปุ่ม Move ที่ผู้ใช้กดเอง | — |
+| EC-11 · งานค้างข้ามวัน | ⚠️ **เปลี่ยนรูปแบบ 2026-08-19** | เดิม `CarriedOverBand` บน `/daily` — ถอดไปพร้อมหน้านั้น (§8 เฟส 3.5) ตอนนี้ใช้ฟิลเตอร์ **Overdue** บน `/tasks` แทน ยังไม่มีแถบเฉพาะ | ถ้าต้องการแถบกลับมาบน `/tasks` |
 | FR-4 · Side panel: Agenda | ✅ **เสร็จ** | `CalendarEvent` + `EventDialog` สร้าง/แก้/ลบได้จาก panel | — |
 | FR-4 · Side panel: Tasks | ✅ **เสร็จ** | ติ๊กงานจาก panel เขียนถึง server จริง | — |
 | FR-4 · Side panel: ลิงก์โน้ตรายวัน | ✅ **เสร็จ** | `DayDetailPanel` สามส่วนครบ + ปุ่มไป `/daily?date=` | — |
@@ -446,7 +447,49 @@ NotesCalendarPage
 | ~~1~~ | ~~สร้างตาราง `Task` + API + migration + adapter~~ | ✅ **เสร็จ 2026-08-17** — migration ย้าย legacy ครบสามรูปแบบ (bare string / `{text,checked}` / `done` flag) และรันซ้ำได้ · `/daily` อ่านจาก `tasks` แล้ว · `checklistItems` ไม่ถูกเขียนอีก |
 | ~~2~~ | ~~Badge (US-01) + Master List (US-06)~~ | ✅ **เสร็จ 2026-08-17** — badge เปิดโน้ตใบที่ถูกต้องผ่าน `/notes?note=<id>` · Master List กรอง open/done/overdue/ค้นหา ครบ ใช้ index · **เหลือ reschedule UI** ดูด้านล่าง |
 | ~~3~~ | ~~สร้าง `CalendarEvent` + Day Detail Panel + Mini Calendar~~ | ✅ **เสร็จ 2026-08-18** — 10/10 ใน ledger · event คร่อมวันแสดงครบทุกวันที่ครอบ · marker แยกด้วยรูปทรง · day panel สามส่วนครบเสมอ |
-| **4** | ลบคอลัมน์ `checklistItems` | ไม่มีโค้ดใดอ่านคอลัมน์นี้แล้วหนึ่ง release เต็ม |
+| ~~3.5~~ | ~~ถอด `/daily` ออก รวมเข้ากับ `/notes` + `/tasks`~~ | ✅ **เสร็จ 2026-08-19** — ดูรายละเอียดด้านล่าง |
+| **4** | ลบคอลัมน์ `checklistItems` | ไม่มีโค้ดใดอ่านคอลัมน์นี้แล้วหนึ่ง release เต็ม — `useDailyTodos.ts` (ตัวอ่าน fallback ตัวสุดท้าย) ถูกลบไปพร้อมเฟส 3.5 แต่ `notes.ts` ฝั่ง server ยังรับ/คืนคอลัมน์นี้อยู่ |
+
+### เฟส 3.5 — ถอด `/daily`, รวมเข้าเป็นสองหน้า (เสร็จ 2026-08-19)
+
+การมีทั้ง `/daily` (เขียนโน้ตรายวัน + todo แบบ inline) และ `/notes` (การ์ดโน้ตทุกใบ) พร้อมกัน
+สร้างคำถามซ้ำ: โน้ตของวันนี้ต้องเปิดที่ไหน สีของโน้ตตั้งได้จากที่ไหน งานเพิ่มได้จากกี่จุด
+— เฟสนี้ยุบให้เหลือหน้าที่ชัดเจนของแต่ละหน้าเดียว:
+
+- **`RichTextEditor` (ตัวเดียวกับที่ `/daily` เคยใช้) ย้ายเข้า `/notes`** ผ่าน component ใหม่
+  [`NoteForm.tsx`](../../../app/client/src/components/notes/NoteForm.tsx) — ใช้ทั้งตอนสร้างโน้ตใหม่
+  และตอนแก้ไข (`EditNoteDialog`) เดิม `EditNoteDialog` เป็น `<textarea>` ธรรมดา บันทึกทับ
+  `contentRich` ทุกครั้งที่แก้ — ตอนนี้แก้ในตัวเอดิเตอร์เดิม ไม่ทิ้ง formatting อีกแล้ว
+- **สีโน้ตตั้งได้จากฟอร์มโดยตรง** — [`NoteColorPicker.tsx`](../../../app/client/src/components/notes/NoteColorPicker.tsx)
+  เดิมตั้งได้จากเมนูคลิกขวาบนการ์ดเท่านั้น (แปลว่าต้องมีโน้ตอยู่ก่อน) พาเลตต์ย้ายไปเป็น
+  [`lib/noteColors.ts`](../../../app/client/src/lib/noteColors.ts) ที่เดียว ใช้ร่วมกันทั้งฟอร์ม
+  เมนูคลิกขวา และชิปบนปฏิทิน
+- **`/tasks` เพิ่มปุ่มสร้างงานได้** — [`TaskComposer.tsx`](../../../app/client/src/components/tasks/TaskComposer.tsx)
+  ก่อนหน้านี้เพิ่มงานได้เฉพาะจาก `/daily` เท่านั้น ทำให้หน้าที่แสดง "ทุกงานที่ต้องทำข้ามทุกวัน" (US-06)
+  เพิ่มงานเองไม่ได้ ตอนนี้ CRUD ครบทั้งสี่ตัวบนหน้าเดียว
+- **Day panel เปิดฟอร์มเขียนโน้ตแทนการนำทางออกจากปฏิทิน** — ปุ่ม "Write this day" ใน
+  `DayDetailPanel` เดิมลิงก์ไป `/daily?date=`, ตอนนี้เรียก `onWriteNote` ที่เปิด `NoteForm`
+  ในหน้า `/notes` เอง ผู้อ่านไม่หลุดออกจากปฏิทินที่กำลังดูอยู่
+- **`/tasks` ลิงก์ไปวันบนปฏิทินผ่าน `?day=`** แทน `/daily?date=` — `NotesCalendar.tsx` อ่านพารามิเตอร์นี้
+  ครั้งเดียวแล้วลบออกจาก URL เหมือนที่ `?note=` ทำอยู่แล้ว
+
+**สิ่งที่หายไปพร้อม `/daily` และยังไม่มีที่แทน:** แถบ "Still open from earlier" (mitigation ของ EC-11
+เดิม ดู §8 หัวข้อถัดไป) ไม่มีที่อยู่แล้วเพราะเคยอยู่บนหน้า `/daily` โดยเฉพาะ ตัวแทนตอนนี้คือฟิลเตอร์
+**Overdue** บน `/tasks` (query ข้ามทุกวัน ไม่ใช่แค่ "ก่อนวันที่เปิดอยู่" แบบเดิม) หลักการที่เคาะไว้ —
+**ไม่ยกงานอัตโนมัติ** — ยังคงอยู่ครบ แต่รูปแบบการนำเสนอเปลี่ยนจากแถบเฉพาะที่เป็นฟิลเตอร์ทั่วไป
+ถ้าต้องการแถบเฉพาะกลับมาบน `/tasks` ยังไม่ได้ทำ
+
+**ไฟล์ที่ถูกลบ:** `pages/DailyNote.tsx`, `hooks/useDailyTodos.ts`, `hooks/useCarriedOverTasks.ts`,
+`components/tasks/CarriedOverBand.tsx`, `components/tasks/DailyNoteBadge.tsx`,
+`components/tasks/RescheduleControl.tsx` (แทนที่ด้วยการ reschedule จากแถวใน `/tasks` โดยตรง),
+`components/calendar/MiniMonth.tsx`, `components/calendar/DayAgendaStrip.tsx` — mini-calendar
+และ agenda strip ที่เคยอยู่ข้าง `/daily` ไม่มีที่อยู่แล้วเพราะปฏิทินหลักอยู่ที่ `/notes` โดยตรง
+
+**เอกสารที่เปลี่ยนตาม:** `daily-note-rich-editor.md` (สเปกของ `/daily`) ย้ายไป `archive/`
+เพราะจอที่บรรยายไม่มีอยู่แล้ว — ตัวเอดิเตอร์เองยังอยู่ ย้ายไปใช้ร่วมใน `NoteForm` แทน
+`docs-content/daily-notes.md` (เอกสารผู้ใช้ที่เผยแพร่จริงใน `/docs`) แทนที่ด้วย `docs-content/tasks.md`
+— **หน้า `daily-notes` เดิมยังเผยแพร่อยู่ใน DB** เพราะ `seed-docs.ts` ไม่ลบแถว ต้อง unpublish เองที่
+`/admin/docs`
 
 ### ต้องเคาะก่อนเริ่มเฟส 1
 
