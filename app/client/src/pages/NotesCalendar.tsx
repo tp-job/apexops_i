@@ -728,7 +728,7 @@ const NotesCalendar: FC = () => {
     const scheduledCount = notesList.filter((n) => n.scheduledFor).length;
 
     return (
-        <div className="mx-auto flex w-full max-w-7xl flex-col gap-7">
+        <div className="flex flex-col gap-6">
             <PageHeader
                 title="Notes & Calendar"
                 subtitle="Everything you've written, and everything you've planned — one dataset, two views."

@@ -1,0 +1,1512 @@
+<title>ApexOps Luxe</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap">
+
+<style>
+/* ═══════════════════════════════════════════════════════════════
+ * ApexOps — Luxe v2 design system reference
+ *
+ * Every token below is copied from the running app, not invented:
+ *   app/client/src/index.css          @theme block
+ *   app/client/src/styles/globals.css .ds-* utilities
+ *   app/client/src/lib/motion.ts      easing, durations, variants
+ *   .agents/design-system/design.md   the written spec
+ *
+ * The page is built in the system it documents. Where a rule says
+ * "one glowing element per view", this page obeys it.
+ * ═══════════════════════════════════════════════════════════════ */
+
+/* ── Tokens: light is the complete set ─────────────────────────── */
+:root {
+    /* Brand */
+    --lime:         #C5F43A;
+    --lime-hover:   #B0DC34;
+    --lime-soft:    rgba(197, 244, 58, 0.14);
+    --lime-glow:    rgba(197, 244, 58, 0.45);
+    --ink:          #222222;
+    --ink-deep:     #141414;
+    --ink-deep-2:   #1C1C1C;
+    --steel:        #9CB3C4;
+    --steel-deep:   #7C97AA;
+
+    /* Status */
+    --blue:   #3B82F6;
+    --red:    #EF4444;
+    --yellow: #F59E0B;
+    --green:  #10B981;
+
+    /* Page ground — the app's real canvas gradient */
+    --canvas:      linear-gradient(135deg, #E0E7FF 0%, #EFF6FF 100%);
+    --canvas-flat: #E7EDFB;
+
+    /* Surface + text, steel-biased rather than neutral grey */
+    --surface:      rgba(255, 255, 255, 0.55);
+    --surface-solid:#FFFFFF;
+    --surface-sunk: rgba(156, 179, 196, 0.10);
+    --hairline:     rgba(17, 24, 39, 0.09);
+    --hairline-soft:rgba(17, 24, 39, 0.05);
+
+    --text:      #222222;
+    --text-mid:  #55606B;
+    --text-dim:  #7C8A97;
+
+    /* Elevation — soft, wide, low opacity. Luxury is restraint. */
+    --elev-1: 0 1px 2px rgba(17, 24, 39, 0.04), 0 1px 3px rgba(17, 24, 39, 0.03);
+    --elev-2: 0 8px 24px rgba(31, 38, 135, 0.06), 0 2px 6px rgba(31, 38, 135, 0.04);
+    --elev-3: 0 18px 48px rgba(31, 38, 135, 0.10), 0 6px 16px rgba(31, 38, 135, 0.06);
+    --elev-glow: 0 0 0 1px rgba(197, 244, 58, 0.35), 0 8px 28px rgba(197, 244, 58, 0.25);
+
+    /* Glass */
+    --frost-bg:     rgba(255, 255, 255, 0.55);
+    --frost-border: rgba(255, 255, 255, 0.70);
+    --menu-bg:      #FFFFFF;
+    --menu-border:  rgba(17, 24, 39, 0.08);
+
+    /* Motion */
+    --ease-lux:      cubic-bezier(0.22, 1, 0.36, 1);
+    --ease-lux-soft: cubic-bezier(0.40, 0, 0.20, 1);
+    --dur-fast: 160ms;
+    --dur-base: 280ms;
+    --dur-slow: 520ms;
+
+    /* Type */
+    --font-heading: "DM Sans", ui-sans-serif, system-ui, sans-serif;
+    --font-body:    "Inter", ui-sans-serif, system-ui, sans-serif;
+    --font-mono:    "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+    /* Theme-dependent component values.
+     *
+     * These exist so no component rule ever lives inside a @media or
+     * [data-theme] block. A colour whose only definition sits behind
+     * [data-theme] never applies in the un-stamped "system" state, and the
+     * page renders one theme's text on the other theme's ground. Everything
+     * that differs between themes differs HERE and nowhere else. */
+    --accent-text:    #5C7A0B;   /* lime, darkened until it reads on a light ground */
+    --seg-active-bg:  #222222;
+    --seg-active-fg:  #FFFFFF;
+}
+
+/* System dark — only when the viewer has not explicitly chosen light */
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        --canvas:      linear-gradient(135deg, #141414 0%, #1C1C1C 100%);
+        --canvas-flat: #171717;
+
+        --surface:      rgba(255, 255, 255, 0.05);
+        --surface-solid:#1F1F1F;
+        --surface-sunk: rgba(255, 255, 255, 0.04);
+        --hairline:     rgba(255, 255, 255, 0.11);
+        --hairline-soft:rgba(255, 255, 255, 0.06);
+
+        --text:     #F3F4F6;
+        --text-mid: #A9B4BF;
+        --text-dim: #7E8A95;
+
+        --elev-1: 0 1px 2px rgba(0, 0, 0, 0.40);
+        --elev-2: 0 8px 24px rgba(0, 0, 0, 0.42);
+        --elev-3: 0 18px 48px rgba(0, 0, 0, 0.55), 0 6px 16px rgba(0, 0, 0, 0.40);
+
+        --frost-bg:     rgba(255, 255, 255, 0.05);
+        --frost-border: rgba(255, 255, 255, 0.09);
+        --menu-bg:      #262626;
+        --menu-border:  rgba(255, 255, 255, 0.10);
+
+        --accent-text:   #D9F97A;
+        --seg-active-bg: #C5F43A;
+        --seg-active-fg: #222222;
+    }
+}
+
+/* Explicit dark — wins over a light OS */
+:root[data-theme="dark"] {
+    --canvas:      linear-gradient(135deg, #141414 0%, #1C1C1C 100%);
+    --canvas-flat: #171717;
+
+    --surface:      rgba(255, 255, 255, 0.05);
+    --surface-solid:#1F1F1F;
+    --surface-sunk: rgba(255, 255, 255, 0.04);
+    --hairline:     rgba(255, 255, 255, 0.11);
+    --hairline-soft:rgba(255, 255, 255, 0.06);
+
+    --text:     #F3F4F6;
+    --text-mid: #A9B4BF;
+    --text-dim: #7E8A95;
+
+    --elev-1: 0 1px 2px rgba(0, 0, 0, 0.40);
+    --elev-2: 0 8px 24px rgba(0, 0, 0, 0.42);
+    --elev-3: 0 18px 48px rgba(0, 0, 0, 0.55), 0 6px 16px rgba(0, 0, 0, 0.40);
+
+    --frost-bg:     rgba(255, 255, 255, 0.05);
+    --frost-border: rgba(255, 255, 255, 0.09);
+    --menu-bg:      #262626;
+    --menu-border:  rgba(255, 255, 255, 0.10);
+
+    --accent-text:   #D9F97A;
+    --seg-active-bg: #C5F43A;
+    --seg-active-fg: #222222;
+}
+
+/* ── Base ──────────────────────────────────────────────────────── */
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    /* Explicit ground: the host paints its own theme behind the page,
+       so a transparent body would borrow the wrong one. */
+    background: var(--canvas-flat);
+    background-image: var(--canvas);
+    background-attachment: fixed;
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 15px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3 { font-family: var(--font-heading); text-wrap: balance; margin: 0; }
+p { margin: 0; }
+code, .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+a { color: inherit; }
+
+:focus-visible {
+    outline: 2px solid var(--lime);
+    outline-offset: 3px;
+    border-radius: 4px;
+}
+
+.shell {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 0 24px 96px;
+}
+
+/* ── Frost surface: the system's canonical card ────────────────── */
+.frost {
+    background: var(--frost-bg);
+    -webkit-backdrop-filter: blur(28px) saturate(150%);
+    backdrop-filter: blur(28px) saturate(150%);
+    border: 1px solid var(--frost-border);
+    box-shadow: var(--elev-2);
+    border-radius: 24px;
+}
+
+/* ── Masthead ──────────────────────────────────────────────────── */
+.masthead {
+    padding: 72px 0 40px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.eyebrow {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.eyebrow::before {
+    content: "";
+    width: 6px; height: 6px;
+    border-radius: 999px;
+    background: var(--lime);
+    flex: none;
+}
+
+.masthead h1 {
+    font-size: clamp(44px, 8vw, 76px);
+    font-weight: 700;
+    letter-spacing: -0.035em;
+    line-height: 0.98;
+}
+
+.masthead h1 em {
+    font-style: normal;
+    /* The one glowing element on this page. Budget spent here. */
+    color: var(--ink);
+    background: var(--lime);
+    box-shadow: var(--elev-glow);
+    border-radius: 12px;
+    padding: 0 0.18em;
+    margin-left: 0.06em;
+}
+
+.thesis {
+    font-size: 18px;
+    line-height: 1.55;
+    color: var(--text-mid);
+    max-width: 60ch;
+}
+
+.provenance {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 4px;
+}
+
+.chip {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 5px 11px;
+    border-radius: 999px;
+    border: 1px solid var(--hairline);
+    color: var(--text-mid);
+    background: var(--surface-sunk);
+    white-space: nowrap;
+}
+
+/* ── Pill rail — the documented nav pattern, doing real work ───── */
+.rail-wrap {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    padding: 12px 0 20px;
+    background: linear-gradient(var(--canvas-flat) 55%, transparent);
+}
+
+.rail {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    background: var(--ink);
+    border-radius: 999px;
+    padding: 6px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    box-shadow: var(--elev-2);
+}
+.rail::-webkit-scrollbar { display: none; }
+
+.rail a {
+    flex: none;
+    text-decoration: none;
+    color: rgba(255, 255, 255, 0.62);
+    font-size: 13px;
+    font-weight: 500;
+    padding: 8px 15px;
+    border-radius: 999px;
+    transition: background var(--dur-fast) var(--ease-lux-soft),
+                color var(--dur-fast) var(--ease-lux-soft);
+    white-space: nowrap;
+}
+
+.rail a:hover { background: rgba(255, 255, 255, 0.10); color: #FFF; }
+
+.rail a.on {
+    background: var(--lime);
+    color: var(--ink);
+    font-weight: 600;
+}
+
+.theme-btn {
+    flex: none;
+    margin-left: auto;
+    border: 0;
+    cursor: pointer;
+    background: rgba(255, 255, 255, 0.10);
+    color: #FFF;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 8px 13px;
+    border-radius: 999px;
+    transition: background var(--dur-fast) var(--ease-lux-soft);
+}
+.theme-btn:hover { background: rgba(255, 255, 255, 0.20); }
+
+/* ── Sections ──────────────────────────────────────────────────── */
+.section { padding: 44px 0 8px; scroll-margin-top: 84px; }
+
+.section-head {
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    flex-wrap: wrap;
+    padding-bottom: 18px;
+    margin-bottom: 26px;
+    border-bottom: 1px solid var(--hairline);
+}
+
+.section-head h2 {
+    font-size: 27px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+}
+
+/* The § reference is real: it points at the numbered section of
+   design.md that governs this material. */
+.ref {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-left: auto;
+}
+
+.lede {
+    color: var(--text-mid);
+    max-width: 68ch;
+    margin-bottom: 26px;
+}
+
+/* ── Specimen row: live thing left, exact token right ──────────── */
+.spec {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 260px);
+    gap: 20px;
+    align-items: center;
+    padding: 16px 0;
+    border-bottom: 1px solid var(--hairline-soft);
+}
+.spec:last-child { border-bottom: 0; }
+
+.spec-meta { display: flex; flex-direction: column; gap: 3px; }
+
+.token {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    color: var(--text);
+    word-break: break-word;
+}
+
+.note { font-size: 12px; color: var(--text-dim); line-height: 1.5; }
+
+@media (max-width: 720px) {
+    .spec { grid-template-columns: 1fr; gap: 12px; }
+}
+
+/* ── Colour ────────────────────────────────────────────────────── */
+.swatches {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 12px;
+}
+
+.swatch {
+    border-radius: 16px;
+    overflow: hidden;
+    border: 1px solid var(--hairline);
+    background: var(--surface-solid);
+    box-shadow: var(--elev-1);
+}
+
+.swatch .fill { height: 78px; }
+
+.swatch .body {
+    padding: 10px 12px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.swatch .name { font-size: 12px; font-weight: 600; }
+.swatch .hex {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+}
+
+.swatch-role { font-size: 11px; color: var(--text-dim); line-height: 1.45; }
+
+/* ── Type specimens ────────────────────────────────────────────── */
+.type-h1  { font-family: var(--font-heading); font-size: 36px; font-weight: 700; letter-spacing: -0.03em; line-height: 1.1; }
+.type-num { font-family: var(--font-mono); font-size: 30px; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.type-card{ font-family: var(--font-heading); font-size: 20px; font-weight: 700; }
+.type-body{ font-family: var(--font-body); font-size: 14px; font-weight: 500; }
+.type-sm  { font-family: var(--font-body); font-size: 12px; font-weight: 500; color: var(--text-mid); }
+.type-nano{ font-family: var(--font-body); font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-dim); }
+
+/* ── Surfaces ──────────────────────────────────────────────────── */
+.surface-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 14px;
+}
+
+.surf {
+    border-radius: 24px;
+    padding: 20px;
+    min-height: 124px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.surf .label { font-family: var(--font-mono); font-size: 12px; }
+.surf .use { font-size: 11px; line-height: 1.45; opacity: 0.75; }
+
+.surf-frost {
+    background: var(--frost-bg);
+    -webkit-backdrop-filter: blur(28px) saturate(150%);
+    backdrop-filter: blur(28px) saturate(150%);
+    border: 1px solid var(--frost-border);
+    box-shadow: var(--elev-2);
+    color: var(--text);
+}
+
+.surf-panel {
+    background: rgba(255, 255, 255, 0.60);
+    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.80);
+    box-shadow: 0 8px 32px rgba(31, 38, 135, 0.05);
+    color: var(--ink);
+}
+
+.surf-dark {
+    background: rgba(34, 34, 34, 0.85);
+    -webkit-backdrop-filter: blur(24px);
+    backdrop-filter: blur(24px);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    color: #F3F4F6;
+}
+
+.surf-blue {
+    background: rgba(156, 179, 196, 0.90);
+    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.20);
+    color: var(--ink);
+}
+
+.surf-menu {
+    background: var(--menu-bg);
+    border: 1px solid var(--menu-border);
+    box-shadow: var(--elev-3);
+    color: var(--text);
+}
+
+/* Nesting model — drawn as actual nesting, not described */
+.nest {
+    background: rgba(34, 34, 34, 0.85);
+    -webkit-backdrop-filter: blur(24px);
+    backdrop-filter: blur(24px);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 24px;
+    padding: 16px;
+    color: #F3F4F6;
+}
+
+.nest-2 {
+    background: rgba(156, 179, 196, 0.90);
+    border: 1px solid rgba(255, 255, 255, 0.20);
+    border-radius: 16px;
+    padding: 14px;
+    color: var(--ink);
+    margin-top: 10px;
+}
+
+.nest-3 {
+    background: rgba(255, 255, 255, 0.55);
+    border-radius: 12px;
+    padding: 11px 13px;
+    margin-top: 10px;
+}
+
+.nest-label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    opacity: 0.85;
+}
+
+/* ── Radius ────────────────────────────────────────────────────── */
+.radius-row { display: flex; flex-wrap: wrap; gap: 14px; }
+
+.radius-chip {
+    width: 96px;
+    height: 96px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    background: var(--surface-sunk);
+    border: 1px solid var(--hairline);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-mid);
+}
+
+.radius-chip b { color: var(--text); font-weight: 600; }
+
+.forbidden {
+    border-style: dashed;
+    border-color: var(--red);
+    color: var(--red);
+    background: rgba(239, 68, 68, 0.06);
+}
+
+/* ── Elevation ─────────────────────────────────────────────────── */
+.elev-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 22px;
+}
+
+.elev-card {
+    background: var(--surface-solid);
+    border: 1px solid var(--hairline-soft);
+    border-radius: 16px;
+    padding: 18px 16px;
+    text-align: center;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-mid);
+}
+
+/* ── Motion ────────────────────────────────────────────────────── */
+.track {
+    position: relative;
+    height: 42px;
+    border-radius: 12px;
+    background: var(--surface-sunk);
+    border: 1px solid var(--hairline-soft);
+    overflow: hidden;
+}
+
+.dot {
+    position: absolute;
+    top: 50%;
+    left: 6px;
+    width: 26px;
+    height: 26px;
+    margin-top: -13px;
+    border-radius: 999px;
+}
+
+.dot-lux { background: var(--lime); }
+.dot-lin { background: var(--steel); }
+
+.run .dot-lux {
+    animation: slide var(--dur-slow) var(--ease-lux) forwards;
+}
+.run .dot-lin {
+    animation: slide var(--dur-slow) linear forwards;
+}
+
+@keyframes slide {
+    from { transform: translateX(0); }
+    to   { transform: translateX(calc(100cqw - 38px)); }
+}
+
+.track { container-type: inline-size; }
+
+.replay {
+    border: 1px solid var(--hairline);
+    background: var(--surface-sunk);
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: 9px 16px;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: background var(--dur-fast) var(--ease-lux-soft);
+}
+.replay:hover { background: var(--lime-soft); border-color: var(--lime); }
+
+.motion-note {
+    font-size: 12px;
+    color: var(--text-dim);
+    font-family: var(--font-mono);
+}
+
+/* ── Primitive demos ───────────────────────────────────────────── */
+.demo-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+
+.btn {
+    font-family: var(--font-body);
+    font-size: 13px;
+    font-weight: 700;
+    border-radius: 12px;
+    padding: 10px 20px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: transform var(--dur-fast) var(--ease-lux),
+                background var(--dur-fast) var(--ease-lux-soft);
+}
+.btn:active { transform: scale(0.96); }
+
+.btn-accent { background: var(--lime); color: var(--ink); }
+.btn-accent:hover { background: var(--lime-hover); }
+
+.btn-dark { background: var(--ink); color: #FFF; }
+.btn-dark:hover { background: #000; }
+
+.btn-ghost {
+    background: transparent;
+    color: var(--text);
+    border-color: var(--hairline);
+}
+.btn-ghost:hover { background: var(--surface-sunk); }
+
+.badge {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    padding: 4px 9px;
+    border-radius: 999px;
+}
+.badge-accent  { background: var(--lime-soft); color: var(--accent-text); border: 1px solid var(--lime); }
+.badge-solid   { background: var(--ink); color: #FFF; }
+.badge-neutral { background: var(--surface-sunk); color: var(--text-mid); border: 1px solid var(--hairline); }
+.badge-outline { background: transparent; color: var(--text-dim); border: 1px solid var(--hairline); }
+
+/* Stat tile */
+.tile {
+    background: var(--frost-bg);
+    -webkit-backdrop-filter: blur(28px) saturate(150%);
+    backdrop-filter: blur(28px) saturate(150%);
+    border: 1px solid var(--frost-border);
+    box-shadow: var(--elev-2);
+    border-radius: 24px;
+    padding: 20px;
+    min-width: 190px;
+    background-image:
+        radial-gradient(60% 80% at 15% 0%, rgba(197, 244, 58, 0.10), transparent 60%),
+        radial-gradient(50% 60% at 100% 100%, rgba(156, 179, 196, 0.14), transparent 60%);
+}
+
+.tile .k { font-size: 12px; color: var(--text-dim); font-weight: 500; }
+
+.tile .v {
+    font-family: var(--font-mono);
+    font-size: 30px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+    margin-top: 4px;
+}
+
+.tile .t {
+    display: inline-block;
+    margin-top: 8px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: var(--lime-soft);
+    color: var(--accent-text);
+}
+
+/* Meter */
+.meter {
+    height: 12px;
+    border-radius: 999px;
+    background: var(--surface-sunk);
+    border: 1px solid var(--hairline-soft);
+    overflow: hidden;
+}
+
+.meter .fill {
+    height: 100%;
+    width: 68%;
+    border-radius: 999px;
+    background-color: var(--lime);
+    background-image: repeating-linear-gradient(
+        -45deg,
+        rgba(0, 0, 0, 0.10) 0, rgba(0, 0, 0, 0.10) 6px,
+        transparent 6px, transparent 12px
+    );
+}
+
+/* Input */
+.input {
+    width: 100%;
+    font-family: var(--font-body);
+    font-size: 14px;
+    padding: 10px 14px;
+    border-radius: 12px;
+    border: 1px solid var(--hairline);
+    background: var(--surface-solid);
+    color: var(--text);
+}
+.input::placeholder { color: var(--text-dim); }
+
+/* Segmented */
+.seg {
+    display: inline-flex;
+    gap: 3px;
+    padding: 3px;
+    border-radius: 999px;
+    background: var(--surface-sunk);
+    border: 1px solid var(--hairline);
+}
+
+.seg button {
+    border: 0;
+    cursor: pointer;
+    background: transparent;
+    color: var(--text-mid);
+    font-family: var(--font-body);
+    font-size: 12px;
+    font-weight: 600;
+    padding: 7px 15px;
+    border-radius: 999px;
+    transition: background var(--dur-fast) var(--ease-lux-soft), color var(--dur-fast) var(--ease-lux-soft);
+}
+
+.seg button[aria-selected="true"] {
+    background: var(--seg-active-bg);
+    color: var(--seg-active-fg);
+}
+
+/* List row with the accent strip */
+.rows { display: flex; flex-direction: column; gap: 6px; }
+
+.row {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 11px 14px;
+    border-radius: 16px;
+    border: 1px solid transparent;
+    font-size: 13px;
+    transition: background var(--dur-fast) var(--ease-lux-soft);
+}
+.row:hover { background: var(--surface-sunk); border-color: var(--hairline-soft); }
+
+.row.on {
+    background: var(--surface-sunk);
+    border-color: var(--hairline);
+    box-shadow: var(--elev-1);
+}
+
+.row.on::before {
+    content: "";
+    position: absolute;
+    left: -1px;
+    top: 50%;
+    margin-top: -14px;
+    width: 4px;
+    height: 28px;
+    border-radius: 0 4px 4px 0;
+    background: var(--lime);
+}
+
+.row .amt { font-family: var(--font-mono); font-size: 13px; font-variant-numeric: tabular-nums; }
+
+/* Inventory table */
+.table-wrap { overflow-x: auto; border-radius: 16px; border: 1px solid var(--hairline); }
+
+table { border-collapse: collapse; width: 100%; min-width: 520px; background: var(--surface-solid); }
+
+th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--hairline-soft); font-size: 13px; }
+
+th {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-dim);
+    font-weight: 600;
+    background: var(--surface-sunk);
+}
+
+tr:last-child td { border-bottom: 0; }
+
+td.mono { font-family: var(--font-mono); font-size: 12px; }
+
+/* ── Do / Don't ────────────────────────────────────────────────── */
+.rules { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
+
+.rule-col {
+    border-radius: 20px;
+    padding: 20px;
+    border: 1px solid var(--hairline);
+    background: var(--surface-solid);
+}
+
+.rule-col h3 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 14px;
+}
+
+.rule-col.do h3    { color: var(--green); }
+.rule-col.dont h3  { color: var(--red); }
+
+.rule-col ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 11px; }
+
+.rule-col li { font-size: 13px; line-height: 1.5; padding-left: 22px; position: relative; color: var(--text-mid); }
+
+.rule-col li::before {
+    position: absolute;
+    left: 0;
+    top: 0;
+    font-family: var(--font-mono);
+    font-weight: 700;
+}
+
+.rule-col.do li::before   { content: "+"; color: var(--green); }
+.rule-col.dont li::before { content: "\00d7"; color: var(--red); }
+
+.rule-col li b { color: var(--text); font-weight: 600; }
+
+/* ── Footer ────────────────────────────────────────────────────── */
+.foot {
+    margin-top: 60px;
+    padding-top: 22px;
+    border-top: 1px solid var(--hairline);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 26px;
+    align-items: baseline;
+    font-size: 12px;
+    color: var(--text-dim);
+}
+.foot .mono { color: var(--text-mid); }
+
+/* ── Entrance: the system's own fadeUp ─────────────────────────── */
+.reveal {
+    opacity: 0;
+    transform: translateY(16px);
+    animation: fadeUp var(--dur-base) var(--ease-lux) forwards;
+}
+
+@keyframes fadeUp {
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .reveal { animation: none; opacity: 1; transform: none; }
+    .run .dot-lux, .run .dot-lin { animation-duration: 1ms; }
+    * { transition-duration: 1ms !important; }
+}
+</style>
+
+<div class="shell">
+
+    <header class="masthead reveal">
+        <span class="eyebrow">ApexOps &middot; Design System v2</span>
+        <h1>Neutral,<br>and one <em>lime</em>.</h1>
+        <p class="thesis">
+            Layered glass over a soft gradient canvas. Depth comes from opacity, never from heavier
+            colour. The accent is a signal, not a decoration &mdash; it marks the one thing on a
+            screen that wants your attention, and nothing else.
+        </p>
+        <div class="provenance">
+            <span class="chip">source: index.css @theme</span>
+            <span class="chip">globals.css .ds-*</span>
+            <span class="chip">lib/motion.ts</span>
+            <span class="chip">live: /design-system</span>
+        </div>
+    </header>
+
+    <div class="rail-wrap">
+        <nav class="rail" aria-label="Sections">
+            <a href="#laws" class="on">Laws</a>
+            <a href="#colour">Colour</a>
+            <a href="#type">Type</a>
+            <a href="#surfaces">Surfaces</a>
+            <a href="#radius">Radius</a>
+            <a href="#elevation">Elevation</a>
+            <a href="#motion">Motion</a>
+            <a href="#primitives">Primitives</a>
+            <a href="#rules">Do &amp; Don't</a>
+            <button class="theme-btn" id="themeBtn" type="button" aria-live="polite">theme: auto</button>
+        </nav>
+    </div>
+
+    <!-- ── Laws ─────────────────────────────────────────────── -->
+    <section class="section" id="laws">
+        <div class="section-head">
+            <h2>The six laws</h2>
+            <span class="ref">design.md &sect;1&ndash;&sect;5</span>
+        </div>
+        <p class="lede">
+            Everything else in this document is a consequence of these. When a new screen looks
+            wrong, it has almost always broken one of them.
+        </p>
+
+        <div class="spec">
+            <p><b>Contrast through opacity, not colour weight.</b> Depth is built by stacking
+                translucency &mdash; <span class="mono">white/5 &rarr; white/10 &rarr; white/20</span>
+                &mdash; never by reaching for a darker or more saturated fill.</p>
+            <div class="spec-meta"><span class="token">law 01</span><span class="note">Breaking it produces the muddy, heavy look the glass base exists to avoid.</span></div>
+        </div>
+
+        <div class="spec">
+            <p><b>One glowing element per view.</b> The active state <em>or</em> the primary action
+                &mdash; not both. Two glows and neither reads as focal.</p>
+            <div class="spec-meta"><span class="token">law 02</span><span class="note">On this page the budget is spent on the word "lime" in the title.</span></div>
+        </div>
+
+        <div class="spec">
+            <p><b>Every number is monospaced.</b> Money, IDs, dates, counts, durations. Values must
+                not shift width between renders, and mono signals "this is precise".</p>
+            <div class="spec-meta"><span class="token">law 03</span><span class="note">font-numbers &middot; JetBrains Mono &middot; tabular-nums</span></div>
+        </div>
+
+        <div class="spec">
+            <p><b>Nothing is sharper than 12px.</b> The radius floor is
+                <span class="mono">rounded-xl</span>. There is no
+                <span class="mono">rounded-lg</span> anywhere in the product.</p>
+            <div class="spec-meta"><span class="token">law 04</span><span class="note">A single square corner reads as a bug, not a variation.</span></div>
+        </div>
+
+        <div class="spec">
+            <p><b>Motion comes from one file.</b> Every transition uses a shared variant from
+                <span class="mono">@/lib/motion</span>. No hand-rolled tween, ever.</p>
+            <div class="spec-meta"><span class="token">law 05</span><span class="note">Ad-hoc easing is how a system stops feeling like one system.</span></div>
+        </div>
+
+        <div class="spec">
+            <p><b>Cards compose on <span class="mono">Surface</span>.</b> Never a raw
+                <span class="mono">&lt;div&gt;</span> with background utilities. The primitive owns
+                the blur, border, elevation and reveal.</p>
+            <div class="spec-meta"><span class="token">law 06</span><span class="note">Hand-built cards drift within a sprint.</span></div>
+        </div>
+    </section>
+
+    <!-- ── Colour ───────────────────────────────────────────── -->
+    <section class="section" id="colour">
+        <div class="section-head">
+            <h2>Colour</h2>
+            <span class="ref">design.md &sect;2 &middot; index.css</span>
+        </div>
+        <p class="lede">
+            The palette is deliberately neutral plus lime. Steel is the only real second hue &mdash;
+            though in practice it survives as a <em>mark</em>, not a surface. See the note under
+            Surfaces before reaching for it.
+        </p>
+
+        <div class="swatches">
+            <div class="swatch">
+                <div class="fill" style="background:#C5F43A"></div>
+                <div class="body">
+                    <span class="name">brand-accent</span>
+                    <span class="hex">#C5F43A</span>
+                    <span class="swatch-role">Active nav pill, focal CTA, meter fill. One per view.</span>
+                </div>
+            </div>
+            <div class="swatch">
+                <div class="fill" style="background:#B0DC34"></div>
+                <div class="body">
+                    <span class="name">accentHover</span>
+                    <span class="hex">#B0DC34</span>
+                    <span class="swatch-role">Hover only. Never a resting state.</span>
+                </div>
+            </div>
+            <div class="swatch">
+                <div class="fill" style="background:#222222"></div>
+                <div class="body">
+                    <span class="name">brand-dark</span>
+                    <span class="hex">#222222</span>
+                    <span class="swatch-role">Nav ground, headings, text on the accent.</span>
+                </div>
+            </div>
+            <div class="swatch">
+                <div class="fill" style="background:#141414"></div>
+                <div class="body">
+                    <span class="name">nearBlack</span>
+                    <span class="hex">#141414</span>
+                    <span class="swatch-role">Dark-mode canvas, paired with #1C1C1C.</span>
+                </div>
+            </div>
+            <div class="swatch">
+                <div class="fill" style="background:#9CB3C4"></div>
+                <div class="body">
+                    <span class="name">brand-steel</span>
+                    <span class="hex">#9CB3C4</span>
+                    <span class="swatch-role">Small marks only, in practice &mdash; note dots, neutral track fills. 3 uses.</span>
+                </div>
+            </div>
+            <div class="swatch">
+                <div class="fill" style="background:#7C97AA"></div>
+                <div class="body">
+                    <span class="name">steelDark</span>
+                    <span class="hex">#7C97AA</span>
+                    <span class="swatch-role">Defined for steel on light grounds. <b>Zero uses</b> &mdash; retire it or find its job.</span>
+                </div>
+            </div>
+            <div class="swatch">
+                <div class="fill" style="background:#F3F4F6"></div>
+                <div class="body">
+                    <span class="name">brand-gray</span>
+                    <span class="hex">#F3F4F6</span>
+                    <span class="swatch-role">Chip fills, input grounds, muted surfaces.</span>
+                </div>
+            </div>
+            <div class="swatch">
+                <div class="fill" style="background:linear-gradient(135deg,#E0E7FF,#EFF6FF)"></div>
+                <div class="body">
+                    <span class="name">canvas</span>
+                    <span class="hex">#E0E7FF &rarr; #EFF6FF</span>
+                    <span class="swatch-role">Body only, 135&deg;. Every panel sits above it.</span>
+                </div>
+            </div>
+        </div>
+
+        <div style="height:26px"></div>
+
+        <div class="swatches">
+            <div class="swatch">
+                <div class="fill" style="background:#10B981;height:52px"></div>
+                <div class="body"><span class="name">global-green</span><span class="hex">#10B981</span></div>
+            </div>
+            <div class="swatch">
+                <div class="fill" style="background:#3B82F6;height:52px"></div>
+                <div class="body"><span class="name">global-blue</span><span class="hex">#3B82F6</span></div>
+            </div>
+            <div class="swatch">
+                <div class="fill" style="background:#F59E0B;height:52px"></div>
+                <div class="body"><span class="name">global-yellow</span><span class="hex">#F59E0B</span></div>
+            </div>
+            <div class="swatch">
+                <div class="fill" style="background:#EF4444;height:52px"></div>
+                <div class="body"><span class="name">global-red</span><span class="hex">#EF4444</span></div>
+            </div>
+        </div>
+
+        <p class="note" style="margin-top:14px;max-width:68ch">
+            Status colour is semantic and sits outside the accent system. It reports a condition;
+            it never marks focus. A green success pill does not consume the view's glow budget.
+        </p>
+    </section>
+
+    <!-- ── Type ─────────────────────────────────────────────── -->
+    <section class="section" id="type">
+        <div class="section-head">
+            <h2>Typography</h2>
+            <span class="ref">design.md &sect;3</span>
+        </div>
+        <p class="lede">
+            Three families, strict roles, no overlap. DM Sans carries structure, Inter carries prose,
+            JetBrains Mono carries anything a person might read as a value.
+        </p>
+
+        <div class="spec">
+            <span class="type-h1">Notes &amp; Calendar</span>
+            <div class="spec-meta"><span class="token">text-4xl &middot; bold &middot; font-heading</span><span class="note">Page title. One per screen.</span></div>
+        </div>
+        <div class="spec">
+            <span class="type-num">31,211.00</span>
+            <div class="spec-meta"><span class="token">text-3xl &middot; bold &middot; font-numbers</span><span class="note">Hero figure. Currency symbol is a separate, lighter element &mdash; never part of the string.</span></div>
+        </div>
+        <div class="spec">
+            <span class="type-card">Northwind Trading</span>
+            <div class="spec-meta"><span class="token">text-xl &middot; bold &middot; font-heading</span><span class="note">Card heading, entity name.</span></div>
+        </div>
+        <div class="spec">
+            <span class="type-body">Everything you have planned, across every day.</span>
+            <div class="spec-meta"><span class="token">text-sm &middot; medium &middot; font-body</span><span class="note">The default. Body copy, labels, nav.</span></div>
+        </div>
+        <div class="spec">
+            <span class="type-sm">Unscheduled notes appear on the day they were written.</span>
+            <div class="spec-meta"><span class="token">text-xs &middot; medium &middot; font-body</span><span class="note">Sub-labels, helper text.</span></div>
+        </div>
+        <div class="spec">
+            <span class="type-nano">Overdue</span>
+            <div class="spec-meta"><span class="token">text-[10px] &middot; uppercase &middot; tracking-wider</span><span class="note">Nano label. Badges and column heads only.</span></div>
+        </div>
+    </section>
+
+    <!-- ── Surfaces ─────────────────────────────────────────── -->
+    <section class="section" id="surfaces">
+        <div class="section-head">
+            <h2>Surfaces</h2>
+            <span class="ref">design.md &sect;4 &middot; globals.css</span>
+        </div>
+        <p class="lede">
+            Five registers. Each one is a live specimen below &mdash; the blur and border you see are
+            the values the app ships, not an approximation of them.
+        </p>
+
+        <div class="surface-grid">
+            <div class="surf surf-frost">
+                <span class="label">.ds-frost</span>
+                <span class="use">The canonical premium card. 28px blur + 150% saturate. Hero and KPI surfaces.</span>
+            </div>
+            <div class="surf surf-panel">
+                <span class="label">.glass-panel</span>
+                <span class="use">Light surface on the canvas &mdash; top nav, filter bars, KPI cards.</span>
+            </div>
+            <div class="surf surf-dark">
+                <span class="label">.glass-dark</span>
+                <span class="use">Primary content panels and list containers.</span>
+            </div>
+            <div class="surf surf-blue">
+                <span class="label">.glass-blue &mdash; no current caller</span>
+                <span class="use">Specified for detail panes nested inside a dark panel. <b>Surface variant="blue" is instantiated once in the whole repo &mdash; on this style guide.</b> Read the note below before using it.</span>
+            </div>
+            <div class="surf surf-menu">
+                <span class="label">.ds-menu</span>
+                <span class="use">Opaque by design. Menus sit over arbitrary content, where blur smears detail but keeps contrast &mdash; a lime chip underneath would read straight through.</span>
+            </div>
+        </div>
+
+        <h3 style="font-size:15px;margin:32px 0 12px">The nesting model</h3>
+        <p class="lede" style="margin-bottom:16px">
+            Depth runs one direction: dark holds mid, mid holds translucent white. Putting
+            <span class="mono">glass-panel</span> inside <span class="mono">glass-dark</span> inverts
+            the contrast and breaks the model.
+        </p>
+
+        <div class="nest">
+            <span class="nest-label">.glass-dark &mdash; content panel</span>
+            <div class="nest-2">
+                <span class="nest-label">.glass-blue &mdash; detail pane</span>
+                <div class="nest-3">
+                    <span class="nest-label">white/10 &mdash; line item &middot; hover raises to white/20</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="spec" style="margin-top:24px">
+            <p>
+                <b>This model is specified but no longer in use, and that is worth knowing before you
+                build on it.</b> Counting <span class="mono">Surface</span> variants across the
+                product: <span class="mono">panel</span> 64, <span class="mono">frost</span> 9,
+                <span class="mono">dark</span> 4, <span class="mono">accent</span> 1,
+                <span class="mono">blue</span> <b>0</b>.
+            </p>
+            <div class="spec-meta">
+                <span class="token">measured, not assumed</span>
+                <span class="note">Excludes this style guide, which is the only caller of the blue surface.</span>
+            </div>
+        </div>
+
+        <div class="spec">
+            <p>
+                The nesting model came from a master&ndash;detail layout &mdash; a list and a detail
+                pane sharing one dark container &mdash; on the Invoices page, which
+                <span class="mono">design.md</span> names as the reference template for the product.
+                That page had no <span class="mono">Invoice</span> model and no API route behind it:
+                it was mock data throughout, and it was deleted in the 2026-07-24 UI reset.
+                Everything rebuilt since composes <b>flat panel cards directly on the canvas</b>
+                instead of nesting panes inside a dark container.
+            </p>
+            <div class="spec-meta">
+                <span class="token">why it went quiet</span>
+                <span class="note">The colour outlived the layout it was invented for.</span>
+            </div>
+        </div>
+
+        <div class="spec">
+            <p>
+                So: use <b>panel on the canvas</b> as the default. Reach for
+                <span class="mono">dark</span> and <span class="mono">blue</span> only if you are
+                genuinely rebuilding a master&ndash;detail screen &mdash; and if you do, you are the
+                first, so expect to find gaps.
+            </p>
+            <div class="spec-meta"><span class="token">what to do</span></div>
+        </div>
+    </section>
+
+    <!-- ── Radius ───────────────────────────────────────────── -->
+    <section class="section" id="radius">
+        <div class="section-head">
+            <h2>Radius</h2>
+            <span class="ref">design.md &sect;5</span>
+        </div>
+        <p class="lede">Four steps and a floor. The floor is the part people break.</p>
+
+        <div class="radius-row">
+            <div class="radius-chip" style="border-radius:999px"><b>full</b><span>9999px</span></div>
+            <div class="radius-chip" style="border-radius:24px"><b>3xl</b><span>24px</span></div>
+            <div class="radius-chip" style="border-radius:16px"><b>2xl</b><span>16px</span></div>
+            <div class="radius-chip" style="border-radius:12px"><b>xl</b><span>12px</span></div>
+            <div class="radius-chip forbidden" style="border-radius:8px"><b>lg</b><span>never</span></div>
+        </div>
+
+        <div class="spec" style="margin-top:20px">
+            <p><span class="mono">rounded-full</span> avatars, nav pills, badges, icon buttons &middot;
+               <span class="mono">rounded-3xl</span> cards and main containers &middot;
+               <span class="mono">rounded-2xl</span> list rows and inner panels &middot;
+               <span class="mono">rounded-xl</span> buttons, inputs, dropdowns</p>
+            <div class="spec-meta"><span class="token">floor: 12px</span><span class="note">Anything sharper is a defect, not a choice.</span></div>
+        </div>
+    </section>
+
+    <!-- ── Elevation ────────────────────────────────────────── -->
+    <section class="section" id="elevation">
+        <div class="section-head">
+            <h2>Elevation &amp; glow</h2>
+            <span class="ref">index.css &middot; --shadow-ds-*</span>
+        </div>
+        <p class="lede">
+            Wide, soft, low opacity. Luxury reads as restraint &mdash; a hard drop shadow is the
+            fastest way to make this system look cheap.
+        </p>
+
+        <div class="elev-row">
+            <div class="elev-card" style="box-shadow:var(--elev-1)">ds-elev-1<br><span style="opacity:.7">resting</span></div>
+            <div class="elev-card" style="box-shadow:var(--elev-2)">ds-elev-2<br><span style="opacity:.7">cards</span></div>
+            <div class="elev-card" style="box-shadow:var(--elev-3)">ds-elev-3<br><span style="opacity:.7">overlays</span></div>
+            <div class="elev-card" style="box-shadow:var(--elev-glow);border-color:var(--lime)">ds-glow<br><span style="opacity:.7">one per view</span></div>
+        </div>
+
+        <div class="spec" style="margin-top:22px">
+            <p class="note" style="max-width:none">
+                <span class="mono">--shadow-ds-2: 0 8px 24px rgba(31,38,135,.06), 0 2px 6px rgba(31,38,135,.04)</span>
+                &mdash; note the blue-violet tint in the shadow colour. It ties the elevation to the
+                canvas gradient instead of dropping a neutral grey onto a coloured ground.
+            </p>
+            <div class="spec-meta"><span class="token">shadow hue</span><span class="note">Grey shadows on this canvas read as dirt.</span></div>
+        </div>
+    </section>
+
+    <!-- ── Motion ───────────────────────────────────────────── -->
+    <section class="section" id="motion">
+        <div class="section-head">
+            <h2>Motion</h2>
+            <span class="ref">lib/motion.ts</span>
+        </div>
+        <p class="lede">
+            One signature curve. <span class="mono">EASE_LUX</span> leaves fast and settles slowly,
+            which is what makes an interface feel responsive without feeling abrupt. Run them
+            side by side &mdash; the lime dot is the system, the steel dot is linear.
+        </p>
+
+        <div id="motionDemo" style="display:flex;flex-direction:column;gap:10px;max-width:620px">
+            <div class="track"><span class="dot dot-lux"></span></div>
+            <span class="motion-note">EASE_LUX &mdash; cubic-bezier(.22, 1, .36, 1)</span>
+            <div class="track"><span class="dot dot-lin"></span></div>
+            <span class="motion-note">linear &mdash; for comparison only, never shipped</span>
+            <div><button class="replay" id="replayBtn" type="button">&#9654;&nbsp; replay</button></div>
+        </div>
+
+        <div style="height:14px"></div>
+
+        <div class="spec">
+            <p><span class="mono">--dur-fast: 160ms</span></p>
+            <div class="spec-meta"><span class="token">hover, colour, small state</span></div>
+        </div>
+        <div class="spec">
+            <p><span class="mono">--dur-base: 280ms</span></p>
+            <div class="spec-meta"><span class="token">entrances, panel reveals &mdash; the default</span></div>
+        </div>
+        <div class="spec">
+            <p><span class="mono">--dur-slow: 520ms</span></p>
+            <div class="spec-meta"><span class="token">count-ups, meter fills, hero sequences</span></div>
+        </div>
+        <div class="spec">
+            <p><span class="mono">SPRING &mdash; stiffness 420 &middot; damping 32 &middot; mass 0.7</span></p>
+            <div class="spec-meta"><span class="token">interactive lift and press</span><span class="note">Snappy but composed. Never bouncy.</span></div>
+        </div>
+
+        <h3 style="font-size:15px;margin:30px 0 12px">Variants</h3>
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>Variant</th><th>Motion</th><th>Applied to</th></tr></thead>
+                <tbody>
+                    <tr><td class="mono">fadeUp</td><td>opacity 0&rarr;1, y 16&rarr;0</td><td>Cards, rows, hero blocks. The default entrance.</td></tr>
+                    <tr><td class="mono">scaleIn</td><td>opacity 0&rarr;1, scale .96&rarr;1</td><td>Focal elements &mdash; KPIs, modals, badges.</td></tr>
+                    <tr><td class="mono">fade</td><td>opacity only, EASE_SOFT</td><td>When movement would be noise.</td></tr>
+                    <tr><td class="mono">stagger(gap)</td><td>children in sequence, 60ms default</td><td>Lists and grids. Parent only.</td></tr>
+                    <tr><td class="mono">hoverLift</td><td>y &minus;4 on hover, scale .985 on tap</td><td>Interactive cards and tiles.</td></tr>
+                    <tr><td class="mono">pressable</td><td>scale 1.02 / 0.96</td><td>Buttons. Press without lift.</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <p class="note" style="margin-top:14px;max-width:68ch">
+            <b>Reduced motion is a contract, not a courtesy.</b> Count-ups always land on their final
+            value, entrances resolve to their end state, and nothing depends on an animation
+            completing for the interface to be usable.
+        </p>
+    </section>
+
+    <!-- ── Primitives ───────────────────────────────────────── -->
+    <section class="section" id="primitives">
+        <div class="section-head">
+            <h2>Primitives</h2>
+            <span class="ref">components/design-system/*</span>
+        </div>
+        <p class="lede">
+            Twenty-eight primitives behind one import. If a screen needs something that is not here,
+            the primitive gets built here first &mdash; it does not get hand-rolled into the page.
+        </p>
+
+        <div class="spec">
+            <div class="demo-row">
+                <button class="btn btn-accent" type="button">Save note</button>
+                <button class="btn btn-dark" type="button">Open</button>
+                <button class="btn btn-ghost" type="button">Cancel</button>
+            </div>
+            <div class="spec-meta"><span class="token">AccentButton</span><span class="note">accent &middot; dark &middot; ghost. Only the accent variant may glow.</span></div>
+        </div>
+
+        <div class="spec">
+            <div class="demo-row">
+                <span class="badge badge-accent">Active</span>
+                <span class="badge badge-solid">Unsent</span>
+                <span class="badge badge-neutral">3 open</span>
+                <span class="badge badge-outline">Viewed</span>
+            </div>
+            <div class="spec-meta"><span class="token">Badge</span><span class="note">accent &middot; solid &middot; neutral &middot; outline</span></div>
+        </div>
+
+        <div class="spec">
+            <div class="demo-row">
+                <div class="tile">
+                    <span class="k">Open tasks</span>
+                    <div class="v">128</div>
+                    <span class="t">&uarr; 12 this week</span>
+                </div>
+                <div class="tile">
+                    <span class="k">Resolved</span>
+                    <div class="v">1,904</div>
+                    <span class="t">&uarr; 4.2%</span>
+                </div>
+            </div>
+            <div class="spec-meta"><span class="token">StatTile + AnimatedNumber</span><span class="note">Mono value, count-up on mount, ds-mesh behind. Always lands on the final figure.</span></div>
+        </div>
+
+        <div class="spec">
+            <div style="max-width:340px"><div class="meter"><div class="fill"></div></div></div>
+            <div class="spec-meta"><span class="token">Meter</span><span class="note">ds-stripe-fill &mdash; diagonal lime at 45&deg;, 6px on 6px off.</span></div>
+        </div>
+
+        <div class="spec">
+            <div style="max-width:340px"><input class="input" type="text" placeholder="Search title, content or category&hellip;" aria-label="Search demo"></div>
+            <div class="spec-meta"><span class="token">Input + Field</span><span class="note">Field owns the label, hint and error wiring.</span></div>
+        </div>
+
+        <div class="spec">
+            <div class="seg" role="tablist" aria-label="View">
+                <button type="button" role="tab" aria-selected="true">Notes</button>
+                <button type="button" role="tab" aria-selected="false">Calendar</button>
+            </div>
+            <div class="spec-meta"><span class="token">SegmentedControl</span><span class="note">Switches the view, never the data.</span></div>
+        </div>
+
+        <div class="spec">
+            <div class="rows" style="max-width:400px">
+                <div class="row on"><span>Ship the editor</span><span class="amt">18 Aug</span></div>
+                <div class="row"><span>Review the day panel</span><span class="amt">19 Aug</span></div>
+                <div class="row"><span>Rotate the API key</span><span class="amt">21 Aug</span></div>
+            </div>
+            <div class="spec-meta"><span class="token">list row &middot; active</span><span class="note">4px accent strip on the leading edge. The strip is the state; the fill alone is ambiguous.</span></div>
+        </div>
+
+        <h3 style="font-size:15px;margin:30px 0 12px">Full inventory</h3>
+        <div class="table-wrap">
+            <table>
+                <thead><tr><th>Primitive</th><th>Role</th></tr></thead>
+                <tbody>
+                    <tr><td class="mono">Surface</td><td>The card. frost &middot; panel &middot; dark &middot; blue &middot; accent, plus interactive and reveal</td></tr>
+                    <tr><td class="mono">PageHeader</td><td>Title, subtitle, optional back arrow, actions slot</td></tr>
+                    <tr><td class="mono">StatTile &middot; KpiCard</td><td>KPI atoms on a luxe surface</td></tr>
+                    <tr><td class="mono">AnimatedNumber</td><td>Count-up mono figure, reduced-motion safe</td></tr>
+                    <tr><td class="mono">Meter &middot; GanttTrack &middot; Timeline</td><td>Progress and time</td></tr>
+                    <tr><td class="mono">AccentButton &middot; Badge</td><td>Action and status</td></tr>
+                    <tr><td class="mono">Input &middot; Textarea &middot; Select &middot; Checkbox &middot; Switch &middot; Field</td><td>The form kit</td></tr>
+                    <tr><td class="mono">SegmentedControl &middot; PillTabs &middot; Stepper</td><td>View switching and sequence</td></tr>
+                    <tr><td class="mono">DataTable &middot; Pagination</td><td>Tabular data</td></tr>
+                    <tr><td class="mono">Modal &middot; ConfirmDialog &middot; ContextMenu</td><td>Overlays. Anything destructive goes through ConfirmDialog</td></tr>
+                    <tr><td class="mono">EmptyState &middot; Skeleton</td><td>Nothing yet, and not yet</td></tr>
+                    <tr><td class="mono">AvatarStack &middot; GlassPanel</td><td>People, and the raw glass shell</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- ── Do / Don't ───────────────────────────────────────── -->
+    <section class="section" id="rules">
+        <div class="section-head">
+            <h2>Do &amp; Don't</h2>
+            <span class="ref">design.md &sect;2 &middot; v2 rules</span>
+        </div>
+
+        <div class="rules">
+            <div class="rule-col do">
+                <h3>Do</h3>
+                <ul>
+                    <li>Compose on <b>Surface</b>. It owns blur, border, elevation and reveal.</li>
+                    <li>Spend the <b>glow budget once</b> &mdash; active state or CTA, never both.</li>
+                    <li>Put every money value, ID, count and duration in <b>font-numbers</b>.</li>
+                    <li>Layer <b>white/5 &rarr; white/10 &rarr; white/20</b> for depth on dark surfaces.</li>
+                    <li>Take all motion from <b>@/lib/motion</b>, and let reduced motion resolve to the end state.</li>
+                    <li>Keep the shadow tint <b>blue-violet</b> so elevation belongs to the canvas.</li>
+                </ul>
+            </div>
+            <div class="rule-col dont">
+                <h3>Don't</h3>
+                <ul>
+                    <li>Use <b>brand-accent as a large background</b>. It is a signal, and a signal cannot be a field.</li>
+                    <li>Reach for <b>blue or purple SaaS gradients</b>. The palette is neutral plus lime, on purpose.</li>
+                    <li>Nest <b>glass-panel inside glass-dark</b> &mdash; the contrast inversion breaks depth.</li>
+                    <li>Ship <b>rounded-lg or sharper</b>. 12px is the floor.</li>
+                    <li>Write a <b>one-off transition object</b>, however small.</li>
+                    <li>Add new <b>remixicon</b> usage. React Icons (Fi) only.</li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <footer class="foot">
+        <span>ApexOps Design System v2 &mdash; &ldquo;Luxe&rdquo;</span>
+        <span class="mono">canonical spec: .agents/design-system/design.md</span>
+        <span class="mono">live guide: /design-system</span>
+    </footer>
+
+</div>
+
+<script>
+(function () {
+    'use strict';
+
+    /* ── Theme: auto → light → dark, matching the app's own toggle ── */
+    var btn = document.getElementById('themeBtn');
+    var root = document.documentElement;
+    var order = ['auto', 'light', 'dark'];
+    var i = 0;
+
+    btn.addEventListener('click', function () {
+        i = (i + 1) % order.length;
+        var mode = order[i];
+        if (mode === 'auto') root.removeAttribute('data-theme');
+        else root.setAttribute('data-theme', mode);
+        btn.textContent = 'theme: ' + mode;
+    });
+
+    /* ── Rail: mark the section currently in view ── */
+    var links = Array.prototype.slice.call(document.querySelectorAll('.rail a'));
+    var sections = links.map(function (a) {
+        return document.querySelector(a.getAttribute('href'));
+    });
+
+    function sync() {
+        var best = 0;
+        for (var n = 0; n < sections.length; n++) {
+            if (sections[n] && sections[n].getBoundingClientRect().top <= 120) best = n;
+        }
+        links.forEach(function (a, n) { a.classList.toggle('on', n === best); });
+    }
+
+    var ticking = false;
+    window.addEventListener('scroll', function () {
+        if (ticking) return;
+        ticking = true;
+        requestAnimationFrame(function () { sync(); ticking = false; });
+    }, { passive: true });
+    sync();
+
+    /* ── Motion demo ── */
+    var demo = document.getElementById('motionDemo');
+    var replay = document.getElementById('replayBtn');
+
+    function run() {
+        demo.classList.remove('run');
+        /* Force a reflow so the animation restarts rather than being ignored. */
+        void demo.offsetWidth;
+        demo.classList.add('run');
+    }
+
+    replay.addEventListener('click', run);
+    run();
+})();
+</script>

@@ -87,7 +87,14 @@ const TaskRow: FC<TaskRowProps> = ({ todo, readOnly, onToggle, onRename, onRemov
                                 onClick={() => setEditing(true)}
                                 title="Click to rename"
                                 className={[
-                                    'text-left text-sm font-medium transition-colors disabled:cursor-default',
+                                    // `break-words`, and it has to be here rather than
+                                    // `min-w-0` on the column. A pasted URL is one
+                                    // unbreakable word, so it sets the grid item's
+                                    // min-content width and pushes the whole row wider
+                                    // than the page — measured at 1701px against a
+                                    // 1623px track. `min-w-0` does NOT fix that on its
+                                    // own; only letting the word break does.
+                                    'text-left text-sm font-medium transition-colors disabled:cursor-default break-words',
                                     todo.checked
                                         ? 'text-gray-400 line-through dark:text-gray-500'
                                         : 'text-brand-dark hover:text-gray-600 dark:text-white dark:hover:text-gray-300',

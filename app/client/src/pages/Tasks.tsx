@@ -164,7 +164,7 @@ const Tasks: FC = () => {
     );
 
     return (
-        <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
+        <div className="flex flex-col gap-6">
             <PageHeader
                 title="Tasks"
                 subtitle="Everything you have planned, across every day."
@@ -265,7 +265,23 @@ const Tasks: FC = () => {
                     />
                 </Surface>
             ) : (
-                <motion.div variants={fadeUp} initial="hidden" animate="show" className="flex flex-col gap-6">
+                /* A day is a card, not a full-width band.
+                 *
+                 * This page used to be capped at max-w-5xl, where a stack of day
+                 * panels read fine. Uncapped it fills the window, and a single
+                 * column of 1600px-wide rows is harder to scan than the narrow
+                 * one it replaced — the eye loses the line on the way back.
+                 * Columns keep the measure short and put the extra width to
+                 * work, which is what the Projects grid already does.
+                 *
+                 * `items-start` so a day with twelve tasks does not stretch the
+                 * empty day beside it to match. */
+                <motion.div
+                    variants={fadeUp}
+                    initial="hidden"
+                    animate="show"
+                    className="grid grid-cols-1 items-start gap-5 sm:grid-cols-2 xl:grid-cols-3"
+                >
                     {grouped.map(([dayIso, rows]) => (
                         <Surface key={dayIso} variant="panel" radius="3xl" padding="lg">
                             <div className="flex flex-col gap-4">

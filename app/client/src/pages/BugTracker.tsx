@@ -690,7 +690,7 @@ const BugTracker: FC<BugTrackerProps> = ({ projectId }) => {
     );
 
     return (
-        <div className="mx-auto flex w-full max-w-7xl flex-col gap-7">
+        <div className="flex flex-col gap-6">
             {/* Embedded in a project page: that page's own PageHeader + ProjectTabs
                 already carry the title, so a second heading here would be a
                 redundant "Bug Tracker" sitting under "Sprint2 Demo". The actions

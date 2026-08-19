@@ -137,7 +137,7 @@ const Chat: FC = () => {
 
     if (!currentUserId) {
         return (
-            <div className="mx-auto w-full max-w-7xl">
+            <div className="flex flex-col gap-6">
                 <EmptyState
                     icon={<FiLock size={22} />}
                     title="Sign in to chat"
@@ -148,7 +148,7 @@ const Chat: FC = () => {
     }
 
     return (
-        <div className="mx-auto flex w-full max-w-7xl flex-col gap-7">
+        <div className="flex flex-col gap-6">
             <PageHeader
                 title="Chat"
                 subtitle="Direct messages with anyone in the workspace."
