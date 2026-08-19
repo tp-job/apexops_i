@@ -11,7 +11,7 @@
 - **Value:** Unified auth, structured logging, real-time APIs (WebSocket/Socket.io), and built-in docs + analytics for faster onboarding and operations.
 
 
-<img width="1900" height="862" alt="image" src="https://github.com/user-attachments/assets/63293a36-3b37-4d89-9fbb-c8ff45fe57b4" />
+<img width="1912" height="983" alt="screencapture-localhost-5173-dashboard-2026-08-19-18_09_03" src="https://github.com/user-attachments/assets/c47acb97-5adf-4f05-949f-d26450553521" />
 
 ---
 
