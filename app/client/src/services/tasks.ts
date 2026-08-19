@@ -1,0 +1,255 @@
+import { fetchWithAuth } from '@/api/client';
+import type { DailyTodo } from '@/lib/dailyTodos';
+
+/**
+ * The adapter between the UI's todo array and the `tasks` table
+ * (blueprint phase 1, D1).
+ *
+ * **The UI contract does not change.** `/daily` has always worked on an
+ * immutable `DailyTodo[]` — `toggleTodo(todos, id)` returns a new array — and the
+ * pure functions in `lib/dailyTodos.ts` stay exactly as they are. This module
+ * turns "here is the day as it should now be" into one request, and turns the
+ * response back into the same array shape.
+ *
+ * That whole-array model is why the server offers a reconcile endpoint at all.
+ * Per-item calls would mean a reorder firing one request per row, any of which
+ * can fail alone and leave the day half-written; one array in one transaction
+ * cannot.
+ *
+ * Everything goes through `fetchWithAuth`, so the 401 refresh-and-replay in
+ * `lib/authSession.ts` is inherited rather than reimplemented.
+ */
+
+/** What the server sends back for one task. `id` is the client-side id. */
+interface WireTask {
+    id: string;
+    taskId: number;
+    text: string;
+    checked: boolean;
+    completedAt: string | null;
+    createdAt: string | null;
+    position: number;
+}
+
+export interface DayTasks {
+    todos: DailyTodo[];
+    /**
+     * False when this day has never been written to the tasks table, which is the
+     * caller's cue that `Note.checklistItems` is still the source for it.
+     *
+     * It is **not** the same as "the list is empty": a day whose todos were all
+     * deleted also returns an empty list, and falling back there would resurrect
+     * them on every load.
+     */
+    migrated: boolean;
+}
+
+const toTodo = (t: WireTask): DailyTodo => ({
+    id: t.id,
+    text: t.text,
+    checked: t.checked,
+    createdAt: t.createdAt,
+    // Belt and braces: the server derives this from `checked`, but a stale value
+    // reaching the UI would show a completion time on unfinished work.
+    completedAt: t.checked ? t.completedAt : null,
+});
+
+const asRecord = (v: unknown): Record<string, unknown> =>
+    typeof v === 'object' && v !== null ? (v as Record<string, unknown>) : {};
+
+const readTasks = (body: unknown): WireTask[] => {
+    const raw = asRecord(body).tasks;
+    return Array.isArray(raw) ? (raw as WireTask[]) : [];
+};
+
+/** Everything planned for one day, in the order it should render. */
+export async function fetchDayTasks(dayKey: string): Promise<DayTasks> {
+    const res = await fetchWithAuth(`/api/tasks/day/${dayKey}`);
+    if (!res.ok) throw new Error('Failed to load tasks for that day');
+
+    const body = await res.json().catch(() => ({}));
+    return { todos: readTasks(body).map(toTodo), migrated: asRecord(body).migrated === true };
+}
+
+/**
+ * Write a day as a whole.
+ *
+ * `position` is not sent: the array order *is* the order, and the server
+ * rewrites positions from the index. Sending both would be two sources of truth
+ * for one fact, and they would eventually disagree.
+ *
+ * `completedAt` is not sent either — the server derives it, so a client cannot
+ * report work as finished at a time of its choosing (blueprint EC-05).
+ */
+export async function syncDayTasks(
+    dayKey: string,
+    todos: DailyTodo[],
+    noteId?: number | null,
+): Promise<DailyTodo[]> {
+    const res = await fetchWithAuth(`/api/tasks/day/${dayKey}`, {
+        method: 'PUT',
+        json: true,
+        body: JSON.stringify({
+            tasks: todos.map((t) => ({
+                clientId: t.id,
+                text: t.text,
+                isDone: t.checked,
+                createdAt: t.createdAt,
+            })),
+            ...(noteId !== undefined ? { noteId } : {}),
+        }),
+    });
+
+    if (!res.ok) {
+        const body = asRecord(await res.json().catch(() => ({})));
+        throw new Error(typeof body.error === 'string' ? body.error : 'Could not save that change.');
+    }
+
+    return readTasks(await res.json().catch(() => ({}))).map(toTodo);
+}
+
+// ── master list (US-06) ───────────────────────────────────────
+
+/**
+ * `YYYY-MM-DD` -> the instant a task's `scheduledFor` is stored at: **UTC noon**.
+ *
+ * This is the one helper for it on the client. Do not reach for `dayAnchorIso`
+ * in `lib/dailyTodos.ts` — it looks interchangeable and is not. That one returns
+ * *local* noon (`12:00` in the browser's zone, converted to UTC), which is right
+ * for `Note.scheduledFor` because the notes calendar resolves days through the
+ * user's stored timezone. The tasks API resolves a day with a naive UTC range
+ * (`api/tasks.ts` `dayRange`), so a task has to be anchored in UTC or the two
+ * sides disagree about which day it belongs to.
+ *
+ * Verified at UTC+7: local noon lands at 05:00Z and UTC noon at 12:00Z, and both
+ * fall inside the server's day window, so the two are interchangeable *here*.
+ * They stop being interchangeable as the offset grows — local noon moves toward
+ * the edges of the UTC day and eventually crosses out of it. That part is
+ * arithmetic, not something this machine could reproduce: the TZ override had no
+ * effect on this Node build, so only the +7 case was actually measured.
+ */
+export const taskDayAnchor = (dayKey: string): string => `${dayKey}T12:00:00.000Z`;
+
+export type TaskStatus = 'all' | 'open' | 'done' | 'overdue';
+
+export interface TaskQuery {
+    status?: TaskStatus;
+    from?: string;
+    to?: string;
+    q?: string;
+    limit?: number;
+    offset?: number;
+}
+
+/** A task as the master list needs it: the todo plus where it sits in time. */
+export type MasterTask = DailyTodo & {
+    taskId: number;
+    scheduledFor: string | null;
+    dueDate: string | null;
+};
+
+export interface TaskPage {
+    todos: MasterTask[];
+    total: number;
+}
+
+/** The cross-day view. Every filter here is served by an index, never in memory. */
+export async function fetchTasks(query: TaskQuery = {}): Promise<TaskPage> {
+    const params = new URLSearchParams();
+    if (query.status && query.status !== 'all') params.set('status', query.status);
+    if (query.from) params.set('from', query.from);
+    if (query.to) params.set('to', query.to);
+    if (query.q?.trim()) params.set('q', query.q.trim());
+    if (query.limit) params.set('limit', String(query.limit));
+    if (query.offset) params.set('offset', String(query.offset));
+
+    const qs = params.toString();
+    const res = await fetchWithAuth(`/api/tasks${qs ? `?${qs}` : ''}`);
+    if (!res.ok) throw new Error('Failed to load tasks');
+
+    const body = asRecord(await res.json().catch(() => ({})));
+    const rows = Array.isArray(body.tasks) ? (body.tasks as Array<WireTask & Record<string, unknown>>) : [];
+
+    return {
+        todos: rows.map((t) => ({
+            ...toTodo(t),
+            taskId: t.taskId,
+            scheduledFor: typeof t.scheduledFor === 'string' ? t.scheduledFor : null,
+            dueDate: typeof t.dueDate === 'string' ? t.dueDate : null,
+        })),
+        total: typeof body.total === 'number' ? body.total : rows.length,
+    };
+}
+
+/**
+ * Change one task.
+ *
+ * Addressed by the numeric `taskId`, not the `clientId` the daily page works in:
+ * the master list spans many days and a client id is only unique per user, so
+ * the row id is the unambiguous handle here.
+ *
+ * `completedAt` is never sent — the server derives it from `isDone`, so ticking
+ * a task cannot record a completion time the client invented (EC-05).
+ */
+export async function updateTask(
+    taskId: number,
+    patch: { text?: string; isDone?: boolean; scheduledFor?: string; dueDate?: string | null },
+): Promise<void> {
+    const res = await fetchWithAuth(`/api/tasks/${taskId}`, {
+        method: 'PATCH',
+        json: true,
+        body: JSON.stringify(patch),
+    });
+    if (!res.ok) {
+        const body = asRecord(await res.json().catch(() => ({})));
+        throw new Error(typeof body.error === 'string' ? body.error : 'Could not save that change.');
+    }
+}
+
+/** Soft delete on the server — the row is recoverable for 30 days (D5). */
+export async function deleteTask(taskId: number): Promise<void> {
+    const res = await fetchWithAuth(`/api/tasks/${taskId}`, { method: 'DELETE' });
+    // 204 on a task that was already gone: deleting twice is not an error.
+    if (!res.ok && res.status !== 404) throw new Error('Could not delete that task.');
+}
+
+/**
+ * Create one task, from the master list.
+ *
+ * The daily page reconciles a whole day in one `PUT`, which is right when you
+ * are editing a list you can see in full. The master list is the opposite case:
+ * it shows a filtered slice across many days, so reconciling from it would send
+ * a "day" that omits every task the current filter hid — and the server would
+ * dutifully delete them. This route touches exactly one row.
+ *
+ * `scheduledFor` is anchored with `taskDayAnchor`, never a bare `YYYY-MM-DD`:
+ * midnight is within one timezone offset of the neighbouring day.
+ */
+export async function createTask(input: {
+    text: string;
+    dayKey: string;
+    dueDate?: string | null;
+}): Promise<MasterTask> {
+    const res = await fetchWithAuth('/api/tasks', {
+        method: 'POST',
+        json: true,
+        body: JSON.stringify({
+            text: input.text,
+            scheduledFor: taskDayAnchor(input.dayKey),
+            ...(input.dueDate ? { dueDate: input.dueDate } : {}),
+        }),
+    });
+    if (!res.ok) {
+        const body = asRecord(await res.json().catch(() => ({})));
+        throw new Error(typeof body.error === 'string' ? body.error : 'Could not add that task.');
+    }
+
+    const t = asRecord(asRecord(await res.json().catch(() => ({}))).task) as WireTask &
+        Record<string, unknown>;
+    return {
+        ...toTodo(t),
+        taskId: t.taskId,
+        scheduledFor: typeof t.scheduledFor === 'string' ? t.scheduledFor : null,
+        dueDate: typeof t.dueDate === 'string' ? t.dueDate : null,
+    };
+}

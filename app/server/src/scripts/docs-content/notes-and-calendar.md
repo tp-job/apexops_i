@@ -9,7 +9,7 @@ One set of notes, two ways to look at them.
 
 There is no separate "calendar entry" type. A note appears in the calendar because of the day attached to it, and nothing else.
 
-Anything written on the [Daily note](/docs/daily-notes) page is in here too, carrying a `daily` badge.
+Notes written against a particular day carry a `daily` badge, and appear on that day in the calendar.
 
 ## Which day a note lands on
 
@@ -36,13 +36,13 @@ Right-clicking a note — on a calendar chip or in the day panel — opens its m
 
 Right-clicking an empty part of a day offers **New note on that day**.
 
-:::callout{tone=warn title="Editing a note that has formatting"}
-The edit dialog is plain text. If the note was written on the Daily note page with formatting, saving from here keeps the words and drops the formatting — the dialog warns you before it does. Edit rich notes on the [Daily note](/docs/daily-notes) page instead.
+:::callout{tone=info title="Editing a note that has formatting"}
+The edit dialog opens the note in the same editor it was written in, so formatting survives being corrected. Colour and categories are set in the same place — you no longer have to right-click the card afterwards, although that menu still works.
 :::
 
 ## Colours
 
-A colour is a label you choose, nothing more — it does not affect sorting, filtering or scheduling. Once set, it replaces the automatic accent a note gets from its type, and shows on the calendar chip and in the day panel.
+Set a colour while writing the note, or from the card's right-click menu afterwards. A colour is a label you choose, nothing more — it does not affect sorting, filtering or scheduling. Once set, it replaces the automatic accent a note gets from its type, and shows on the calendar chip and in the day panel.
 
 ## Finding things
 

@@ -205,13 +205,23 @@ export const dayKeyOf = (iso: string | null | undefined): string | null => {
  * `scripts/rename-daily-notes.ts`, because a generator change on its own leaves
  * two formats sitting next to each other in the same list forever.
  *
+ * **`.locale('en')` is deliberate and load-bearing.** This title is an
+ * identifier as much as a label — it is what a user searches for and what makes
+ * a list of daily notes sort and read consistently. Nothing currently calls
+ * `dayjs.locale()`, so the month abbreviation is English today by accident; the
+ * day someone localises the interface, every *new* note would silently start
+ * carrying a different title from every old one, in the same list, with no
+ * migration to reconcile them. Pinning the locale here decouples the stored
+ * title from display language. Localise the UI freely — translate this and you
+ * split the archive.
+ *
  * **Nothing looks a daily note up by this string.** `findDailyNote` matches on
  * `type`, the `daily` tag and `scheduledFor`, so the title is presentation only
  * and renaming one cannot orphan its todos. Keep it that way — the moment a
  * lookup keys on the title, changing the wording becomes a data migration.
  */
 export const dailyNoteTitle = (dayKey: string): string =>
-    `Daily Note - ${dayjs(dayKey).format('D MMM YYYY')}`;
+    `Daily Note - ${dayjs(dayKey).locale('en').format('D MMM YYYY')}`;
 
 /**
  * Picks the day's todo note out of the full note list.

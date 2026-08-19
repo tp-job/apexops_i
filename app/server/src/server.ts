@@ -386,6 +386,9 @@ import mailRoutes from './api/mail';
 import logsRoutes from './api/logs';
 import ticketsRoutes from './api/tickets';
 import notesRoutes from './api/notes';
+import tasksRoutes from './api/tasks';
+import calendarEventsRoutes from './api/calendarEvents';
+import dayRoutes from './api/day';
 import consoleLogsRoutes from './api/console-logs';
 import aiRoutes from './api/ai';
 import aiKeyRoutes from './api/ai-key';
@@ -415,6 +418,9 @@ app.use('/api/projects', projectsRoutes);
 app.use('/api/invites', invitesRoutes);
 app.use('/api/tickets', ticketsRoutes);
 app.use('/api/notes', notesRoutes);
+app.use('/api/tasks', tasksRoutes);
+app.use('/api/calendar-events', calendarEventsRoutes);
+app.use('/api/day', dayRoutes);
 app.use('/api/console-logs', consoleLogsRoutes);
 // Mounted before `aiRoutes` so `/api/ai/key` is matched by its own router rather
 // than falling through to the chat router's handlers.
