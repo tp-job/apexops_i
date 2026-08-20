@@ -532,9 +532,10 @@ function legacyRunsToNodes(runs: LegacyRun[]): Record<string, unknown>[] {
 /**
  * The document to load into the editor for a note that has no `contentRich`.
  *
- * One function so every caller — the notes page, the daily page, anything later —
- * makes the same choice. A legacy HTML note opens as *formatted content*; a plain
- * note opens as paragraphs, exactly as before.
+ * One function so every caller makes the same choice — today that is `NoteForm`
+ * on `/notes`, which is the only writing surface left since the daily page was
+ * folded into it. A legacy HTML note opens as *formatted content*; a plain note
+ * opens as paragraphs, exactly as before.
  */
 export function legacyContentToRichDoc(content: string | null | undefined): Record<string, unknown> {
     if (!content) return { type: 'doc', content: [{ type: 'paragraph' }] };

@@ -62,7 +62,7 @@ Already settled and already acted on in code: `useOptimizationCalendarEvents` is
 | **G0** — this document | ✅ done |
 | **G1** — schema + API + client contract | ✅ migration applied, typechecks clean, timezone unit-verified (12/12 incl. EST→EDT) |
 | **G2** — the merged page UI | ✅ `pages/NotesCalendar.tsx` at `/notes`, verified in-browser against the real DB |
-| **G3** — richer note editor (blocks, tags, colours) | 🔨 in progress 2026-08-20 — see [G3 detail](#g3-detail) |
+| **G3** — richer note editor (blocks, tags, colours) | ✅ 2026-08-20 — three items were already shipped; the legacy-HTML defect that was left is closed. [G3 detail](#g3-detail) |
 
 G2 verification: a note scheduled to **14 Aug** while the system date was 26 Jul persisted and
 rendered on that exact cell of the August grid — the forward-planning case that was impossible
@@ -151,6 +151,37 @@ Each one is an observation. A criterion that cannot fail proves nothing.
    degrades to stripped text, never to visible markup — and reintroduce raw passthrough to watch the
    suite go red.
 9. `tsc`, `eslint`, tests and `build` clean in both workspaces.
+
+### G3 verification — 2026-08-20
+
+Observed against the running app and the dev database, not argued.
+
+| # | Criterion | Evidence |
+|---|---|---|
+| 1 | Blocks persist and re-open | A note holding an `h2` and a two-item bullet list re-opened in the editor as `H2`, `UL` with 2 `<li>`, heading text intact |
+| 2 | Tags | Saved as `["research","roadmap"]`, rendered as two chips; clicking *research* filtered the list from 2 cards to 1 |
+| 3 | Colours | `amber` rendered as `bg-amber-500` on the card dot, and the Amber swatch read `aria-checked="true"` in the form |
+| 4 | No markup, anywhere | `/notes` with the legacy row present: no `<p>` and no `&nbsp;` in the rendered page — previously the card printed both |
+| 5 | Editor shows structure | The legacy note opened as **two real paragraphs**, not as literal text |
+| 6 | Saving normalises the row | After one save: `content` = `"ดดดดดดดดดดดดดดดดดดดดดโ
+1"` (plain), `contentRich` = a two-paragraph document. Before: HTML in `content`, `contentRich` null |
+| 7 | No word lost | Both text runs survived the conversion |
+| 8 | Failure case, watched to fail | Two mutations went red and reverted clean — raw passthrough in `noteDisplayText` (1 assertion), and dropping the residual-markup strip (1) |
+| 9 | Gates | client `tsc` + `eslint` + 138 tests + `build`; server `tsc` + 109 tests. Clean |
+
+**Two defects the tests caught before this shipped**, both in the converter itself:
+
+1. `'<p unclosed'` — a tag with no closing `>` — never matched the tokeniser and reached the reader
+   as **visible markup**, which is the single property the converter exists to guarantee. Fixed with
+   an explicit residual-strip pass.
+2. The detector matched `a < b and c > d` as a `<b>` tag, because it allowed whitespace between `<`
+   and the tag name. That is prose being mistaken for markup — the one false positive that would
+   have rewritten someone's words. HTML does not allow that whitespace either; neither does the
+   detector now.
+
+**Carried:** the rows themselves are still legacy on disk until each is next saved — that is D4
+working as designed, not an omission. `RichTextEditor` has exactly two consumers (`NoteForm` and
+itself), so the conversion has one door.
 
 ## Known risks
 
