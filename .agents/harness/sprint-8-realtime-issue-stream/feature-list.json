@@ -51,8 +51,8 @@
         "The emit happens after commit, never inside the transaction",
         "FAILURE CASE: with the emit forced to throw, ingest still answers 202, still writes event and issue, and is not measurably slower"
       ],
-      "passes": null,
-      "notes": ""
+      "passes": true,
+      "notes": "2026-08-20. OBSERVED LIVE against the dev database, server on PORT=3010/WS=8091, a real member socket joined to project:1. Two POSTs of the same error produced exactly two frames, one each, at +858ms (cold Prisma) and +34ms — inside the 2s criterion. Frames carried absolute count 1 then 2, isNew true then false, level, status and ISO lastSeen; no issue body. FAILURE CASE observed, not argued: with emitToRoom patched to throw unconditionally and the server restarted on 3011/8092, ingest still answered 202 (149ms vs 108ms — noise, and the push runs after res.json so it cannot delay the response), the Issue row still incremented to count 2 and the Event row was still written; the throw surfaced only as 'issue activity emit failed' in the server log. The emit loop got its own try/catch: the outer catch would otherwise answer 500 after the 202 was already sent. The frame for a regression is built from the reopened row, so it arrives as unresolved rather than resolved. Unit side: buildIssueFrame, 5 assertions including an idempotence check that applying one frame twice lands on the same count."
     },
     {
       "id": "F004",

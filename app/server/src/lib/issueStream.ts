@@ -43,3 +43,63 @@ export function decideIssueStreamJoin(input: {
     if (!input.membership) return { ok: false, error: STREAM_ERR_REFUSED };
     return { ok: true, room: projectRoom(input.membership.project.id) };
 }
+
+// ── The frame (R-D1) ─────────────────────────────────────────
+
+/**
+ * What ingest pushes into `project:<id>`.
+ *
+ * Small and **absolute-valued**: `count` is the new total, never `+1`. Sockets
+ * drop, reconnect and replay, and an increment over an unreliable transport is
+ * how a counting tool starts lying — this product's whole credibility is its
+ * counts. Applied twice, an absolute value is the same value, so double
+ * application is harmless by construction rather than by care.
+ *
+ * Not the issue object: the list is server-filtered, server-sorted and paged,
+ * and the room has no idea what filter a given client is on. Whether a row
+ * belongs in a view is decided where the query state lives (R-D2).
+ */
+export interface IssueActivityFrame {
+    issueId: number;
+    projectId: number;
+    fingerprint: string;
+    level: string;
+    status: string;
+    /** Absolute total after this batch. Never a delta. */
+    count: number;
+    /** ISO 8601. */
+    lastSeen: string;
+    /** First time this fingerprint has been seen — the client may prepend it. */
+    isNew: boolean;
+}
+
+/**
+ * Was this issue created by the batch that just ran, or updated?
+ *
+ * Prisma's `upsert` does not say which branch it took, and both branches write
+ * the same `now`. Equal timestamps therefore mean "created", with one benign
+ * ambiguity: an issue created and hit again inside the same millisecond by a
+ * *second* request reads as new. That costs nothing, because the client checks
+ * "already on screen" before it checks `isNew` (R-D2) — a row it already holds
+ * is patched, never prepended twice.
+ */
+export const isNewIssue = (firstSeen: Date, lastSeen: Date): boolean =>
+    firstSeen.getTime() === lastSeen.getTime();
+
+export function buildIssueFrame(input: {
+    projectId: number;
+    fingerprint: string;
+    level: string;
+    issue: { id: number; status: string; count: number; firstSeen: Date; lastSeen: Date };
+}): IssueActivityFrame {
+    return {
+        issueId: input.issue.id,
+        projectId: input.projectId,
+        fingerprint: input.fingerprint,
+        level: input.level,
+        status: input.issue.status,
+        count: input.issue.count,
+        lastSeen: input.issue.lastSeen.toISOString(),
+        isNew: isNewIssue(input.issue.firstSeen, input.issue.lastSeen),
+    };
+}

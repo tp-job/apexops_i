@@ -139,7 +139,7 @@ describe('issues-join over a real socket', () => {
         const tport = (thrower.address() as { port: number }).port;
 
         const client = ioClient(`http://127.0.0.1:${tport}`, { transports: ['websocket'], forceNew: true });
-        await new Promise((r) => client.on('connect', r));
+        await new Promise<void>((resolve) => { client.on('connect', () => resolve()); });
         client.emit('issues-join', { slug: SLUG });
         expect(await raceFrames(client, ['issues-joined', 'issues-error'], 1000)).toEqual({
             name: 'issues-error',

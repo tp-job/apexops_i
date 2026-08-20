@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+    buildIssueFrame,
     projectRoom,
     isProjectRoom,
     decideIssueStreamJoin,
@@ -53,5 +54,52 @@ describe('decideIssueStreamJoin', () => {
         const missing = decideIssueStreamJoin({ userId: 4, membership: null });
         const foreign = decideIssueStreamJoin({ userId: 9, membership: null });
         expect(missing).toEqual(foreign);
+    });
+});
+
+describe('buildIssueFrame', () => {
+    const base = {
+        projectId: 7,
+        fingerprint: 'abc123',
+        level: 'error',
+        issue: {
+            id: 42,
+            status: 'unresolved',
+            count: 9,
+            firstSeen: new Date('2026-08-20T10:00:00.000Z'),
+            lastSeen: new Date('2026-08-20T10:05:00.000Z'),
+        },
+    };
+
+    it('carries the absolute total, not a delta', () => {
+        expect(buildIssueFrame(base).count).toBe(9);
+    });
+
+    // FAILURE CASE, and the one this whole design is shaped around. A frame whose
+    // count is a delta cannot be told from an absolute one by its type, so the
+    // assertion is on the value: applying the same frame twice must not move it.
+    it('is idempotent by construction — applying it twice lands on the same count', () => {
+        const frame = buildIssueFrame(base);
+        const applyOnce = (row: { count: number }) => ({ ...row, count: frame.count });
+        expect(applyOnce(applyOnce({ count: 1 })).count).toBe(9);
+    });
+
+    it('marks a first sighting as new and a repeat as not new', () => {
+        const at = new Date('2026-08-20T10:00:00.000Z');
+        expect(buildIssueFrame({ ...base, issue: { ...base.issue, firstSeen: at, lastSeen: at } }).isNew).toBe(true);
+        expect(buildIssueFrame(base).isNew).toBe(false);
+    });
+
+    it('carries the post-flip status so a regression arrives as unresolved', () => {
+        const frame = buildIssueFrame({ ...base, issue: { ...base.issue, status: 'unresolved' } });
+        expect(frame.status).toBe('unresolved');
+    });
+
+    it('serialises lastSeen as ISO 8601 and carries no issue body', () => {
+        const frame = buildIssueFrame(base);
+        expect(frame.lastSeen).toBe('2026-08-20T10:05:00.000Z');
+        expect(Object.keys(frame).sort()).toEqual(
+            ['count', 'fingerprint', 'isNew', 'issueId', 'lastSeen', 'level', 'projectId', 'status'].sort()
+        );
     });
 });

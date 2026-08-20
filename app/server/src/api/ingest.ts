@@ -5,6 +5,8 @@ import { fingerprintEvent } from '../lib/fingerprint';
 import { ingestSchema, MAX_BATCH_EVENTS } from '../schemas/ingest.schema';
 import { isIngestKeyShaped } from '../lib/projectKeys';
 import { dispatchRegressionAlert, type RegressionAlertInput } from '../lib/alerts';
+import { emitToRoom } from '../lib/realtime';
+import { buildIssueFrame, projectRoom, type IssueActivityFrame } from '../lib/issueStream';
 import { Prisma } from '@prisma/client';
 
 /**
@@ -194,6 +196,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         let accepted = 0;
         const issueIds: number[] = [];
         const regressionAlerts: RegressionAlertInput[] = [];
+        const frames: IssueActivityFrame[] = [];
 
         for (const g of groups.values()) {
             // Upsert on @@unique([projectId, fingerprint]) — concurrent batches for
@@ -214,7 +217,11 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
                     count: { increment: g.count },
                     lastSeen: now,
                 },
-                select: { id: true, status: true },
+                // `count`, `lastSeen` and `firstSeen` are selected for the socket
+                // frame (R-D1) — the push carries the new *total*, read back from
+                // the row that was just written rather than computed here. No extra
+                // query: this is the same round trip that was already happening.
+                select: { id: true, status: true, count: true, firstSeen: true, lastSeen: true },
             });
 
             // A resolved issue that happens again is a REGRESSION and has to come
@@ -235,7 +242,10 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
                             reopenCount: { increment: 1 },
                             lastReopenedAt: now,
                         },
-                        select: { id: true, title: true, culprit: true, reopenCount: true },
+                        select: {
+                            id: true, title: true, culprit: true, reopenCount: true,
+                            status: true, count: true, firstSeen: true, lastSeen: true,
+                        },
                     }),
                     prisma.issueStatusChange.create({
                         data: {
@@ -262,6 +272,17 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
                     culprit: reopened.culprit,
                     reopenCount: reopened.reopenCount,
                 });
+
+                // The reopened row, not the pre-flip one: a regression has to reach
+                // the live list as `unresolved`, or the page shows it resolved while
+                // it is actively firing.
+                frames.push(buildIssueFrame({
+                    projectId: project.id, fingerprint: g.fingerprint, level: g.level, issue: reopened,
+                }));
+            } else {
+                frames.push(buildIssueFrame({
+                    projectId: project.id, fingerprint: g.fingerprint, level: g.level, issue,
+                }));
             }
 
             issueIds.push(issue.id);
@@ -292,9 +313,25 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
             regressions: regressionAlerts.length,
         });
 
-        // Dispatched after the response is sent. The SDK on a third-party page is
-        // waiting on this request; it must not also wait on our outbound webhook.
-        // Errors are contained inside dispatchRegressionAlert.
+        // Both fan-outs below run AFTER the response and after every write has
+        // committed (R-D4). Ingest is the hot path: an event recorded but not
+        // broadcast is cosmetic, an event lost because a broadcast threw is data
+        // loss. Neither adds an awaited step before the 202, and neither can throw
+        // into this handler — `emitToRoom` catches internally, as does
+        // `dispatchRegressionAlert`.
+        // Guarded a second time even though `emitToRoom` already swallows. The
+        // outer catch would answer 500 on a throw — and the 202 has already been
+        // written, so that becomes a double-send on top of a broadcast bug. The
+        // reporting client must not be able to tell that the socket layer broke.
+        try {
+            const room = projectRoom(project.id);
+            for (const frame of frames) {
+                emitToRoom(room, 'issue-activity', frame);
+            }
+        } catch (err) {
+            console.error('issue activity emit failed:', err);
+        }
+
         for (const alert of regressionAlerts) {
             void dispatchRegressionAlert(alert);
         }
