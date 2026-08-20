@@ -4,6 +4,10 @@ import {
     RICH_TEXT_MAX_BYTES,
     isEmptyRichDoc,
     isRichDocTooLarge,
+    legacyContentToRichDoc,
+    legacyHtmlToRichDoc,
+    looksLikeLegacyHtml,
+    noteDisplayText,
     plainTextToRichDoc,
     richDocToPlainText,
     sameRichDoc,
@@ -171,5 +175,129 @@ describe('sanitizeImageSrc', () => {
         expect(sanitizeImageSrc('/uploads/a.png')).toBeNull();
         expect(sanitizeImageSrc('//evil.com/a.png')).toBeNull();
         expect(sanitizeImageSrc('')).toBeNull();
+    });
+});
+
+describe('looksLikeLegacyHtml', () => {
+    it('recognises what the pre-reset editor wrote', () => {
+        expect(looksLikeLegacyHtml('<p>hello</p>')).toBe(true);
+        expect(looksLikeLegacyHtml('a&nbsp;b')).toBe(true);
+        expect(looksLikeLegacyHtml('<DIV>shouty</DIV>')).toBe(true);
+    });
+
+    // The narrow test is the point: prose about inequalities is not markup, and
+    // running it through the converter would rewrite someone's words.
+    it('leaves prose alone', () => {
+        expect(looksLikeLegacyHtml('a < b and c > d')).toBe(false);
+        expect(looksLikeLegacyHtml('use <- for assignment')).toBe(false);
+        expect(looksLikeLegacyHtml('plain note')).toBe(false);
+        expect(looksLikeLegacyHtml('')).toBe(false);
+        expect(looksLikeLegacyHtml(null)).toBe(false);
+    });
+});
+
+describe('legacyHtmlToRichDoc', () => {
+    it('turns paragraphs into paragraphs, and never leaves markup in the text', () => {
+        const doc = legacyHtmlToRichDoc('<p>first</p><p>second</p>');
+        expect(doc).toEqual({
+            type: 'doc',
+            content: [
+                { type: 'paragraph', content: [{ type: 'text', text: 'first' }] },
+                { type: 'paragraph', content: [{ type: 'text', text: 'second' }] },
+            ],
+        });
+        expect(richDocToPlainText(doc)).toBe('first\nsecond');
+    });
+
+    it('decodes the entities the old editor emitted', () => {
+        const text = richDocToPlainText(legacyHtmlToRichDoc('<p>a&nbsp;b &amp; c &lt;d&gt;</p>'));
+        expect(text).toContain('&');
+        expect(text).toContain('<d>');
+        expect(text).not.toContain('&nbsp;');
+        expect(text).not.toContain('&amp;');
+    });
+
+    it('keeps headings, lists and quotes as structure rather than as text', () => {
+        const doc = legacyHtmlToRichDoc(
+            '<h2>Title</h2><ul><li>one</li><li>two</li></ul><blockquote>said</blockquote>',
+        ) as { content: { type: string; attrs?: { level?: number }; content?: unknown[] }[] };
+        expect(doc.content.map((n) => n.type)).toEqual(['heading', 'bulletList', 'blockquote']);
+        expect(doc.content[0].attrs?.level).toBe(2);
+        expect(doc.content[1].content).toHaveLength(2);
+    });
+
+    it('groups consecutive items into one list and starts a new one for a new kind', () => {
+        const doc = legacyHtmlToRichDoc('<ul><li>a</li><li>b</li></ul><ol><li>c</li></ol>') as {
+            content: { type: string }[];
+        };
+        expect(doc.content.map((n) => n.type)).toEqual(['bulletList', 'orderedList']);
+    });
+
+    it('carries bold, italic and links across as marks', () => {
+        const doc = legacyHtmlToRichDoc('<p><strong>bold</strong> and <a href="https://x.test">link</a></p>') as {
+            content: { content: { text?: string; marks?: { type: string; attrs?: { href?: string } }[] }[] }[];
+        };
+        const runs = doc.content[0].content;
+        expect(runs[0]).toMatchObject({ text: 'bold', marks: [{ type: 'bold' }] });
+        expect(runs.at(-1)).toMatchObject({ marks: [{ type: 'link', attrs: { href: 'https://x.test' } }] });
+    });
+
+    it('makes <br> a hard break instead of a literal newline in a text node', () => {
+        const doc = legacyHtmlToRichDoc('<p>a<br>b</p>') as { content: { content: { type: string }[] }[] };
+        expect(doc.content[0].content.map((n) => n.type)).toEqual(['text', 'hardBreak', 'text']);
+        expect(richDocToPlainText(doc)).toContain('a');
+        expect(richDocToPlainText(doc)).toContain('b');
+    });
+
+    it('projects an image as its alt text and never as its URL', () => {
+        const text = richDocToPlainText(legacyHtmlToRichDoc('<p><img src="https://x.test/a.png" alt="a chart"></p>'));
+        expect(text).toBe('a chart');
+        expect(text).not.toContain('http');
+    });
+
+    it('drops script and style bodies rather than reading them out', () => {
+        const text = richDocToPlainText(
+            legacyHtmlToRichDoc('<p>keep</p><script>alert(1)</script><style>.x{color:red}</style>'),
+        );
+        expect(text).toBe('keep');
+    });
+
+    // FAILURE CASE — the property the whole converter exists for. Whatever it is
+    // handed, the reader must never be shown markup.
+    it('degrades unparseable input to stripped text, never to visible markup', () => {
+        const nasty = '<weird-tag data-x="<">  &notanentity; <p unclosed';
+        const text = richDocToPlainText(legacyHtmlToRichDoc(nasty));
+        expect(text).not.toMatch(/<\s*\/?\s*(p|div|weird-tag)/i);
+        expect(text).toContain('&notanentity;');
+    });
+
+    it('loses no word from a real legacy note', () => {
+        const html = '<p>ดดดด</p><p>&nbsp; &nbsp; keep this</p><p>&nbsp;1&nbsp;</p>';
+        const text = richDocToPlainText(legacyHtmlToRichDoc(html));
+        expect(text).toContain('ดดดด');
+        expect(text).toContain('keep this');
+        expect(text).toContain('1');
+        expect(text).not.toContain('<p>');
+    });
+});
+
+describe('noteDisplayText / legacyContentToRichDoc', () => {
+    it('passes plain content through untouched', () => {
+        expect(noteDisplayText('just a note')).toBe('just a note');
+        expect(legacyContentToRichDoc('just a note')).toEqual(plainTextToRichDoc('just a note'));
+    });
+
+    it('renders a legacy row as text a person can read', () => {
+        expect(noteDisplayText('<p>hello</p><p>world</p>')).toBe('hello\nworld');
+    });
+
+    it('opens a legacy row in the editor as structure, not as literal markup', () => {
+        const doc = legacyContentToRichDoc('<h1>Plan</h1><p>body</p>') as { content: { type: string }[] };
+        expect(doc.content.map((n) => n.type)).toEqual(['heading', 'paragraph']);
+    });
+
+    it('is empty, not a crash, for nothing at all', () => {
+        expect(noteDisplayText(null)).toBe('');
+        expect(legacyContentToRichDoc(null)).toEqual(EMPTY_RICH_DOC);
     });
 });

@@ -49,6 +49,7 @@ import { createNote, deleteNote, toggleNotePin, updateNote } from '@/services/no
 import type { Note } from '@/types/notes';
 import { DAILY_TAG } from '@/lib/dailyTodos';
 import { NOTE_COLORS, colorFor } from '@/lib/noteColors';
+import { legacyContentToRichDoc, looksLikeLegacyHtml, noteDisplayText } from '@/lib/richText';
 import NoteForm, { type NoteDraft } from '@/components/notes/NoteForm';
 
 /** A blank note, shared by the create form and the edit dialog's reset. */
@@ -86,7 +87,7 @@ const NOTE_ACCENT: Record<string, string> = {
 /** Case-insensitive match across the fields a person would expect to search. */
 const matchesQuery = (note: Note, q: string): boolean => {
     if (!q) return true;
-    const hay = [note.title, note.content, ...(note.tags ?? [])].join(' ').toLowerCase();
+    const hay = [note.title, noteDisplayText(note.content), ...(note.tags ?? [])].join(' ').toLowerCase();
     return hay.includes(q);
 };
 
@@ -158,9 +159,13 @@ const NoteCard: FC<{
                         </button>
                     </div>
 
-                    {note.content && (
+                    {noteDisplayText(note.content) && (
                         <p className="line-clamp-3 whitespace-pre-wrap text-xs leading-relaxed text-gray-600 dark:text-gray-400">
-                            {note.content}
+                            {/* A note written before the UI reset holds HTML in
+                                `content`; printing it raw showed the reader `<p>`
+                                and `&nbsp;`. One converter, at the one place that
+                                knows this column can be legacy (D4). */}
+                            {noteDisplayText(note.content)}
                         </p>
                     )}
 
@@ -257,8 +262,14 @@ const EditNoteDialog: FC<{
     useEffect(() => {
         setDraft({
             title: note?.title ?? '',
-            doc: (note?.contentRich as JSONContent | null) ?? null,
-            text: note?.content ?? '',
+            // A legacy HTML note has no `contentRich`, so the draft is seeded with
+            // the *converted* document rather than null. Without this, saving an
+            // untouched legacy note would write the plain projection and silently
+            // drop the structure the editor is showing on screen.
+            doc:
+                (note?.contentRich as JSONContent | null) ??
+                (looksLikeLegacyHtml(note?.content) ? (legacyContentToRichDoc(note?.content) as JSONContent) : null),
+            text: noteDisplayText(note?.content),
             color: note?.color ?? null,
             tags: (note?.tags ?? []).join(', '),
         });
@@ -1145,9 +1156,9 @@ const NotesCalendar: FC = () => {
                                                         </Badge>
                                                     )}
                                                 </div>
-                                                {n.content && (
+                                                {noteDisplayText(n.content) && (
                                                     <p className="line-clamp-2 text-xs text-gray-500 dark:text-gray-400">
-                                                        {n.content}
+                                                        {noteDisplayText(n.content)}
                                                     </p>
                                                 )}
                                             </li>
