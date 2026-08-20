@@ -2,6 +2,8 @@ import express, { Request, Response } from 'express';
 import prisma from '../lib/prisma';
 import { validate } from '../middleware/validate';
 import { isProjectMember, resolveMembership } from '../lib/projectAccess';
+import { emitToRoom } from '../lib/realtime';
+import { buildIssueFrame, projectRoom } from '../lib/issueStream';
 import { symbolicate } from '../lib/sourcemaps';
 import {
     listIssuesQuerySchema,
@@ -39,6 +41,31 @@ const issueSelect = {
 } as const;
 
 type IssueRow = Prisma.IssueGetPayload<{ select: typeof issueSelect }>;
+
+/**
+ * Push a status or promote change into the project's live issue list.
+ *
+ * Ingest is not the only thing that changes a row: a resolve in one window has
+ * to reach the other windows, or two people work the same bug. Same rules as the
+ * ingest push (R-D4) — after the write, detached, and it can never fail the
+ * request that triggered it.
+ *
+ * `isNew: false` always. A human acting on an issue is never a first sighting,
+ * whatever the timestamps happen to say.
+ */
+const pushIssueChange = (projectId: number, issue: IssueRow): void => {
+    try {
+        emitToRoom(projectRoom(projectId), 'issue-activity', buildIssueFrame({
+            projectId,
+            fingerprint: issue.fingerprint,
+            level: issue.level,
+            issue,
+            isNew: false,
+        }));
+    } catch (err) {
+        console.error('issue activity emit failed:', err);
+    }
+};
 
 const formatIssue = (i: IssueRow) => ({
     id: i.id,
@@ -345,6 +372,7 @@ router.patch('/:id', validate(updateIssueSchema), async (req: Request, res: Resp
         ]);
 
         res.json(formatIssue(issue));
+        pushIssueChange(found.project.id, issue);
     } catch (err: any) {
         console.error('Error updating issue:', err);
         res.status(500).json({ error: err.message || 'Failed to update issue' });
@@ -432,6 +460,10 @@ router.post('/:id/ticket', validate(promoteIssueSchema), async (req: Request, re
             },
             issue: { ...formatIssue(issue), ticketId: ticket.id },
         });
+
+        // The row that was just linked, not the pre-promote read: another window
+        // must stop offering "Create ticket" for work that now has one.
+        pushIssueChange(found.project.id, { ...issue, ticketId: ticket.id });
     } catch (err: any) {
         if (err.code === 'P2002') {
             res.status(409).json({ error: 'This issue has already been promoted to a ticket' });

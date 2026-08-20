@@ -8,6 +8,14 @@ import { reconcileIssueFrame, type IssueActivityFrame, type StreamStatus } from 
 
 const PAGE_SIZE = 25;
 
+/**
+ * How long to wait before filling in a prepended placeholder's body.
+ *
+ * Long enough that a burst of new fingerprints becomes one request, short enough
+ * that nobody reads the placeholder text and wonders what it means.
+ */
+const HYDRATE_DEBOUNCE_MS = 600;
+
 export interface IssueQuery {
     level: string;
     status: string;
@@ -107,11 +115,36 @@ export function useIssues(slug: string | undefined, projectId: number | null = n
         void load();
     }, [load]);
 
+    // Always the loader for the *current* query — the debounce below may fire
+    // after a filter change, and refetching the previous query would overwrite
+    // the list the user is now looking at.
+    const loadRef = useRef(load);
+    loadRef.current = load;
+
     // The live feed. `queryRef` rather than a dependency: the frame handler must
     // see the *current* filter and page without the socket being torn down and
     // rebuilt every time either changes.
     const queryRef = useRef({ issues, filtered, page: query.page, projectId });
     queryRef.current = { issues, filtered, page: query.page, projectId };
+
+    // A prepended row is a placeholder: the frame carries no title or culprit by
+    // design (R-D1), so the row would otherwise sit there reading "New issue"
+    // until something else refetched. One debounced refetch fills in the body and
+    // coalesces a burst of new fingerprints into a single request.
+    //
+    // This is only ever scheduled by a prepend. A count tick on a row already on
+    // screen still refetches nothing — that is the case R-D2 forbids it for.
+    const hydrateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const scheduleHydrate = useCallback(() => {
+        if (hydrateTimer.current) clearTimeout(hydrateTimer.current);
+        hydrateTimer.current = setTimeout(() => {
+            hydrateTimer.current = null;
+            void loadRef.current();
+        }, HYDRATE_DEBOUNCE_MS);
+    }, []);
+    useEffect(() => () => {
+        if (hydrateTimer.current) clearTimeout(hydrateTimer.current);
+    }, []);
 
     const onFrame = useCallback((frame: IssueActivityFrame) => {
         const { issues: current, filtered: isFiltered, page, projectId: viewing } = queryRef.current;
@@ -127,12 +160,13 @@ export function useIssues(slug: string | undefined, projectId: number | null = n
         else if (outcome.kind === 'prepended') {
             setIssues(outcome.issues);
             setTotal(outcome.total);
+            scheduleHydrate();
         } else if (outcome.kind === 'deferred') {
             // A row that cannot be shown is counted, not hidden: the banner is the
             // difference between "quiet" and "you are looking at a stale list".
             setPendingNew((n) => n + 1);
         }
-    }, [total]);
+    }, [total, scheduleHydrate]);
 
     const onResync = useCallback(() => {
         // Pushes missed while disconnected are gone (R-D5). One refetch of the

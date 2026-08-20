@@ -49,6 +49,22 @@ Not the full issue object, because the list is server-filtered, server-sorted an
 server room has no idea what filter the client is on, so it cannot know whether a given issue belongs
 in that client's current view. That decision has to live where the query state lives (R-D2).
 
+#### R-D1a — Amendment, 2026-08-20: the frame also carries `ticketId`, and status changes emit
+
+Two additions made during G2/G3, recorded here rather than applied quietly:
+
+1. **`ticketId: number | null` joins the frame.** Acceptance criterion 5 and ledger item F006 both
+   require a promote in one window to reach another, and `status` cannot express it — a promoted
+   issue is still `unresolved`. Without it a second window keeps offering *Create ticket* for work
+   that already has one, and the click 409s. The field keeps every property R-D1 was protecting:
+   absolute, small, and not the issue body.
+2. **`PATCH /:id` and `POST /:id/ticket` emit too.** R-D4 named ingest because ingest is the hot
+   path, but ingest is not the only writer of these rows. Both use the same builder, both push
+   *after* the response, both are wrapped, and both force `isNew: false` — a human acting on an
+   issue is never a first sighting whatever the timestamps say.
+
+Neither changes the reconciliation rules below.
+
 ### R-D2 — The client reconciles against its own query; it never blind-inserts
 
 `useIssues` owns filter, sort and page in the URL. On a push it:

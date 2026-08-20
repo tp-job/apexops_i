@@ -90,6 +90,17 @@ describe('buildIssueFrame', () => {
         expect(buildIssueFrame(base).isNew).toBe(false);
     });
 
+    it('carries ticketId so another window stops offering "Create ticket"', () => {
+        expect(buildIssueFrame(base).ticketId).toBeNull();
+        expect(buildIssueFrame({ ...base, issue: { ...base.issue, ticketId: 12 } }).ticketId).toBe(12);
+    });
+
+    it('honours an explicit isNew — a status change is never a first sighting', () => {
+        const at = new Date('2026-08-20T10:00:00.000Z');
+        const frame = buildIssueFrame({ ...base, issue: { ...base.issue, firstSeen: at, lastSeen: at }, isNew: false });
+        expect(frame.isNew).toBe(false);
+    });
+
     it('carries the post-flip status so a regression arrives as unresolved', () => {
         const frame = buildIssueFrame({ ...base, issue: { ...base.issue, status: 'unresolved' } });
         expect(frame.status).toBe('unresolved');
@@ -99,7 +110,7 @@ describe('buildIssueFrame', () => {
         const frame = buildIssueFrame(base);
         expect(frame.lastSeen).toBe('2026-08-20T10:05:00.000Z');
         expect(Object.keys(frame).sort()).toEqual(
-            ['count', 'fingerprint', 'isNew', 'issueId', 'lastSeen', 'level', 'projectId', 'status'].sort()
+            ['count', 'fingerprint', 'isNew', 'issueId', 'lastSeen', 'level', 'projectId', 'status', 'ticketId'].sort()
         );
     });
 });

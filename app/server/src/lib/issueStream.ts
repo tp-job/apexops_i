@@ -69,6 +69,18 @@ export interface IssueActivityFrame {
     count: number;
     /** ISO 8601. */
     lastSeen: string;
+    /**
+     * Non-null once promoted, so a second window stops offering "Create ticket"
+     * for work that already has one.
+     *
+     * **This field is an amendment to R-D1**, which listed the frame's contents
+     * without it. Added because acceptance criterion 5 and ledger item F006 both
+     * require a promote in one window to reach another, and status alone cannot
+     * express it. It keeps every property R-D1 was protecting: absolute, small,
+     * and not the issue body. Recorded in the decisions doc rather than changed
+     * quietly.
+     */
+    ticketId: number | null;
     /** First time this fingerprint has been seen — the client may prepend it. */
     isNew: boolean;
 }
@@ -90,7 +102,19 @@ export function buildIssueFrame(input: {
     projectId: number;
     fingerprint: string;
     level: string;
-    issue: { id: number; status: string; count: number; firstSeen: Date; lastSeen: Date };
+    issue: {
+        id: number;
+        status: string;
+        count: number;
+        firstSeen: Date;
+        lastSeen: Date;
+        ticketId?: number | null;
+    };
+    /**
+     * Override for callers that know better than the timestamps — a status change
+     * or a promote is never a first sighting, whatever the clock says.
+     */
+    isNew?: boolean;
 }): IssueActivityFrame {
     return {
         issueId: input.issue.id,
@@ -100,6 +124,7 @@ export function buildIssueFrame(input: {
         status: input.issue.status,
         count: input.issue.count,
         lastSeen: input.issue.lastSeen.toISOString(),
-        isNew: isNewIssue(input.issue.firstSeen, input.issue.lastSeen),
+        ticketId: input.issue.ticketId ?? null,
+        isNew: input.isNew ?? isNewIssue(input.issue.firstSeen, input.issue.lastSeen),
     };
 }

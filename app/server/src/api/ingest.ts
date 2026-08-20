@@ -221,7 +221,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
                 // frame (R-D1) — the push carries the new *total*, read back from
                 // the row that was just written rather than computed here. No extra
                 // query: this is the same round trip that was already happening.
-                select: { id: true, status: true, count: true, firstSeen: true, lastSeen: true },
+                select: { id: true, status: true, count: true, firstSeen: true, lastSeen: true, ticketId: true },
             });
 
             // A resolved issue that happens again is a REGRESSION and has to come
@@ -244,7 +244,7 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
                         },
                         select: {
                             id: true, title: true, culprit: true, reopenCount: true,
-                            status: true, count: true, firstSeen: true, lastSeen: true,
+                            status: true, count: true, firstSeen: true, lastSeen: true, ticketId: true,
                         },
                     }),
                     prisma.issueStatusChange.create({

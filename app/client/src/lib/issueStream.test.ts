@@ -45,6 +45,7 @@ const frame = (over: Partial<IssueActivityFrame> = {}): IssueActivityFrame => ({
     status: 'unresolved',
     count: 9,
     lastSeen: '2026-08-20T11:00:00.000Z',
+    ticketId: null,
     isNew: false,
     ...over,
 });
@@ -76,6 +77,14 @@ describe('reconcileIssueFrame — a row already on screen', () => {
         const twice = reconcileIssueFrame(state({ issues: once.issues }), frame({ count: 9 }));
         expect(twice.kind).toBe('ignored');
         expect(once.issues[1].count).toBe(9);
+    });
+
+    // F006 — a promote in one window has to reach the others, or two people work
+    // the same bug and the second gets a 409 from a button that should be gone.
+    it('carries a promote done in another window through as a ticket link', () => {
+        const r = reconcileIssueFrame(state(), frame({ ticketId: 31 }));
+        if (r.kind !== 'patched') throw new Error('expected patched');
+        expect(r.issues[1].ticketId).toBe(31);
     });
 
     it('carries a resolve done in another window through as a status change', () => {
@@ -148,6 +157,7 @@ describe('isIssueActivityFrame', () => {
         expect(isIssueActivityFrame('issue')).toBe(false);
         expect(isIssueActivityFrame({ ...frame(), count: '9' })).toBe(false);
         expect(isIssueActivityFrame({ ...frame(), isNew: undefined })).toBe(false);
+        expect(isIssueActivityFrame({ ...frame(), ticketId: 'TICK-1' })).toBe(false);
     });
 });
 

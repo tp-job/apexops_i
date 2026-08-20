@@ -23,6 +23,8 @@ export interface IssueActivityFrame {
     /** Absolute total, never a delta (R-D1). */
     count: number;
     lastSeen: string;
+    /** Non-null once promoted — a second window must stop offering "Create ticket". */
+    ticketId: number | null;
     isNew: boolean;
 }
 
@@ -57,6 +59,7 @@ export function isIssueActivityFrame(value: unknown): value is IssueActivityFram
         typeof f.count === 'number' &&
         typeof f.lastSeen === 'string' &&
         typeof f.status === 'string' &&
+        (f.ticketId === null || typeof f.ticketId === 'number') &&
         typeof f.isNew === 'boolean'
     );
 }
@@ -96,13 +99,15 @@ export function reconcileIssueFrame(state: IssueListState, frame: IssueActivityF
             count: frame.count,
             lastSeen: frame.lastSeen,
             status: frame.status as IssueStatus,
+            ticketId: frame.ticketId,
         };
         // Untouched if nothing actually changed, so a replayed frame after a
         // reconnect does not re-render the list for no reason.
         if (
             current.count === patched.count &&
             current.lastSeen === patched.lastSeen &&
-            current.status === patched.status
+            current.status === patched.status &&
+            current.ticketId === patched.ticketId
         ) {
             return { kind: 'ignored' };
         }
@@ -128,7 +133,7 @@ export function reconcileIssueFrame(state: IssueListState, frame: IssueActivityF
         count: frame.count,
         firstSeen: frame.lastSeen,
         lastSeen: frame.lastSeen,
-        ticketId: null,
+        ticketId: frame.ticketId,
         reopenCount: 0,
         lastReopenedAt: null,
     };
