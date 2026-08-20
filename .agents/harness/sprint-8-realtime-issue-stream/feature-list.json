@@ -33,8 +33,8 @@
         "The SDK's anonymous socket cannot join",
         "FAILURE CASE: a non-member receives ZERO frames for that project, asserted on the wire, not by an empty UI"
       ],
-      "passes": null,
-      "notes": ""
+      "passes": true,
+      "notes": "2026-08-20. lib/issueStream.ts (decision, 7 assertions) + lib/issueStreamHandler.ts driven by a REAL socket.io server and real clients in issueStreamHandler.test.ts (5 assertions). The failure case is a wire assertion as the step demands: a signed-in non-member is refused, then 5 frames are emitted into project:1 and the outsider's received array is [] after a 300ms window. Same for the anonymous SDK socket. Refusal string is identical for 'no such project' and 'not yours' so the socket is not a slug oracle. Membership lookup throwing fails CLOSED. Mutation-checked: admitting a null membership turns 4 of these red (named), and reverting turns them green."
     },
     {
       "id": "F003",
