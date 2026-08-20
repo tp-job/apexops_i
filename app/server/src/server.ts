@@ -32,6 +32,7 @@ import {
     type MonitorAdmit,
 } from './lib/monitorAccess';
 import { scheduleRetentionPrune } from './lib/retention';
+import { registerRealtime } from './lib/realtime';
 
 // ── Express App ──────────────────────────────────────────────
 const app = express();
@@ -52,6 +53,11 @@ const server = http.createServer();
 const io = new SocketIOServer(server, {
     cors: { origin: '*', methods: ['GET', 'POST'] },
 });
+
+// Published through a registry rather than exported (R-D4). `api/ingest.ts` needs
+// a seam to push issue activity through, and importing this file from a router
+// that this file mounts is a cycle.
+registerRealtime(io);
 
 // The native WebSocket relay that used to listen on :8082 was REMOVED (spec D6,
 // .agents/docs/features/project-workspaces-and-sdk.md). It accepted unauthenticated

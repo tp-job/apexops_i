@@ -16,14 +16,16 @@
         "A call before boot is a no-op, not a crash",
         "FAILURE CASE: no import cycle — verified by the build, not by reading"
       ],
-      "passes": null,
-      "notes": ""
+      "passes": true,
+      "notes": "2026-08-20. server/src/lib/realtime.ts + realtime.test.ts (4 assertions). server.ts:60 registers io at boot. Before-boot emit returns false and does not throw; a throwing transport is swallowed and reported false. No-cycle proof is stronger than a read: the module's only import is `import type`, so dist/lib/realtime.js emits zero require() calls — there is no runtime edge to form a cycle through. The 'ingest imports only the registry' half of step 2 is asserted under F003, where that import is actually written."
     },
     {
       "id": "F002",
       "title": "project:<id> room, gated by resolveMembership",
       "priority": "critical",
-      "depends_on": ["F001"],
+      "depends_on": [
+        "F001"
+      ],
       "description": "R-D3. Joining is authorized, not merely authenticated. An authenticated-only room is a cross-project leak — the third occurrence of the defect that deleted the :8082 relay and forced the monitors room to gate itself.",
       "steps": [
         "A member joining project:<id> succeeds",
@@ -38,7 +40,10 @@
       "id": "F003",
       "title": "Ingest emits absolute-valued deltas, post-commit and detached",
       "priority": "critical",
-      "depends_on": ["F001", "F002"],
+      "depends_on": [
+        "F001",
+        "F002"
+      ],
       "description": "R-D1 + R-D4. count is the new total, never +1: sockets drop and replay, and an increment over an unreliable transport is how a counting tool starts lying. The emit runs after the transaction commits, wrapped, and can never fail or slow ingest.",
       "steps": [
         "An ingested error produces one frame on project:<id> within 2s",
@@ -53,7 +58,9 @@
       "id": "F004",
       "title": "useIssues patches in place — no reorder, no refetch",
       "priority": "critical",
-      "depends_on": ["F003"],
+      "depends_on": [
+        "F003"
+      ],
       "description": "R-D2. A push for an issue already on screen updates count, lastSeen and status in place. Re-sorting a list under a reading cursor is the thing that makes people close the tab.",
       "steps": [
         "The count on a visible issue increments in place",
@@ -67,7 +74,9 @@
       "id": "F005",
       "title": "New issues: conditional prepend, banner when filtered",
       "priority": "critical",
-      "depends_on": ["F004"],
+      "depends_on": [
+        "F004"
+      ],
       "description": "R-D2. The server room does not know the client's filter, so insertion has to be decided where the query state lives. Injecting a row that does not match the active filter makes the filter look broken.",
       "steps": [
         "isNew on page 1 with no filters prepends and the list still holds exactly pageSize rows",
@@ -83,7 +92,9 @@
       "id": "F006",
       "title": "No double-applied optimistic updates",
       "priority": "critical",
-      "depends_on": ["F004"],
+      "depends_on": [
+        "F004"
+      ],
       "description": "The named risk in the plan and the top item in the pre-mortem. A local optimistic update and the echoed server push both land on the same row; absolute values are what make that harmless.",
       "steps": [
         "Resolve an issue in window A; window B shows resolved once",
@@ -97,7 +108,9 @@
       "id": "F007",
       "title": "Three-state connection badge, never 'live' over a dead feed",
       "priority": "high",
-      "depends_on": ["F004"],
+      "depends_on": [
+        "F004"
+      ],
       "description": "R-D5. 'Nothing is happening' and 'the page stopped listening' look identical, and that is the worst failure a monitoring view has. A boolean cannot express the difference.",
       "steps": [
         "Kill the server: the badge goes reconnecting, then offline",
@@ -112,7 +125,9 @@
       "id": "F008",
       "title": "Socket handshake refreshes its token once",
       "priority": "critical",
-      "depends_on": ["F007"],
+      "depends_on": [
+        "F007"
+      ],
       "description": "R-D6, and the one that decides whether this sprint is real. lib/authSession.ts covers four HTTP transports and explicitly not sockets. A tab past token expiry reconnects with a stale token, io.use throws, and the feed dies silently while the page still renders signed-in — the exact shape of the Sprint 1 defect.",
       "steps": [
         "Leave a tab open past access-token expiry: it keeps streaming",
@@ -127,7 +142,10 @@
       "id": "F009",
       "title": "The suite proves its worth: reintroduce the count drift",
       "priority": "critical",
-      "depends_on": ["F003", "F004"],
+      "depends_on": [
+        "F003",
+        "F004"
+      ],
       "description": "Same discipline as Sprint 7's F011. A test that has never failed has proven nothing, and count drift is the failure this whole design is shaped to prevent.",
       "steps": [
         "Reintroduce an increment-based count (count += 1) and the suite goes red naming the drift",
@@ -141,7 +159,9 @@
       "id": "F010",
       "title": "Clean build, green suite, and the plan corrected",
       "priority": "high",
-      "depends_on": ["F009"],
+      "depends_on": [
+        "F009"
+      ],
       "description": "sprint-plan.md:375 claims every sprint has shipped. It is the document-precedence rule's own failure mode, and it gets fixed in the same PR as the code rather than 'at the end'.",
       "steps": [
         "tsc --noEmit, eslint src and npm run build clean in both workspaces",
