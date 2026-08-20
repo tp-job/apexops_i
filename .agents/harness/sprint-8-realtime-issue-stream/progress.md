@@ -60,3 +60,46 @@ refresh coordinator and covers four HTTP transports; sockets are recorded there 
 covered. Sprint 3's own exit criterion is *"leave a tab open past token expiry — it keeps streaming"*,
 which cannot pass without it. It is also the first time anything will drive that coordinator from
 outside an HTTP transport, so it is the most likely item to run long.
+
+---
+
+## 2026-08-20 — build opened, target re-verified against the tree
+
+The spec was written 2026-08-07 and nothing was built. Sprints 9, 11 and 12 landed in between, so
+the target was re-audited before consuming it rather than trusted because it is written down.
+
+| Spec claim (2026-08-07) | Re-checked 2026-08-20 | Still true |
+|---|---|---|
+| `hooks/useIssues.ts` has no socket and no poll | `grep socket\|setInterval` → no hits; `load()` runs on mount and on query change only | yes |
+| `io` is not exported from `server.ts` | [`server.ts:52`](../../../app/server/src/server.ts) — `const io`, no export | yes |
+| `api/ingest.ts` never touches `io` | no `io` and no `emit` in the file | yes |
+| `server/src/lib/realtime.ts` does not exist | missing | yes |
+| `sprint-plan.md` still claims every sprint shipped | line still present | yes |
+
+**All six gates and ten ledger features stand unchanged.** Stage 1 and Stage 2 were closed on
+2026-08-07; this session consumes them and does not re-derive them.
+
+Harness moved out of `.agents/docs/archive/` into `.agents/harness/sprint-8-realtime-issue-stream/`
+to match the sprint-11 and sprint-12 layout — it was archived while unbuilt, alongside sprint 9's,
+which is part of how it stayed invisible. Decisions moved to
+[`.agents/docs/features/realtime-issue-stream.md`](../../docs/features/realtime-issue-stream.md),
+which is the path the spec and the ledger already pointed at and which did not exist.
+
+Branch: `sprint-8/realtime-issue-stream`.
+
+### Implementation shape chosen at open (does not alter R-D1..R-D6)
+
+The repo's testable-decision idiom is a **pure module + a thin caller** — `lib/monitorAccess.ts`'s
+`decideMonitorAdmit` next to a `socket.join` that only obeys it. There is no socket or HTTP
+integration harness in this repo (vitest covers pure `lib/*` only), so every decision this sprint
+makes goes into a pure module or it cannot be verified by the suite at all:
+
+| Decision | Pure module | Thin caller |
+|---|---|---|
+| frame shape, absolute values (R-D1) | `server/src/lib/issueStream.ts` | `api/ingest.ts` |
+| room name + join admittance (R-D3) | `server/src/lib/issueStream.ts` | `server.ts` socket handler |
+| reconciliation: patch / prepend / banner (R-D2) | `client/src/lib/issueStream.ts` | `hooks/useIssueStream.ts` |
+| badge state machine (R-D5) | `client/src/lib/issueStream.ts` | badge component |
+
+F009's reintroduced-drift proof is only meaningful against pure modules, so this is what makes that
+ledger item runnable rather than a claim.
