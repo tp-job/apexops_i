@@ -67,8 +67,8 @@
         "The list does not reorder and does not refetch",
         "Two windows on the same project both update, within 2s, once each"
       ],
-      "passes": null,
-      "notes": ""
+      "passes": true,
+      "notes": "2026-08-20. OBSERVED in two browser windows on /p/default/issues. One ingest of an error already on screen: both windows changed EXACTLY ONCE (MutationObserver count 1 each), +156ms, count 3 -> 4, row order unchanged, and read_network_requests shows no issues GET after the push — patched in place, not refetched. The patched row was the LAST one under sort=lastSeen desc and stayed last, which is the no-reorder rule doing its job. Unit side: 6 assertions in client/src/lib/issueStream.test.ts including untouched-object identity for the rows that did not change."
     },
     {
       "id": "F005",
@@ -85,8 +85,8 @@
         "Clicking the banner refetches the current query",
         "FAILURE CASE: a push for a project the client is not viewing is ignored"
       ],
-      "passes": null,
-      "notes": ""
+      "passes": true,
+      "notes": "2026-08-20. OBSERVED. Unfiltered page 1: a new fingerprint prepended within ~200ms and the row count grew by one. With ?q=hydrate active a new non-matching issue did NOT insert — the list stayed at its 2 matching rows and a '1 new issue — show' banner appeared; clicking it cleared the banner and refetched the current query. 'Holds exactly pageSize' is unit-tested rather than observed: the dev project has 7 issues against a pageSize of 25, so a full page could not be shown live. Page > 1 defer and the ignore-other-projects failure case are unit-tested. IMPLEMENTATION NOTE: the frame carries no title by design, so a prepended row is a placeholder and one debounced (600ms) refetch fills in its body; a burst of new fingerprints coalesces into a single request. KNOWN WART, recorded not hidden: the banner counts new issues for the PROJECT, so under a filter it can offer '1 new issue' and then show nothing new after the refetch, because the new issue does not match the filter."
     },
     {
       "id": "F006",
@@ -101,8 +101,8 @@
         "Window A shows no flicker and no doubled count",
         "Promoting an issue to a ticket behaves the same way"
       ],
-      "passes": null,
-      "notes": ""
+      "passes": true,
+      "notes": "2026-08-20. OBSERVED. Resolve clicked in window A (issue detail): window B's list changed exactly once, +163ms, to RESOLVED with count unchanged at 4 and no reorder; window A showed RESOLVED once and occurrences 4 — no doubling, no flicker. Then the same error was ingested again: one change, +186ms, back to UNRESOLVED with absolute count 5 — the regression flip propagates from the reopened row, not the pre-flip one. Promote is covered by the same push: PATCH /:id and POST /:id/ticket both emit (R-D1a amendment — the frame gained ticketId, because status alone cannot tell another window to stop offering 'Create ticket'). Idempotence is unit-asserted twice: applying one frame twice returns 'ignored' the second time."
     },
     {
       "id": "F007",
@@ -118,8 +118,8 @@
         "Restart: it reconnects, refetches the current query, and the list is correct",
         "FAILURE CASE: pushes missed while disconnected are recovered by the refetch, not lost"
       ],
-      "passes": null,
-      "notes": ""
+      "passes": true,
+      "notes": "2026-08-20. OBSERVED end to end on an isolated client (vite :5199 -> API :3013, WS :8099) so the developer's own dev server was never touched. Timeline from the page itself: LIVE -> server killed -> RECONNECTING at +10.6s (socket.io ping timeout) -> OFFLINE at +30.8s -> server restarted -> LIVE at +43.0s, and at +43.2s the list held 7 rows including 'S8 missed while offline', which was ingested while the feed was dead. Missed pushes are recovered by the refetch, exactly as R-D5 says, with no buffer. A separate run against a never-started server went RECONNECTING -> OFFLINE and never once read LIVE. The state machine's 'no sequence without a connect can reach live' is unit-asserted over 50 events."
     },
     {
       "id": "F008",
