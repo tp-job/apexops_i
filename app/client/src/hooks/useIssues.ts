@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { issuesAPI } from '@/services/projects';
 import type { Issue, IssueStatus, PromotedTicket } from '@/types/projects';
 import { getErrorMessage } from '@/utils/error';
+import { useIssueStream } from './useIssueStream';
+import { reconcileIssueFrame, type IssueActivityFrame, type StreamStatus } from '@/lib/issueStream';
 
 const PAGE_SIZE = 25;
 
@@ -31,6 +33,12 @@ export interface UseIssuesResult {
     setStatus: (id: number, status: IssueStatus) => Promise<void>;
     promote: (id: number) => Promise<PromotedTicket>;
     refetch: () => Promise<void>;
+    /** Live feed state. Never `live` while the socket is down (R-D5). */
+    streamStatus: StreamStatus;
+    /** New issues that arrived but were not inserted — the banner's count (R-D2). */
+    pendingNew: number;
+    /** Show them: refetch the current query and clear the banner. */
+    showPendingNew: () => Promise<void>;
 }
 
 /**
@@ -43,12 +51,13 @@ export interface UseIssuesResult {
  *
  * Sorting and paging are server-side; this hook only reflects them and asks.
  */
-export function useIssues(slug: string | undefined): UseIssuesResult {
+export function useIssues(slug: string | undefined, projectId: number | null = null): UseIssuesResult {
     const [searchParams, setSearchParams] = useSearchParams();
     const [issues, setIssues] = useState<Issue[]>([]);
     const [total, setTotal] = useState(0);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [pendingNew, setPendingNew] = useState(0);
 
     const query = useMemo<IssueQuery>(() => {
         const rawSort = searchParams.get('sort');
@@ -91,8 +100,48 @@ export function useIssues(slug: string | undefined): UseIssuesResult {
     }, [slug, query.level, query.status, query.q, query.sort, query.direction, query.page]);
 
     useEffect(() => {
+        // The banner counts new issues *for the current query*. Changing the
+        // filter or the page answers the question it was asking, so it resets
+        // with the fetch rather than carrying a stale number across views.
+        setPendingNew(0);
         void load();
     }, [load]);
+
+    // The live feed. `queryRef` rather than a dependency: the frame handler must
+    // see the *current* filter and page without the socket being torn down and
+    // rebuilt every time either changes.
+    const queryRef = useRef({ issues, filtered, page: query.page, projectId });
+    queryRef.current = { issues, filtered, page: query.page, projectId };
+
+    const onFrame = useCallback((frame: IssueActivityFrame) => {
+        const { issues: current, filtered: isFiltered, page, projectId: viewing } = queryRef.current;
+        const outcome = reconcileIssueFrame(
+            { issues: current, total, pageSize: PAGE_SIZE, projectId: viewing, filtered: isFiltered, page },
+            frame
+        );
+
+        // Deliberately computed OUTSIDE a state updater. An updater that also
+        // calls `setTotal` runs twice under StrictMode and double-counts the very
+        // number this sprint exists to keep honest.
+        if (outcome.kind === 'patched') setIssues(outcome.issues);
+        else if (outcome.kind === 'prepended') {
+            setIssues(outcome.issues);
+            setTotal(outcome.total);
+        } else if (outcome.kind === 'deferred') {
+            // A row that cannot be shown is counted, not hidden: the banner is the
+            // difference between "quiet" and "you are looking at a stale list".
+            setPendingNew((n) => n + 1);
+        }
+    }, [total]);
+
+    const onResync = useCallback(() => {
+        // Pushes missed while disconnected are gone (R-D5). One refetch of the
+        // current query is the resync, and it is cheaper than any buffer.
+        setPendingNew(0);
+        void load();
+    }, [load]);
+
+    const { status: streamStatus } = useIssueStream({ slug, onFrame, onResync });
 
     const patchParams = useCallback(
         (patch: Record<string, string | number | undefined>, resetPage: boolean) => {
@@ -134,5 +183,12 @@ export function useIssues(slug: string | undefined): UseIssuesResult {
         },
 
         refetch: load,
+
+        streamStatus,
+        pendingNew,
+        showPendingNew: async () => {
+            setPendingNew(0);
+            await load();
+        },
     };
 }
