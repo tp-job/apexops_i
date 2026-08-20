@@ -135,8 +135,8 @@
         "A second consecutive auth failure signs out rather than looping",
         "FAILURE CASE: the anonymous-socket path stays open for the SDK — do not tighten io.use as a side effect"
       ],
-      "passes": null,
-      "notes": ""
+      "passes": true,
+      "notes": "2026-08-20. OBSERVED — the criterion Sprint 3 wrote and never ran. A tab was opened with an access token expiring in 60s and a REAL refresh-token row (minted through lib/sessions.ts, so the /refresh route behaves exactly as in production). Left past expiry, then the feed was killed and restarted to force a reconnect with the now-stale token: handshake refused, the hook called refreshOnce() in lib/authSession.ts, reconnected, and the badge was LIVE 2s after the server returned. localStorage then held a token expiring 8h later. It KEPT STREAMING — an ingest after the refresh moved the visible count 5 -> 6. The refresh went through the existing single-flight coordinator, not a second implementation; dev StrictMode mounts two sockets, and the two refresh POSTs observed are that, each succeeding through the coordinator's rotation-adoption path. FAILURE CASE observed: an anonymous socket still CONNECTS (the SDK path is untouched — io.use was not tightened) and is refused the room with 'Not a member of that project'. PARTIAL, stated plainly: sign-out-not-loop was observed with an unusable refresh token (tokens cleared, redirected to /login, no retry loop); the specific 'refresh succeeded but the new token was refused too' branch is code, not an observation — forcing it needs a server-side fault injector this repo does not have."
     },
     {
       "id": "F009",
@@ -152,8 +152,8 @@
         "Reintroduce a blind insert under an active filter and the suite goes red",
         "Both revert clean and the suite goes green"
       ],
-      "passes": null,
-      "notes": ""
+      "passes": true,
+      "notes": "2026-08-20. Both mutations were WATCHED TO FAIL, then reverted. (1) count += 1 instead of the absolute value: 3 assertions red, named — 'patches count, lastSeen and status in place', 'is idempotent: the same frame applied twice leaves the same count', 'ignores a replayed frame that changes nothing'. (2) blind insert with the filter check removed: 2 red — 'does NOT insert while a filter is active', 'does NOT insert on page 2'. A third mutation earlier in the sprint (admitting a null membership to the project room) turned 4 red across the pure decision and the real-socket test. Every mutation reverted clean: 143 client and 132 server tests green."
     },
     {
       "id": "F010",
@@ -169,8 +169,8 @@
         "sprint-plan.md's 'every sprint has now shipped' line corrected with what was actually missing",
         "realtime-issue-stream.md gains its exit notes"
       ],
-      "passes": null,
-      "notes": ""
+      "passes": true,
+      "notes": "2026-08-20. tsc clean in both workspaces, eslint clean on the client (the server workspace has no eslint config — CI lints the client only, and that is unchanged by this sprint), npm run build clean in both, 275 tests green (143 client + 132 server). CI runs this exact set. sprint-plan.md's 'Every sprint in this plan has now shipped' line is corrected in this same branch, naming what was actually missing and why the row was plausibly marked done, and realtime-issue-stream.md gained its exit notes with the five carried gaps."
     }
   ]
 }

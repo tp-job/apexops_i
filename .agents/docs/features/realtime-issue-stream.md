@@ -151,3 +151,39 @@ it's cheaper", an auto-insert "because the banner is ugly" — it comes straight
 
 The second most believable: the feed dies at token expiry and the badge still says `live`. That is
 R-D6 and R-D5, and it is why the badge has three states rather than a boolean.
+
+---
+
+## Exit notes — shipped 2026-08-20
+
+Built in Sprint 8 against these decisions, six gates, ten ledger features. All ten pass; the ledger
+records for each one what was *observed* versus what was unit-tested.
+
+**What the sprint proved on the wire, not in an argument:**
+
+- Two windows on one project's issue list, one ingest: both changed exactly once, +156ms, count
+  3 → 4, no reorder, no refetch. Sprint 3's exit test — *"an error in a third tab appears in both
+  windows within 2s, once"* — was never runnable before this. It runs.
+- A signed-in **non-member** and the SDK's anonymous socket are both refused `project:<id>` and both
+  receive **zero** frames while the room is emitted into — asserted against a real Socket.IO server
+  in [`issueStreamHandler.test.ts`](../../../app/server/src/lib/issueStreamHandler.test.ts), not by
+  looking at an empty UI.
+- With the emit forced to throw, ingest still answered 202 and still wrote both rows.
+- A tab left open past access-token expiry refreshed through `authSession.ts` and kept streaming —
+  the count moved 5 → 6 after the refresh.
+- Killing the feed: `live` → `reconnecting` → `offline`, never `live` over a dead socket, and the
+  issue ingested during the outage arrived via the reconnect refetch.
+
+**Carried gaps, named rather than hidden:**
+
+| Gap | Why it is acceptable today |
+|---|---|
+| `io` is single-process | Stated up front as a non-goal. Multi-instance needs a socket.io Redis adapter, exactly like the in-memory rate limiters. Do not half-build it |
+| The banner counts new issues for the **project**, not for the query | Under an active filter it can read *"1 new issue"* and then show nothing new, because the new issue does not match the filter. Making it query-aware means the server knowing the client's filter, which is what R-D2 exists to avoid |
+| A prepended row is a placeholder for ~600ms | The frame carries no title by design; one debounced refetch fills it in, and a burst coalesces into one request |
+| `reconnecting` takes ~10s to appear after a hard kill | Socket.IO's ping timeout, not our state machine. The badge is honest the whole time — it just is not instant |
+| The second-consecutive-auth-failure branch is code, not an observation | The sign-out was observed with an unusable refresh token (session ended, redirected to `/login`, no loop). Forcing a *refreshed* token to be refused again needs a server-side fault injector this repo does not have |
+
+**Do not soften these two, or the pre-mortem comes true:** absolute counts (R-D1) and no blind
+insertion (R-D2). Both are guarded by tests that were *watched to fail* — reintroducing `count += 1`
+turns three assertions red, and blind-inserting under a filter turns two red.

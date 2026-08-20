@@ -40,18 +40,11 @@ Two design calls worth stating here because they are what the sprint is shaped a
    and the room has no idea what filter a given client is on. Deciding in the room means injecting
    rows that do not match an active filter, which reads as a broken filter.
 
-## Status
+## Status — at scoping (2026-08-07)
 
-| G | Scope | State |
-|---|---|---|
-| G1 | `lib/realtime.ts` registry | not started |
-| G2 | `project:<id>` room + authorized join, ingest emit | not started |
-| G3 | `useIssues` reconciliation | not started |
-| G4 | Connection badge + reconnect refetch | not started |
-| G5 | Socket token refresh | not started |
-| G6 | Tests, reintroduced-bug proof, plan correction | not started |
-
-**Nothing is implemented yet. No criterion has been observed.**
+Nothing was implemented and no criterion had been observed. Superseded by the 2026-08-20 entries
+below; left in place because the ledger is append-mostly and a scoping snapshot that quietly turns
+into a completion claim is the drift this sprint exists to correct.
 
 ## Carried risk
 
@@ -103,3 +96,55 @@ makes goes into a pure module or it cannot be verified by the suite at all:
 
 F009's reintroduced-drift proof is only meaningful against pure modules, so this is what makes that
 ledger item runnable rather than a claim.
+
+
+## 2026-08-20 — all six gates closed
+
+10/10 ledger features pass. Every note in `feature-list.json` says which criteria were **observed**
+and which were unit-tested, because those are different claims.
+
+| G | Scope | State | Evidence |
+|---|---|---|---|
+| G1 | `lib/realtime.ts` registry | done | 4 assertions; `dist/lib/realtime.js` emits no `require()`, so no cycle is even possible |
+| G2 | `project:<id>` room + authorized join, ingest emit | done | Real-socket isolation test; live ingest → one frame at +858ms then +34ms |
+| G3 | `useIssues` reconciliation | done | Two windows, one change each at +156ms, no reorder, no refetch |
+| G4 | Badge + reconnect refetch | done | `live → reconnecting → offline → live`, and the issue ingested during the outage recovered |
+| G5 | Socket token refresh | done | Tab past expiry refreshed through `authSession.ts` and kept streaming, 5 → 6 |
+| G6 | Tests, reintroduced-bug proof, plan correction | done | Two mutations watched to fail; `sprint-plan.md:375` corrected |
+
+### What the carried risk turned out to be
+
+G5 was called *"the item that decides whether this sprint is real"* and *"the most likely to run
+long."* It was neither difficult nor long — because `authSession.ts` had already done the hard part.
+The socket needed roughly fifteen lines: catch `connect_error` with the server's `Unauthorized`,
+stop socket.io retrying the refused token, call the existing single-flight `refreshOnce()`, set
+`socket.auth` and connect **once**. The risk was real but it had been paid down in Sprint 5.
+
+### What actually cost time, and was not on the list
+
+1. **Verifying honestly.** The repo's suite is pure-unit only, so "a non-member receives zero frames"
+   had nowhere to live. The fix was to extract the join handler with membership injected and stand up
+   a real Socket.IO server in the test — the first wire-level test in this repo. Criterion 8 needed
+   the emit forced to throw and the server restarted; criterion 9 and G5 needed a **second, isolated**
+   client/server pair (vite :5199 → API :3013, WS :8099) so the developer's own dev server was never
+   killed underneath them.
+2. **Two decisions had to be amended, and were written down rather than applied quietly** — see
+   `R-D1a`. The frame gained `ticketId`, and `PATCH /:id` and `POST /:id/ticket` emit too: criterion
+   5 needs a resolve *and* a promote in one window to reach another, and ingest is not the only
+   writer of these rows.
+3. **A prepended row is a placeholder**, because the frame carries no title by design. One debounced
+   refetch fills it in; a burst of new fingerprints coalesces into a single request.
+
+### Gaps carried out of the sprint
+
+Listed with their reasons in the exit notes of
+[`realtime-issue-stream.md`](../../docs/features/realtime-issue-stream.md). The short version:
+single-process `io` (stated non-goal, needs a Redis adapter — do not half-build it), the banner
+counting new issues per *project* rather than per *query*, the ~10s socket.io ping timeout before
+`reconnecting` shows, and one auth branch that is code rather than an observation.
+
+### The finding that produced this sprint, restated
+
+`sprint-plan.md` claimed every sprint had shipped. Four of Sprint 3's five items had. **Verify plans
+against the tree** — the correction now sits in the plan itself, with the reasoning, so the next
+reader learns the process lesson and not just the fact.
