@@ -1,30 +1,22 @@
 import type { FC } from 'react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import {
     FiActivity,
-    FiTrendingUp,
-    FiZap,
+    FiTrendingUp,
     FiArrowUpRight,
     FiPlus,
-    FiDownload,
-    FiLayers,
-    FiDroplet,
-    FiType,
-    FiBox,
-    FiGrid,
+    FiDownload,
     FiEye,
     FiCheckCircle,
     FiPaperclip,
     FiEdit3,
     FiTag,
     FiMail,
-    FiLock,
-    FiList,
+    FiLock,
     FiAlertTriangle,
 } from 'react-icons/fi';
 import {
-    PageHeader,
     Surface,
     GlassPanel,
     KpiCard,
@@ -58,26 +50,36 @@ import {
     type SortDirection,
     type GanttBar,
 } from '@/components/design-system';
-import { EASE_LUX, fadeUp, scaleIn, stagger, inViewOnce } from '@/lib/motion';
+import { EASE_LUX, fadeUp, stagger, inViewOnce } from '@/lib/motion';
+import { useTheme } from '@/context/theme-context';
 
 // ── Section wrapper ───────────────────────────────────────────
-const Section: FC<{ id: string; icon: React.ReactNode; title: string; children: React.ReactNode }> = ({
-    icon,
-    title,
-    children,
-}) => (
+/**
+ * A section, styled as the written reference styles one: the title on the left,
+ * the file it is answerable to on the right, a hairline between that and the
+ * content. The `ref` is the point — a rule with no source is an opinion, and the
+ * reader can go and check.
+ */
+const Section: FC<{
+    id: string;
+    title: string;
+    /** Where this section's rules actually live. Rendered mono, right-aligned. */
+    sourceRef?: string;
+    children: React.ReactNode;
+}> = ({ id, title, sourceRef, children }) => (
     <motion.section
+        id={id}
         variants={fadeUp}
         initial="hidden"
         whileInView="show"
         viewport={inViewOnce}
-        className="flex flex-col gap-5"
+        className="flex scroll-mt-28 flex-col gap-6 pt-4"
     >
-        <div className="flex items-center gap-3">
-            <span className="w-9 h-9 rounded-xl bg-brand-accent/20 text-brand-dark dark:text-brand-accent flex items-center justify-center">
-                {icon}
-            </span>
-            <h2 className="text-xl font-bold font-heading text-brand-dark dark:text-white">{title}</h2>
+        <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 border-b border-black/10 pb-3 dark:border-white/10">
+            <h2 className="font-heading text-2xl font-bold tracking-tight text-brand-dark dark:text-white">{title}</h2>
+            {sourceRef && (
+                <span className="font-mono text-[11px] text-gray-500 dark:text-gray-400">{sourceRef}</span>
+            )}
         </div>
         {children}
     </motion.section>
@@ -148,6 +150,39 @@ const TypeRow: FC<{ label: string; cls: string; sample: string }> = ({ label, cl
  * (`.agents/design-system/design-system.html`) so the live guide states the rules
  * it demonstrates. Two references that disagree are worse than one.
  */
+/** The files this page is answerable to. Shown as chips under the thesis. */
+const SOURCES = [
+    'source: index.css @theme',
+    'globals.css .ds-*',
+    'lib/motion.ts',
+    'written: design-system.html',
+];
+
+/**
+ * The rail. Ids match the `Section` ids, and the scroll-spy below reads them —
+ * one list, so a section cannot exist without a way to reach it.
+ */
+type RailId =
+    | 'laws' | 'color' | 'type' | 'radius' | 'elevation' | 'motion'
+    | 'surfaces' | 'components' | 'forms' | 'data' | 'overlays' | 'rules';
+
+const RAIL: { id: RailId; label: string }[] = [
+    { id: 'laws', label: 'Laws' },
+    { id: 'color', label: 'Colour' },
+    { id: 'type', label: 'Type' },
+    { id: 'radius', label: 'Radius' },
+    { id: 'elevation', label: 'Elevation' },
+    { id: 'motion', label: 'Motion' },
+    { id: 'surfaces', label: 'Surfaces' },
+    { id: 'components', label: 'Primitives' },
+    { id: 'forms', label: 'Forms' },
+    { id: 'data', label: 'Data' },
+    { id: 'overlays', label: 'Overlays' },
+    { id: 'rules', label: "Do & Don't" },
+];
+
+
+
 const LAWS = [
     {
         n: '01',
@@ -321,6 +356,39 @@ const DesignSystem: FC = () => {
     /* Remounting the two dots is what replays them: a key change restarts the
        animation, where re-running the same `animate` would be a no-op. */
     const [motionRun, setMotionRun] = useState(0);
+
+    /* Scroll-spy for the rail. The threshold is a *little* below the sticky rail
+       so the pill flips as a heading passes under it rather than when it is
+       already gone. */
+    const [activeSection, setActiveSection] = useState<RailId>('laws');
+
+    useEffect(() => {
+        const sync = () => {
+            let current: RailId = RAIL[0].id;
+            for (const item of RAIL) {
+                const el = document.getElementById(item.id);
+                if (el && el.getBoundingClientRect().top <= 140) current = item.id;
+            }
+            setActiveSection(current);
+        };
+        sync();
+        window.addEventListener('scroll', sync, { passive: true });
+        return () => window.removeEventListener('scroll', sync);
+    }, []);
+
+    const goToSection = useCallback((id: RailId) => {
+        // `scroll-mt-28` on the section is what keeps the heading clear of the
+        // sticky rail; letting the browser do the scrolling keeps it smooth and
+        // respects the user's reduced-motion setting.
+        document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, []);
+
+    /* Theme control, because this route renders outside `AppLayout` and so has no
+       Topbar toggle of its own. Same three states the written reference offers. */
+    const { preference, setPreference } = useTheme();
+    const cycleTheme = useCallback(() => {
+        setPreference(preference === 'system' ? 'light' : preference === 'light' ? 'dark' : 'system');
+    }, [preference, setPreference]);
     const [dsModal, setDsModal] = useState(false);
     const [dsConfirm, setDsConfirm] = useState(false);
     const dsMenu = useContextMenu<string>();
@@ -332,35 +400,64 @@ const DesignSystem: FC = () => {
 
     return (
         <div className="flex flex-col gap-10 pb-16 max-w-[1400px] mx-auto w-full">
-            {/* Hero */}
-            <motion.div variants={scaleIn} initial="hidden" animate="show">
-                <Surface variant="frost" radius="3xl" padding="lg" className="ds-mesh relative overflow-hidden">
-                    <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6">
-                        <div>
-                            <Badge tone="accent">Design System · v2</Badge>
-                            <h1 className="mt-3 text-5xl font-bold font-heading text-brand-dark dark:text-white tracking-tight">
-                                ApexOps <span className="text-brand-accent">Luxe</span>
-                            </h1>
-                            <p className="mt-2 text-gray-500 dark:text-gray-400 max-w-lg">
-                                A high-end, cutting-edge system built on the Invoices template.
-                                Neutral + lime, layered glass, monospaced numbers, and one
-                                signature motion curve.
-                            </p>
-                        </div>
-                        <div className="flex items-center gap-3">
-                            <AccentButton icon={<FiZap className="w-4 h-4" />}>Get started</AccentButton>
-                            <AccentButton variant="ghost" icon={<FiDownload className="w-4 h-4" />}>
-                                Tokens
-                            </AccentButton>
-                        </div>
-                    </div>
-                </Surface>
-            </motion.div>
+            {/* ── Masthead ──────────────────────────────────────────────
+                Not a card. The written reference opens with a statement of what
+                the system is, and a card around it would make the thesis look
+                like one more component demo. */}
+            <motion.header variants={fadeUp} initial="hidden" animate="show" className="flex flex-col gap-6 pt-2">
+                <span className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.18em] text-gray-500 dark:text-gray-400">
+                    <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-brand-accent" />
+                    ApexOps · Design system v2
+                </span>
 
-            <PageHeader title="Foundations" subtitle="Tokens, type, surfaces, motion & components" />
+                <h1 className="font-heading text-5xl font-bold leading-[1.05] tracking-tight text-brand-dark sm:text-6xl lg:text-7xl dark:text-white">
+                    Neutral,
+                    <br />
+                    and one{' '}
+                    {/* The one glowing element on this page — law 02, spent here
+                        deliberately so the page obeys the rule it states. */}
+                    <span className="ds-glow inline-block rounded-2xl bg-brand-accent px-3 pb-1 text-brand-dark">
+                        lime
+                    </span>
+                    .
+                </h1>
+
+                <p className="max-w-[62ch] text-base leading-relaxed text-gray-600 dark:text-gray-300">
+                    Layered glass over a soft gradient canvas. Depth comes from opacity, never from
+                    heavier colour. The accent is a signal, not a decoration — it marks the one thing
+                    on a screen that wants your attention, and nothing else.
+                </p>
+
+                <div className="flex flex-wrap gap-2">
+                    {SOURCES.map((src) => (
+                        <span
+                            key={src}
+                            className="rounded-full border border-black/10 px-3 py-1 font-mono text-[11px] text-gray-600 dark:border-white/15 dark:text-gray-300"
+                        >
+                            {src}
+                        </span>
+                    ))}
+                </div>
+            </motion.header>
+
+            {/* ── Rail ──────────────────────────────────────────────────
+                Built on PillTabs, which is the primitive for navigating between
+                destinations — this page should use the system it documents, and
+                until today PillTabs had no caller anywhere to prove it worked. */}
+            <div className="sticky top-3 z-30 -mx-2 flex flex-wrap items-center justify-between gap-3 px-2 py-2">
+                <PillTabs tabs={RAIL} activeId={activeSection} onChange={goToSection} />
+                <button
+                    type="button"
+                    onClick={cycleTheme}
+                    className="rounded-full border border-black/10 bg-white/70 px-3 py-1.5 font-mono text-[11px] text-gray-600 backdrop-blur transition-colors hover:text-brand-dark dark:border-white/15 dark:bg-white/5 dark:text-gray-300 dark:hover:text-white"
+                    aria-live="polite"
+                >
+                    theme: {preference === 'system' ? 'auto' : preference}
+                </button>
+            </div>
 
             {/* The six laws — every rule below is a consequence of one of these */}
-            <Section id="laws" icon={<FiEye className="w-4 h-4" />} title="The six laws">
+            <Section id="laws" title="The six laws" sourceRef="design.md §1–§5">
                 <p className="max-w-2xl text-sm text-gray-500 dark:text-gray-400">
                     Everything else on this page is a consequence of these. When a new screen looks
                     wrong, it has almost always broken one of them.
@@ -370,29 +467,29 @@ const DesignSystem: FC = () => {
                     initial="hidden"
                     whileInView="show"
                     viewport={inViewOnce}
-                    className="grid grid-cols-1 gap-4 md:grid-cols-2"
+                    className="flex flex-col"
                 >
                     {LAWS.map((law) => (
-                        <motion.div key={law.n} variants={fadeUp}>
-                            <Surface variant="panel" padding="md" radius="2xl" className="h-full">
-                                <div className="flex items-start gap-4">
-                                    <span className="font-numbers text-2xl font-bold text-brand-accent">{law.n}</span>
-                                    <div className="min-w-0">
-                                        <p className="text-sm font-semibold text-brand-dark dark:text-white">{law.rule}</p>
-                                        <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">{law.why}</p>
-                                        <p className="mt-2 text-[11px] font-medium text-gray-500 dark:text-gray-400">
-                                            <span className="font-mono">{law.tag}</span> - {law.cost}
-                                        </p>
-                                    </div>
-                                </div>
-                            </Surface>
+                        <motion.div
+                            key={law.n}
+                            variants={fadeUp}
+                            className="grid grid-cols-1 gap-x-10 gap-y-2 border-b border-black/10 py-5 last:border-b-0 lg:grid-cols-[1fr_260px] dark:border-white/10"
+                        >
+                            <p className="max-w-[70ch] text-[15px] leading-relaxed text-gray-600 dark:text-gray-300">
+                                <b className="font-semibold text-brand-dark dark:text-white">{law.rule}</b>{' '}
+                                {law.why}
+                            </p>
+                            <div>
+                                <p className="font-mono text-[11px] text-brand-dark dark:text-brand-accent">{law.tag}</p>
+                                <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">{law.cost}</p>
+                            </div>
                         </motion.div>
                     ))}
                 </motion.div>
             </Section>
 
             {/* Colour */}
-            <Section id="color" icon={<FiDroplet className="w-4 h-4" />} title="Colour">
+            <Section id="color" title="Colour" sourceRef="index.css @theme">
                 <Surface variant="panel" padding="md">
                     <p className="mb-4 text-xs text-gray-500 dark:text-gray-400">
                         Values are read from <span className="font-mono">:root</span> at runtime, so this
@@ -428,7 +525,7 @@ const DesignSystem: FC = () => {
             </Section>
 
             {/* Typography */}
-            <Section id="type" icon={<FiType className="w-4 h-4" />} title="Typography">
+            <Section id="type" title="Typography" sourceRef="design.md §3">
                 <Surface variant="panel" padding="md">
                     <TypeRow label="DM Sans · 48 · bold" cls="text-5xl font-bold font-heading" sample="Invoices" />
                     <TypeRow label="Numbers · JetBrains Mono" cls="text-3xl font-bold font-numbers" sample="$31,211.00" />
@@ -439,7 +536,7 @@ const DesignSystem: FC = () => {
             </Section>
 
             {/* Radius */}
-            <Section id="radius" icon={<FiBox className="w-4 h-4" />} title="Radius">
+            <Section id="radius" title="Radius" sourceRef="design.md §5">
                 <Surface variant="panel" padding="md">
                     <p className="mb-5 max-w-2xl text-sm text-gray-500 dark:text-gray-400">
                         Four steps and a floor. The floor is the part people break: a single square
@@ -466,7 +563,7 @@ const DesignSystem: FC = () => {
             </Section>
 
             {/* Elevation */}
-            <Section id="elevation" icon={<FiLayers className="w-4 h-4" />} title="Elevation & glow">
+            <Section id="elevation" title="Elevation & glow" sourceRef="index.css --shadow-ds-*">
                 <Surface variant="panel" padding="md">
                     <p className="mb-5 max-w-2xl text-sm text-gray-500 dark:text-gray-400">
                         Wide, soft, low opacity. Luxury reads as restraint - a hard drop shadow is the
@@ -494,7 +591,7 @@ const DesignSystem: FC = () => {
             </Section>
 
             {/* Motion */}
-            <Section id="motion" icon={<FiZap className="w-4 h-4" />} title="Motion">
+            <Section id="motion" title="Motion" sourceRef="lib/motion.ts">
                 <Surface variant="panel" padding="md">
                     <p className="mb-5 max-w-2xl text-sm text-gray-500 dark:text-gray-400">
                         One signature curve. <span className="font-mono">EASE_LUX</span> leaves fast and
@@ -561,7 +658,7 @@ const DesignSystem: FC = () => {
             </Section>
 
             {/* Surfaces */}
-            <Section id="surfaces" icon={<FiLayers className="w-4 h-4" />} title="Surfaces">
+            <Section id="surfaces" title="Surfaces" sourceRef="globals.css .ds-* · Surface.tsx">
                 <motion.div
                     variants={stagger()}
                     initial="hidden"
@@ -652,7 +749,7 @@ const DesignSystem: FC = () => {
             </Section>
 
             {/* Components */}
-            <Section id="components" icon={<FiBox className="w-4 h-4" />} title="Components">
+            <Section id="components" title="Components" sourceRef="components/design-system/*">
                 {/* Stat tiles */}
                 <motion.div
                     variants={stagger()}
@@ -727,7 +824,7 @@ const DesignSystem: FC = () => {
             </Section>
 
             {/* ── Form kit (Sprint 1 — the auth pages' primitives) ───────── */}
-            <Section id="forms" icon={<FiEdit3 className="w-4 h-4" />} title="Form kit">
+            <Section id="forms" title="Form kit" sourceRef="Field · Input · Select · Switch">
                 <Surface variant="panel" padding="md" className="flex flex-col gap-6">
                     <p className="text-sm text-gray-500 dark:text-gray-400 max-w-2xl">
                         <strong className="text-brand-dark dark:text-white">Field</strong> owns the label,
@@ -875,7 +972,7 @@ const DesignSystem: FC = () => {
             </Section>
 
             {/* ── Data surfaces ─────────────────────────────────────────── */}
-            <Section id="data" icon={<FiList className="w-4 h-4" />} title="Data surfaces">
+            <Section id="data" title="Data surfaces" sourceRef="DataTable · Pagination · Skeleton">
                 <Surface variant="panel" padding="md" className="flex flex-col gap-5">
                     <p className="text-sm text-gray-500 dark:text-gray-400 max-w-2xl">
                         One <strong className="text-brand-dark dark:text-white">DataTable</strong> for every
@@ -922,7 +1019,7 @@ const DesignSystem: FC = () => {
             </Section>
 
             {/* ── Overlays ──────────────────────────────────────────────── */}
-            <Section id="overlays" icon={<FiAlertTriangle className="w-4 h-4" />} title="Overlays">
+            <Section id="overlays" title="Overlays" sourceRef="Modal · ConfirmDialog · ContextMenu">
                 <Surface variant="panel" padding="md" className="flex flex-col gap-5">
                     <p className="text-sm text-gray-500 dark:text-gray-400 max-w-2xl">
                         Radix owns focus trapping, focus restore,{' '}
@@ -1040,7 +1137,7 @@ const DesignSystem: FC = () => {
             </Section>
 
             {/* Do & Don't */}
-            <Section id="rules" icon={<FiCheckCircle className="w-4 h-4" />} title="Do & Don't">
+            <Section id="rules" title="Do & Don't" sourceRef="design.md §2 · v2 rules">
                 <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                     <Surface variant="panel" padding="md" className="h-full">
                         <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">Do</p>
@@ -1068,7 +1165,7 @@ const DesignSystem: FC = () => {
             </Section>
 
             {/* ── Composition primitives (from .agents/template) ────────── */}
-            <Section id="composition" icon={<FiGrid className="w-4 h-4" />} title="Composition">
+            <Section id="composition" title="Composition" sourceRef=".agents/template">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                     <Surface variant="panel" padding="md" className="flex flex-col gap-5">
                         <p className="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400 font-semibold">
