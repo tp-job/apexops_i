@@ -211,11 +211,6 @@ export const mockNotes: Note[] = [
         isPinned: true,
         color: 'red',
         tags: ['release', 'checklist'],
-        checklistItems: [
-            { text: 'Run unit tests', checked: true },
-            { text: 'Run e2e tests', checked: false },
-            { text: 'Verify DB connection', checked: true },
-        ],
         quote: { text: '', author: '' },
         updatedAt: iso(1000 * 60 * 25),
     },

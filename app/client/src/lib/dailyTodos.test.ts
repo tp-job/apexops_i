@@ -11,10 +11,8 @@ import {
     filterTodos,
     findDailyNote,
     moveTodo,
-    normalizeTodos,
     removeTodo,
     renameTodo,
-    serializeTodos,
     todoProgress,
     toggleTodo,
     type DailyTodo,
@@ -38,63 +36,6 @@ const note = (over: Partial<Note> = {}): Note => ({
     tags: [DAILY_TAG],
     scheduledFor: dayAnchorIso('2026-08-11'),
     ...over,
-});
-
-describe('normalizeTodos', () => {
-    it('reads the legacy { text, checked } shape', () => {
-        const out = normalizeTodos([{ text: 'Ship it', checked: true }]);
-        expect(out).toHaveLength(1);
-        expect(out[0]).toMatchObject({ text: 'Ship it', checked: true });
-        expect(out[0].id).toBeTruthy();
-    });
-
-    it('gives legacy rows the same id on every pass', () => {
-        const raw = [{ text: 'Ship it', checked: false }, { text: 'Ship it', checked: false }];
-        expect(normalizeTodos(raw).map((t) => t.id)).toEqual(normalizeTodos(raw).map((t) => t.id));
-    });
-
-    it('keeps distinct ids for duplicate text', () => {
-        const [a, b] = normalizeTodos([{ text: 'Same' }, { text: 'Same' }]);
-        expect(a.id).not.toBe(b.id);
-    });
-
-    it('preserves an id that is already stored', () => {
-        expect(normalizeTodos([{ id: 't-42', text: 'Keep me' }])[0].id).toBe('t-42');
-    });
-
-    it('drops entries with no usable text', () => {
-        expect(normalizeTodos([{ text: '   ' }, null, 7, {}, { checked: true }])).toEqual([]);
-    });
-
-    it('accepts bare strings', () => {
-        expect(normalizeTodos(['Buy milk'])[0]).toMatchObject({ text: 'Buy milk', checked: false });
-    });
-
-    it('returns an empty list for anything that is not an array', () => {
-        expect(normalizeTodos(undefined)).toEqual([]);
-        expect(normalizeTodos({ text: 'nope' })).toEqual([]);
-    });
-
-    it('clears completedAt on an unchecked item', () => {
-        const [t] = normalizeTodos([{ text: 'x', checked: false, completedAt: '2026-08-11T10:00:00.000Z' }]);
-        expect(t.completedAt).toBeNull();
-    });
-
-    it('ignores a completedAt that is not a date', () => {
-        const [t] = normalizeTodos([{ text: 'x', checked: true, completedAt: 'soon' }]);
-        expect(t.completedAt).toBeNull();
-    });
-});
-
-describe('serializeTodos', () => {
-    it('round-trips through normalize', () => {
-        const before = [todo({ id: 't-1' }), todo({ id: 't-2', checked: true, completedAt: '2026-08-11T10:00:00.000Z' })];
-        expect(normalizeTodos(serializeTodos(before))).toEqual(before);
-    });
-
-    it('still writes the legacy `checked` field', () => {
-        expect(serializeTodos([todo({ checked: true })])[0]).toHaveProperty('checked', true);
-    });
 });
 
 describe('mutations', () => {
