@@ -1,0 +1,129 @@
+{
+  "project": {
+    "name": "ApexOps — Notes SSOT, Phase 4",
+    "description": "Drop Note.checklistItems. The todos moved to the tasks table in Phase 1; the column has been carried read-only since, and Phase 3.5 deleted its last reader (useDailyTodos.ts). This removes the column and everything still shaped around it.",
+    "spec": ".agents/docs/features/notes-ssot-blueprint.md (§8 phase 4, EC-06)",
+    "branch": "notes-ssot/phase-4-drop-checklist-items",
+    "created_at": "2026-08-21"
+  },
+  "house_mechanics": {
+    "schema_changes": "prisma db push — this repo has NO migrations directory; `migrate dev` would offer to reset a populated database",
+    "prisma_generate": "stop the :3000 dev server first, or generate fails with EPERM on Windows",
+    "gates": "client: typecheck lint test build | server: typecheck test build",
+    "ci_triggers": "pull_request and push to main only — a pushed feature branch runs nothing",
+    "commit_triggers": "checks only, never deploys"
+  },
+  "features": [
+    {
+      "id": "P4-01",
+      "category": "precondition",
+      "priority": "critical",
+      "description": "The drop is safe: nothing reads the column, and no row still holds unmigrated todos",
+      "steps": [
+        "Grep the tree for every reader of checklistItems / checklist_items and list them before touching any",
+        "Count notes whose checklistItems is a non-empty array, in the actual database",
+        "For any such note, compare its normalized todos against its Task rows and report what is missing",
+        "FAILURE CASE: if a single todo exists that has no Task row, STOP and say so rather than dropping the column",
+        "Evidence is written down BEFORE any removal, so the decision can be re-checked later"
+      ],
+      "depends_on": [],
+      "passes": null,
+      "notes": ""
+    },
+    {
+      "id": "P4-02",
+      "category": "core",
+      "priority": "critical",
+      "description": "The API stops accepting, persisting and returning checklistItems — without breaking a client that still sends it",
+      "steps": [
+        "formatNote no longer emits a checklistItems key",
+        "POST /api/notes ignores the field instead of writing it",
+        "PUT/PATCH's updatable-field whitelist no longer contains it",
+        "Both zod schemas drop the field",
+        "FAILURE CASE: an old client that still posts checklistItems gets a 201 and a real note — not a 500 and not a validation error"
+      ],
+      "depends_on": ["P4-01"],
+      "passes": null,
+      "notes": ""
+    },
+    {
+      "id": "P4-03",
+      "category": "core",
+      "priority": "high",
+      "description": "The client stops sending and typing a column that no longer exists",
+      "steps": [
+        "services/notes.ts no longer sends checklistItems on create, and its param type drops the field",
+        "types/notes.ts drops the field",
+        "utils/mockData.ts no longer fabricates it",
+        "lib/dailyTodos.ts loses the two functions that exist only to read and write that JSON shape",
+        "FAILURE CASE: nothing else imported those two — checked by grep to a fixpoint, not by assumption"
+      ],
+      "depends_on": ["P4-02"],
+      "passes": null,
+      "notes": ""
+    },
+    {
+      "id": "P4-04",
+      "category": "core",
+      "priority": "critical",
+      "description": "The column is gone from the schema and from the database",
+      "steps": [
+        "checklistItems is removed from schema.prisma",
+        "prisma db push applied, with the dev server stopped first (EPERM)",
+        "information_schema.columns no longer lists notes.checklist_items",
+        "The Prisma client is regenerated and the server typechecks with no reference to the field",
+        "FAILURE CASE: the pushed change is confirmed to be exactly one DROP COLUMN — nothing else in the notes table moved"
+      ],
+      "depends_on": ["P4-03"],
+      "passes": null,
+      "notes": ""
+    },
+    {
+      "id": "P4-05",
+      "category": "core",
+      "priority": "critical",
+      "description": "The one-shot migration is retired in the same change, and the ordering requirement is written where the next person will read it",
+      "steps": [
+        "scripts/migrate-todos-to-tasks.ts is removed — it reads a column that no longer exists, so leaving it is a script that fails at runtime",
+        "lib/legacyTodos.ts and its test go with it, as the only consumer is that script",
+        "package.json has no orphaned script entry pointing at the removed file",
+        "The blueprint states plainly: run the Phase 1 migration BEFORE deploying Phase 4, or unmigrated todos are unrecoverable",
+        "FAILURE CASE: grep proves no import of legacyTodos survives anywhere"
+      ],
+      "depends_on": ["P4-04"],
+      "passes": null,
+      "notes": ""
+    },
+    {
+      "id": "P4-06",
+      "category": "verification",
+      "priority": "critical",
+      "description": "The surfaces that used to depend on the column still work",
+      "steps": [
+        "/notes creates a note and it appears with its text",
+        "/notes edits a note and the change persists",
+        "/tasks lists tasks and toggling one persists",
+        "GET /api/notes carries no checklistItems key in the response body",
+        "FAILURE CASE: none of the above throws a 500 from a stale Prisma client"
+      ],
+      "depends_on": ["P4-04"],
+      "passes": null,
+      "notes": ""
+    },
+    {
+      "id": "P4-07",
+      "category": "gate",
+      "priority": "high",
+      "description": "Both workspaces clean, and the docs say what happened",
+      "steps": [
+        "client: tsc, eslint, tests, build",
+        "server: tsc, tests, build",
+        "The blueprint's phase table marks Phase 4 done with the date and the evidence",
+        "The Note model comment that promised removal in Phase 4 is gone with the field it described"
+      ],
+      "depends_on": ["P4-05", "P4-06"],
+      "passes": null,
+      "notes": ""
+    }
+  ]
+}
