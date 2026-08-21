@@ -74,6 +74,14 @@ const PAGES: SeedPage[] = [
      * that unpublishes the row on the next seed rather than leaving it live.
      */
     {
+        slug: 'how-to-use',
+        title: 'How to use ApexOps',
+        group: 'Get started',
+        groupOrder: 0,
+        order: 2,
+        summary: 'The whole loop once: install the snippet, read the error, decide, and turn it into work.',
+    },
+    {
         slug: 'tasks',
         title: 'Tasks',
         group: 'Using ApexOps',
@@ -98,6 +106,14 @@ const PAGES: SeedPage[] = [
         summary: 'What a project holds, who can do what, and the difference between archiving and deleting.',
     },
     {
+        slug: 'features',
+        title: 'Features',
+        group: 'Using ApexOps',
+        groupOrder: 1,
+        order: 3,
+        summary: 'Every surface in the product, what it does, and what it deliberately does not do.',
+    },
+    {
         slug: 'sdk',
         title: 'Browser SDK',
         group: 'SDK',
@@ -114,10 +130,18 @@ const PAGES: SeedPage[] = [
         summary: 'How events collapse into issues, and how long raw events are kept.',
     },
     {
+        slug: 'design-system',
+        title: 'Design system',
+        group: 'Design',
+        groupOrder: 4,
+        order: 0,
+        summary: 'The six laws, the palette, type, radius, elevation and motion — and where to see them running.',
+    },
+    {
         slug: 'ingest-api',
         title: 'Ingest API',
         group: 'API reference',
-        groupOrder: 4,
+        groupOrder: 5,
         order: 0,
         summary: 'The single public endpoint the SDK posts to. Key-authenticated, write-only.',
     },
@@ -125,7 +149,7 @@ const PAGES: SeedPage[] = [
         slug: 'rest-api',
         title: 'REST API',
         group: 'API reference',
-        groupOrder: 4,
+        groupOrder: 5,
         order: 1,
         summary: 'Session-authenticated endpoints for projects, issues and tickets.',
     },
