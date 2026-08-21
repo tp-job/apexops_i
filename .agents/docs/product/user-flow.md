@@ -1,180 +1,141 @@
-# Recommended user flow — post-reset rebuild
+# User flow — ApexOps as shipped
 
-> Status: research + proposal. Owner: frontend/product.
-> Written after the 2026-07-24 UI teardown (see [`ui-reset-2026-07-24.md`](../archive/ui-reset-2026-07-24.md)),
-> which left `/design-system` as the only route and every other page's business logic sitting in
-> `hooks/`/`services/` unwired. This doc answers the question that has to be settled *before*
-> rebuilding: which pages, in what order, connected how.
+> **Rewritten 2026-08-21** from `routes/AppRoutes.tsx`, `components/layout/Sidebar.tsx` and the
+> pages themselves. This document used to be a *proposal* written during the 2026-07-24 UI teardown:
+> which pages to rebuild, in what order. Everything it proposed has shipped or been decided, so it
+> now describes the flow that exists. The original research is kept at the bottom as
+> [history](#appendix--the-2026-07-24-rebuild-research), because two of its findings are still the
+> reason the app is shaped the way it is — but its inventory table is no longer accurate and should
+> not be read as current.
 
-## Method
-
-Not guessed — derived from what the app can actually do, checked in this order:
-
-1. **`database/prisma/schema.prisma`** — the real data model: `User`, `UserSettings`, `Ticket`,
-   `Log`, `Note`, `RefreshToken`. No `Invoice` model. No `Event`/`CalendarEvent` model.
-2. **`app/server/src/api/*.ts`** — every real endpoint (`auth`, `tickets`, `logs`, `notes`, `chat`,
-   `ai`, `console-logs`, `console-monitor`).
-3. **`app/client/src/hooks/*` and `services/*`** — what survived the reset unwired, i.e. what
-   doesn't need to be rebuilt from scratch, only re-wired to new UI.
-4. **`.agents/design-system/design.md`** and **`template-adoption.md`** — what visual/interaction
-   patterns already exist (primitives, scaffolds, template mapping) to build each flow on.
-
-This surfaced two findings that change the shape of the flow, not just its styling:
-
-### Finding 1 — Invoices has no backend
-
-`services/api.ts` and `services/auth.ts` are the only API services that survived, and neither
-touches invoices. There is no `Invoice` model in Prisma and no `/api/invoices` route anywhere in
-`app/server`. The old `Invoices.tsx` page (and the whole `components/ui/invoices/` folder, 11
-files) was **always mock data** — it exists because it's the page `design-system/design.md` was
-extracted from, not because the product has a billing feature.
-
-**Consequence for the flow: Invoices is not a primary node.** It stays as design-system lineage
-(already documented in `design.md`), not as a rebuilt page, unless a real invoicing requirement
-shows up later with backend work to match.
-
-### Finding 2 — Calendar and OptimizationCalendar are the same data, twice
-
-`hooks/useCalendarEvents.ts` calls `services/calendar.ts` → `GET /api/notes/calendar/:year/:month`.
-`hooks/useOptimizationCalendarEvents.ts` wraps `useCalendarEvents` and runs the result through
-`utils/optimizationCalendar.ts`'s `mapNotesToCalendarEvents`. **Both pages read the exact same
-Notes-backed endpoint** — there is no separate scheduling/events model. `OptimizationCalendar.tsx`
-was 1,132 lines because it added a denser reducer-based view over identical data, not because it
-served a different feature.
-
-**Consequence for the flow: one Calendar screen, not two.** The "optimization" density/view can be
-a mode toggle (`SegmentedControl`, already built) inside a single Calendar page instead of a
-separate route users have to discover and choose between.
-
-### Finding 3 — Chat's client logic did not survive the reset
-
-Bug tracker, notes, and calendar all have their state/data logic in top-level `hooks/` — the reset
-explicitly preserved that. Chat's logic (`useChatController.ts`, `chatApi.ts`, `chatTypes.ts`) lived
-inside `components/ui/chat/`, which was deleted as UI, not logic. **Only the backend
-(`GET /api/chat/users`) and generic types remain.** Rebuilding Chat costs materially more than
-rebuilding Bug Tracker/Notes/Calendar — that has to factor into sequencing, not just page order.
-
----
-
-## Feature inventory (grounded in real endpoints)
-
-| Feature | Backend | Frontend logic status | Existing scaffold |
-|---|---|---|---|
-| **Auth** | `POST /register /login /refresh /logout`, `GET/PUT /profile`, `PUT /settings /password` | `services/auth.ts`, `context/AuthContext.tsx` — intact | none yet |
-| **Dashboard** (KPI overview) | Reads Tickets + Logs stats | Rebuilt once already this session (deleted in the reset, pattern proven) | `DashboardShellLayout` + `ProjectAnalyticsLayout` (zb.html/af.html) |
-| **Bug Tracker** | `Ticket` CRUD + stats, `useBugTrackerSocket` for realtime | `hooks/useBugTrackerData.ts`, `useBugTrackerSocket.ts` — intact | `WorkspaceBoardLayout` (aj.html) + `Stepper`/`AvatarStack` (ac.html IA) |
-| **Logs / Console Monitor** | `Log` CRUD + stats + batch; separate multi-session Puppeteer capture (`console-monitor.ts`, session-owner-gated) | no surviving hook — was folded into Dashboard/BugTracker views before | none yet — closest template fit is `zc.html`'s dense record rows |
-| **Notes + Calendar** (merged per Finding 2) | `Note` CRUD, `stats/overview`, `calendar/:year/:month` | `hooks/useNoteList.ts`, `hooks/useCalendarEvents.ts`, `services/notes.ts`, `services/calendar.ts`, `types/notes.ts`. *(`useNoteStatsOverview`, `useNoteAiChat` and `useOptimizationCalendarEvents` were deleted as dead code; the note modules moved out of `components/ui/` on 2026-08-15.)* | `TimelineLayout` (zc.html) + `GanttTrack` |
-| **Chat** (interpersonal) | `GET /api/chat/users` only | **gone** — needs a new hook + socket wiring from spec in `devrule.md` §8 | `zd.html`'s contact rail (documented, not scaffolded) |
-| **AI Assistant** (Gemini, BYOK) | `POST /api/ai/chat`, `GET /api/ai/status`, plus `GET/PUT/DELETE /api/ai/key` (sprint 11) | **shipped 2026-08-16** — `hooks/useAssistant.ts` owns the thread, `services/assistant.ts` owns the wire, `components/assistant/*` owns the surface | right-hand panel in `AppLayout`, not a route |
-| **Account Settings** | `PUT /profile /settings /password` | logic lives directly in `services/auth.ts` + `AuthContext`, no dedicated hook | none yet |
-| **Invoices** | none (Finding 1) | mock-only, was never real | `ai.html` — origin of the design system, not a route |
-
----
-
-## Proposed flow
+## The map
 
 ```mermaid
 flowchart TD
-    A[/ unauthenticated /] --> B[Auth: login / register]
-    B --> C[Dashboard]
-    C --> D[Bug Tracker]
-    C --> E[Notes + Calendar]
-    C --> F[Chat]
-    C --> H[Account Settings]
-    D --> D1[Ticket detail / create — Stepper flow from ac.html]
-    E --> E1[Note editor]
-    E --> E2[Calendar view — SegmentedControl: list / density toggle]
-    F --> F1[Conversation thread]
-    H --> H1[Profile / Security / Notifications tabs]
-    C -.->|power-tool, not primary nav| I[Console Monitor]
-    G[AI Assistant panel] -.->|Topbar toggle, overlays every page| C
-    G -.-> D
-    G -.-> E
+    L[/ landing — public /] --> A[Login / Register]
+    A --> D[Dashboard]
+    D --> P[Projects]
+    P --> I["Project: Issues · Overview · Board · Members · Settings"]
+    I --> T[Bug Tracker board]
+    D --> T
+    D --> N[Notes & Calendar]
+    D --> K[Tasks]
+    D --> C[Chat]
+    D --> S[Settings]
+    ADM["Administration — Users · Documentation · Console Monitor"] -.->|admins only| D
+    AI[AI Assistant panel] -.->|Topbar toggle, overlays every route| D
+    AI -.-> I
+    AI -.-> N
 ```
 
-*(The assistant is drawn pointing **into** the pages rather than hanging off Dashboard: it is a
-panel that opens alongside whatever route you are on, not a place you navigate to.)*
+**Primary nav** (`Sidebar.tsx`): Dashboard · Projects · Bug Tracker · Tasks · Notes & Calendar ·
+Chat. Then an **Administration** group rendered only for admins (Users, Documentation, Console
+Monitor) and an **Account** group (Documentation, Settings).
 
-**Entry.** Unauthenticated users land on Auth (login/register) — there is currently no public
-landing page (`Homepage.tsx` was deleted along with everything else). Whether a marketing/landing
-page belongs in front of Auth is a product call, not something the backend or existing logic
-dictates either way — flagging it rather than deciding it here.
+**The assistant is not in the nav and should not be.** It is a Topbar toggle opening a right-hand
+panel that belongs to no route: available everywhere, losing nothing when you navigate. It is an
+assistant, not a destination.
 
-**Home base.** Dashboard is the post-login landing page — it's the one page already proven to work
-end-to-end this session (shadcn Alert + `StatTile`/`Surface`/`motion`, real ticket/log data,
-verified in-browser). Rebuilding it first again gives every other page a working reference
-instead of a description.
-
-**Primary nav (4 items, not 7).** Bug Tracker, Notes+Calendar, Chat, Account Settings. The AI
-assistant correctly never took a nav slot — but it did *not* end up as an entry point from Notes or
-Dashboard as this paragraph originally guessed. It shipped as a **Topbar toggle opening a
-right-hand panel that overlays no route and belongs to none**: available from every page, losing
-nothing when you navigate, because "it's an assistant, not a destination" argues for a persistent
-slot rather than a doorway on two particular pages. Console Monitor is
-a real, working feature (session-scoped Puppeteer capture) but it's a power-tool for debugging a
-running app, not a screen most users open often — surface it from Logs/Bug Tracker context, not
-primary nav.
-
-**Why 4 nav items instead of the old 9 routes:** the old app had `/chat`, `/chat-optimized`,
-`/chat/new`, `/ai-chat` as four separate top-level routes for what is really one feature (talk to
-someone or something) plus `/calendar` and `/optimization-calendar` as two routes for one dataset.
-Collapsing both is lower risk *and* less to rebuild — the flow research and the "least UI to
-rebuild" incentive point the same direction here, which is a good sign it's the right call rather
-than a compromise.
+**Public routes:** `/` (landing), `/login`, `/register`, `/docs`, `/docs/:slug`. Everything else is
+behind `ProtectedRoute`; `/invite/:token` is authenticated too, because accepting an invite requires
+an account.
 
 ---
 
-## Rebuild sequencing recommendation
+## The journey the product exists for
 
-1. **Dashboard** — already done once, delete-proof now that the pattern (shadcn Alert +
-   design-system primitives + untouched hooks) is documented in `ui-reset-2026-07-24.md`. Rebuild
-   it again first; it's the cheapest page and everything else links back to it.
-2. **Bug Tracker** — richest surviving logic (`useBugTrackerData` + `useBugTrackerSocket`, i.e.
-   realtime already works), richest scaffold (`WorkspaceBoardLayout`), and the `ac.html` stepped
-   create-flow gives ticket creation a real IA instead of a modal afterthought.
-3. **Notes + Calendar, merged** — second-richest logic surface (4 hooks), `TimelineLayout` ready.
-   Building it as one page from the start avoids doing the merge as a *second* migration later.
-4. **Account Settings** — no hook to write, `services/auth.ts` already does the work; mostly a
-   forms-and-tabs UI exercise once the pattern from steps 1–3 is established.
-5. ~~**AI Chat**~~ — **done 2026-08-16** (sprint 11, `sprint-11/ai-assistant-byok`). The estimate
-   here — "backend trivial, needs one new hook" — was right about the chat endpoint and wrong about
-   the feature: the cost was not the hook, it was **BYOK**. Letting each user spend their own key
-   added a `UserAiKey` table, AES-256-GCM envelope encryption (`lib/crypto.ts`), a validate-before-
-   write key API, and a typed error vocabulary so a rejected key reads as "re-enter your key"
-   instead of "invalid request". Full write-up: `.agents/docs/features/ai-assistant-byok.md`.
-6. **Chat (interpersonal)** — last, because it's the only feature needing a new hook *and* new
-   socket wiring *and* new UI, with the smallest backend surface (`/users` only — presence/message
-   history endpoints don't exist yet either). Doing it last means the socket.io client pattern from
-   `devrule.md` §8 gets written once real usage patterns from Bug Tracker's socket hook are proven.
-7. **Console Monitor** — whenever a debugging power-tool is actually needed; not on the critical
-   path for a usable app.
+**1. An error happens in someone's app.** The SDK posts it to `POST /api/ingest` with the project's
+public key.
 
-## Update — 2026-07-24: Calendar merged, Chat hook rebuilt
+**2. It becomes an issue.** Identical errors collapse by fingerprint into one row with a count. A
+resolved issue firing again reopens as a **regression** and notifies.
 
-Acted on this doc's own findings:
+**3. Someone reads it** at `/p/:slug/issues` — filtered, sorted and paged server-side, with the
+filter in the URL so the view can be pasted to a colleague. Detail (`/p/:slug/issues/:id`) shows the
+latest event with **symbolicated** frames, a timeline, and browser/OS/release breakdowns.
 
-- **Finding 2 (Calendar duplication) resolved in code.** `hooks/useOptimizationCalendarEvents.ts`
-  and `utils/optimizationCalendar.ts` are gone; `hooks/useCalendarEvents.ts` now returns the
-  richer shape itself (`events`, `eventsByDay`, `dispatch`, `totalNotes`) — one hook for the one
-  Calendar page this doc recommended, not two.
-- **Finding 3 (Chat logic) addressed.** New `hooks/useChat.ts` + `services/chat.ts` +
-  `types/chat.ts`, built directly against `app/server/src/server.ts`'s actual Socket.IO handlers
-  (`register` with `clientType: 'chat'`, `chat-message`, `user-typing` — same server
-  `useBugTrackerSocket.ts` already connects to). Still needs a page/UI built on top.
-- **`types/invoice.ts` removed** — confirmed zero references before deleting (Finding 1: it was
-  already dead, the Invoices page having been removed in the reset).
+**4. It becomes work.** *Create ticket* promotes the issue into a `Ticket` on the project board,
+carrying the culprit, count, first-seen and latest stack across. Promoting twice returns the ticket
+that already exists rather than making a second one.
 
-This also answered one open question below from the server source directly: `server.ts` comments
-the chat registry as *"Instagram-style DM demo"* — **1:1 only, confirmed**, not group chat. No
-message-persistence model or history endpoint exists either way, so `useChat.ts` is intentionally
-ephemeral (messages live only as long as the socket connection).
+**5. It gets worked.** `/p/:slug/board` or the cross-project `/bug-tracker`: status, priority,
+assignee, tags, comments. Deleting archives; restore brings it back.
 
-## Open questions for you, not decidable from code
+---
 
-- **Landing page before Auth** — rebuild `Homepage.tsx`'s Luxe landing content, or go straight to
-  a login screen?
-- **Console Monitor's audience** — genuinely user-facing, or should it move behind a settings/dev
-  toggle so it stops competing for primary-nav attention?
-- **Chat message persistence** — is ephemeral (reload = history gone) acceptable for a v1, or does
-  a `ChatMessage` model + history endpoint need to be added to the backend before Chat ships?
+## Bug Tracker — what changed since this doc last described it
+
+Two claims in the 2026-07-24 version are now wrong, and both would mislead someone planning work:
+
+| Old claim | Reality on 2026-08-21 |
+| --- | --- |
+| "realtime already works" via `useBugTrackerSocket` | **That hook no longer exists.** `useConsoleMonitor.ts` took over the console feed; nothing took over tickets. The board fetches and refetches |
+| Ticket CRUD is the feature | Tickets are **project-scoped** (`projectId` required) and **soft-deleted**, and the interesting path into them is *promotion from an issue*, not manual creation |
+
+Live updating of the **issue list** — a different surface — is built on
+`sprint-8/realtime-issue-stream` and is not merged.
+
+## AI Assistant — shipped, and BYOK is the reason it cost what it did
+
+The old sequencing note called this "backend trivial, needs one new hook." Right about the endpoint,
+wrong about the feature: the cost was **bring-your-own-key**. Letting each user spend their own
+Gemini quota added a `UserAiKey` table, AES-256-GCM envelope encryption, a validate-before-write key
+API, and a typed error vocabulary so a rejected key reads as *"re-enter your key"* rather than
+*"invalid request"*.
+
+In flow terms: the panel opens from any page; with no key stored it opens a key dialog first; keys
+are proven against the provider before they are saved, so a typo is caught while the user is still
+looking at the dialog rather than on their first message. Full write-up:
+[`features/ai-assistant-byok.md`](../features/ai-assistant-byok.md).
+
+## Notes, Tasks and Calendar
+
+One dataset, two pages. `/notes` is notes plus a month grid (a note can be *scheduled* onto a future
+day); `/tasks` is every task across every day, filterable by open, overdue and done. The old
+`/daily` page is gone — folded into these two — which is why the `daily-notes` documentation page
+was retired in favour of `tasks`.
+
+## Chat
+
+`/chat`, one-to-one, authenticated at the socket handshake and scoped to a room per conversation.
+**Ephemeral by decision** (2026-08-21): messages are relayed, never stored, and the UI says so on
+every thread.
+
+---
+
+## The three open questions this document used to carry — all now answered
+
+| Question | Answer |
+| --- | --- |
+| A landing page before Auth, or straight to login? | **Landing page.** `/` is a public Luxe landing route; unauthenticated users are not dropped onto a form |
+| Is Console Monitor user-facing, or a dev tool? | **Admin tool.** It sits at `/admin/console` under Administration, and the socket room re-checks role from the database rather than trusting the handshake |
+| Is ephemeral chat acceptable for v1? | **Yes — decided, not deferred.** See [`features/chat.md`](../features/chat.md); the authorisation argument for a persistence model disappeared once room ids carried their own participants |
+
+---
+
+## Appendix — the 2026-07-24 rebuild research
+
+Kept because it explains why the app is shaped this way. **Its feature inventory is out of date; do
+not read it as current.**
+
+The UI teardown left `/design-system` as the only route, with business logic sitting unwired in
+`hooks/` and `services/`. Three findings came out of reading the schema and routes rather than
+guessing:
+
+**Finding 1 — Invoices had no backend.** No `Invoice` model, no route; the page was mock data. It
+was never rebuilt, and it survives only as the lineage of the design system. *Still true.*
+
+**Finding 2 — Calendar and OptimizationCalendar were the same data twice.** Both read the
+Notes-backed calendar endpoint at different densities. Resolved by collapsing them into one page
+with a mode toggle, exactly as recommended. *Acted on; `useOptimizationCalendarEvents` and
+`utils/optimizationCalendar.ts` are gone.*
+
+**Finding 3 — Chat's client logic did not survive the reset**, because it lived inside
+`components/ui/chat/` rather than in `hooks/`. Rebuilt as `hooks/useChat.ts` + `services/chat.ts`,
+and then **deliberately blocked** until the socket was authenticated and room-scoped — the security
+work documented in [`features/chat.md`](../features/chat.md). *Shipped.*
+
+The rebuild order it recommended — Dashboard, Bug Tracker, Notes+Calendar, Settings, then AI, then
+Chat, with Console Monitor last — is what happened, with one correction already noted above: the AI
+step was far larger than estimated, and Console Monitor ended up behind an admin gate rather than
+merely deprioritised.
