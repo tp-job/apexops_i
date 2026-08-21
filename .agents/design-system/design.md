@@ -70,6 +70,14 @@ one page whose job is to be the reference it is the worst place for it. The Colo
 gained the semantic tokens (`--color-global-green|yellow|red|blue`) and the accent variants, so the
 page shows the palette that exists rather than six of it.
 
+**The standalone reference [`design-system.html`](design-system.html) was brought to the same state
+in the same pass** — it had drifted the same way, and a second reference that disagrees with the
+first is worse than one reference. It gained the four demos, its swatch captions are now read from
+its own tokens by script instead of typed, its primitive count is the number the barrel exports
+rather than a remembered one, and its light-mode `--text-dim` moved from #7C8A97 (3.01:1 on the
+canvas — a fail) to #5F6B78 (4.64:1). Verified in all three of its theme states: light, dark, and
+the auto that follows the OS.
+
 ### Rules (in addition to §2 Do/Don't below)
 - ✅ Compose on `Surface` — never raw `div` + background utilities for cards.
 - ✅ One glowing element (`ds-glow`/accent) per view — active state **or** CTA, not both.

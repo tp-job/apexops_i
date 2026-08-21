@@ -29,6 +29,10 @@
     --ink-deep-2:   #1C1C1C;
     --steel:        #9CB3C4;
     --steel-deep:   #7C97AA;
+    /* Named here so the swatch below can paint from a token rather than a
+       literal — a chip whose caption is typed by hand can disagree with the
+       paint under it, and this is the page that is supposed to settle that. */
+    --brand-gray:   #F3F4F6;
 
     /* Status */
     --blue:   #3B82F6;
@@ -49,7 +53,12 @@
 
     --text:      #222222;
     --text-mid:  #55606B;
-    --text-dim:  #7C8A97;
+    /* Was #7C8A97 until 2026-08-21, which is 3.01:1 on the canvas and 3.54:1 on
+       white — under the 4.5:1 AA floor, and this token carries captions and
+       notes, i.e. small text. #5F6B78 measures 4.64:1 and 5.44:1 while staying
+       lighter than --text-mid, so the hierarchy survives the fix. The dark-mode
+       value already passed (5.09:1) and is unchanged. */
+    --text-dim:  #5F6B78;
 
     /* Elevation — soft, wide, low opacity. Luxury is restraint. */
     --elev-1: 0 1px 2px rgba(17, 24, 39, 0.04), 0 1px 3px rgba(17, 24, 39, 0.03);
@@ -761,6 +770,77 @@ a { color: inherit; }
 }
 
 /* List row with the accent strip */
+/* ── GlassPanel · KpiCard · PillTabs · Skeleton ──────────────────
+   Added 2026-08-21, when the live guide at /design-system gained them.
+   A primitive nothing renders is a primitive nothing checks: PillTabs had
+   no dark treatment at all and no call site, so nothing ever showed it. */
+.glass-demo {
+    flex: 1 1 160px;
+    min-height: 92px;
+    display: flex;
+    align-items: flex-end;
+    padding: 14px;
+    border-radius: 18px;
+    font-size: 13px;
+    font-weight: 600;
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    box-shadow: var(--elev-1);
+}
+.glass-demo.light { background: var(--surface); border: 1px solid var(--hairline); color: var(--text); }
+.glass-demo.dark  { background: rgba(34, 34, 34, 0.85); border: 1px solid rgba(255,255,255,0.10); color: #FFF; }
+.glass-demo.blue  { background: rgba(156, 179, 196, 0.90); border: 1px solid rgba(255,255,255,0.25); color: #FFF; }
+
+.kpi { display: flex; align-items: flex-start; gap: 12px; min-width: 180px; }
+.kpi-icon {
+    width: 34px; height: 34px; flex: none;
+    display: grid; place-items: center;
+    border-radius: 12px;
+    background: var(--lime-soft);
+    color: var(--accent-text);
+    font-size: 11px;
+}
+.kpi .k { display: block; font-size: 12px; color: var(--text-mid); margin-bottom: 2px; }
+.kpi .v { font-family: 'JetBrains Mono', monospace; font-size: 22px; font-weight: 700; color: var(--text); }
+
+.pills {
+    display: inline-flex; align-items: center; gap: 2px;
+    padding: 5px;
+    border-radius: 999px;
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+}
+.pills button {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 6px 14px;
+    border: 0; border-radius: 999px;
+    background: transparent;
+    color: var(--text-mid);
+    font: inherit; font-size: 12px; font-weight: 500;
+    cursor: pointer;
+    transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.pills button:hover { background: var(--surface-sunk); color: var(--text); }
+.pills button.on { background: var(--lime); color: var(--ink); font-weight: 700; }
+.pills .dot { width: 6px; height: 6px; border-radius: 999px; background: var(--ink); }
+.pills .count {
+    padding: 1px 6px; border-radius: 7px;
+    background: var(--surface-sunk);
+    font-family: 'JetBrains Mono', monospace; font-size: 10px;
+}
+.pills button.on .count { background: rgba(255, 255, 255, 0.42); }
+
+.sk {
+    display: block;
+    border-radius: 10px;
+    background: var(--surface-sunk);
+    animation: skpulse 1.6s var(--ease) infinite;
+}
+@keyframes skpulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+@media (prefers-reduced-motion: reduce) { .sk { animation: none; } }
+
 .rows { display: flex; flex-direction: column; gap: 6px; }
 
 .row {
@@ -984,63 +1064,63 @@ td.mono { font-family: var(--font-mono); font-size: 12px; }
 
         <div class="swatches">
             <div class="swatch">
-                <div class="fill" style="background:#C5F43A"></div>
+                <div class="fill" style="background:var(--lime)"></div>
                 <div class="body">
                     <span class="name">brand-accent</span>
-                    <span class="hex">#C5F43A</span>
+                    <span class="hex" data-token="--lime"></span>
                     <span class="swatch-role">Active nav pill, focal CTA, meter fill. One per view.</span>
                 </div>
             </div>
             <div class="swatch">
-                <div class="fill" style="background:#B0DC34"></div>
+                <div class="fill" style="background:var(--lime-hover)"></div>
                 <div class="body">
                     <span class="name">accentHover</span>
-                    <span class="hex">#B0DC34</span>
+                    <span class="hex" data-token="--lime-hover"></span>
                     <span class="swatch-role">Hover only. Never a resting state.</span>
                 </div>
             </div>
             <div class="swatch">
-                <div class="fill" style="background:#222222"></div>
+                <div class="fill" style="background:var(--ink)"></div>
                 <div class="body">
                     <span class="name">brand-dark</span>
-                    <span class="hex">#222222</span>
+                    <span class="hex" data-token="--ink"></span>
                     <span class="swatch-role">Nav ground, headings, text on the accent.</span>
                 </div>
             </div>
             <div class="swatch">
-                <div class="fill" style="background:#141414"></div>
+                <div class="fill" style="background:var(--ink-deep)"></div>
                 <div class="body">
                     <span class="name">nearBlack</span>
-                    <span class="hex">#141414</span>
+                    <span class="hex" data-token="--ink-deep"></span>
                     <span class="swatch-role">Dark-mode canvas, paired with #1C1C1C.</span>
                 </div>
             </div>
             <div class="swatch">
-                <div class="fill" style="background:#9CB3C4"></div>
+                <div class="fill" style="background:var(--steel)"></div>
                 <div class="body">
                     <span class="name">brand-steel</span>
-                    <span class="hex">#9CB3C4</span>
+                    <span class="hex" data-token="--steel"></span>
                     <span class="swatch-role">Small marks only, in practice &mdash; note dots, neutral track fills. 3 uses.</span>
                 </div>
             </div>
             <div class="swatch">
-                <div class="fill" style="background:#7C97AA"></div>
+                <div class="fill" style="background:var(--steel-deep)"></div>
                 <div class="body">
                     <span class="name">steelDark</span>
-                    <span class="hex">#7C97AA</span>
+                    <span class="hex" data-token="--steel-deep"></span>
                     <span class="swatch-role">Defined for steel on light grounds. <b>Zero uses</b> &mdash; retire it or find its job.</span>
                 </div>
             </div>
             <div class="swatch">
-                <div class="fill" style="background:#F3F4F6"></div>
+                <div class="fill" style="background:var(--brand-gray)"></div>
                 <div class="body">
                     <span class="name">brand-gray</span>
-                    <span class="hex">#F3F4F6</span>
+                    <span class="hex" data-token="--brand-gray"></span>
                     <span class="swatch-role">Chip fills, input grounds, muted surfaces.</span>
                 </div>
             </div>
             <div class="swatch">
-                <div class="fill" style="background:linear-gradient(135deg,#E0E7FF,#EFF6FF)"></div>
+                <div class="fill" style="background:var(--canvas)"></div>
                 <div class="body">
                     <span class="name">canvas</span>
                     <span class="hex">#E0E7FF &rarr; #EFF6FF</span>
@@ -1053,20 +1133,20 @@ td.mono { font-family: var(--font-mono); font-size: 12px; }
 
         <div class="swatches">
             <div class="swatch">
-                <div class="fill" style="background:#10B981;height:52px"></div>
-                <div class="body"><span class="name">global-green</span><span class="hex">#10B981</span></div>
+                <div class="fill" style="background:var(--green);height:52px"></div>
+                <div class="body"><span class="name">global-green</span><span class="hex" data-token="--green"></span></div>
             </div>
             <div class="swatch">
-                <div class="fill" style="background:#3B82F6;height:52px"></div>
-                <div class="body"><span class="name">global-blue</span><span class="hex">#3B82F6</span></div>
+                <div class="fill" style="background:var(--blue);height:52px"></div>
+                <div class="body"><span class="name">global-blue</span><span class="hex" data-token="--blue"></span></div>
             </div>
             <div class="swatch">
-                <div class="fill" style="background:#F59E0B;height:52px"></div>
-                <div class="body"><span class="name">global-yellow</span><span class="hex">#F59E0B</span></div>
+                <div class="fill" style="background:var(--yellow);height:52px"></div>
+                <div class="body"><span class="name">global-yellow</span><span class="hex" data-token="--yellow"></span></div>
             </div>
             <div class="swatch">
-                <div class="fill" style="background:#EF4444;height:52px"></div>
-                <div class="body"><span class="name">global-red</span><span class="hex">#EF4444</span></div>
+                <div class="fill" style="background:var(--red);height:52px"></div>
+                <div class="body"><span class="name">global-red</span><span class="hex" data-token="--red"></span></div>
             </div>
         </div>
 
@@ -1326,8 +1406,9 @@ td.mono { font-family: var(--font-mono); font-size: 12px; }
             <span class="ref">components/design-system/*</span>
         </div>
         <p class="lede">
-            Twenty-eight primitives behind one import. If a screen needs something that is not here,
-            the primitive gets built here first &mdash; it does not get hand-rolled into the page.
+            Twenty-nine primitives behind one import &mdash; the number the barrel actually exports,
+            checked rather than remembered. If a screen needs something that is not here, the
+            primitive gets built here first; it does not get hand-rolled into the page.
         </p>
 
         <div class="spec">
@@ -1390,6 +1471,52 @@ td.mono { font-family: var(--font-mono); font-size: 12px; }
                 <div class="row"><span>Rotate the API key</span><span class="amt">21 Aug</span></div>
             </div>
             <div class="spec-meta"><span class="token">list row &middot; active</span><span class="note">4px accent strip on the leading edge. The strip is the state; the fill alone is ambiguous.</span></div>
+        </div>
+
+        <div class="spec">
+            <div class="demo-row">
+                <div class="glass-demo light">GlassPanel &middot; light</div>
+                <div class="glass-demo dark">GlassPanel &middot; dark</div>
+                <div class="glass-demo blue">GlassPanel &middot; blue</div>
+            </div>
+            <div class="spec-meta"><span class="token">GlassPanel</span><span class="note">The raw glass register under <span class="mono">Surface</span>. Pages compose on Surface; this is the shell it is built from.</span></div>
+        </div>
+
+        <div class="spec">
+            <div class="demo-row">
+                <div class="kpi">
+                    <span class="kpi-icon" aria-hidden="true">&#9679;</span>
+                    <div><span class="k">Unresolved issues</span><div class="v">128</div></div>
+                </div>
+                <div class="kpi">
+                    <span class="kpi-icon" aria-hidden="true">&#9679;</span>
+                    <div><span class="k">Events &middot; 24h</span><div class="v">12,904</div></div>
+                </div>
+            </div>
+            <div class="spec-meta"><span class="token">KpiCard</span><span class="note">Label, mono figure, optional icon. <span class="mono">StatTile</span> is the one with the trend pill and the mesh; this is the plain atom.</span></div>
+        </div>
+
+        <div class="spec">
+            <div class="pills" role="tablist" aria-label="Project sections">
+                <button type="button" role="tab" aria-selected="true" class="on"><span class="dot" aria-hidden="true"></span>Issues<span class="count">128</span></button>
+                <button type="button" role="tab" aria-selected="false">Board<span class="count">12</span></button>
+                <button type="button" role="tab" aria-selected="false">Members</button>
+            </div>
+            <div class="spec-meta"><span class="token">PillTabs</span><span class="note">Navigates between destinations. <span class="mono">SegmentedControl</span> filters what you are already looking at &mdash; the two are not interchangeable. Every surface here carries a dark treatment; it did not until 2026-08-21, when it was a white slab on a dark page with zero call sites to reveal it.</span></div>
+        </div>
+
+        <div class="spec">
+            <div style="max-width:420px;display:flex;flex-direction:column;gap:10px">
+                <span class="sk" style="height:12px;width:92%"></span>
+                <span class="sk" style="height:12px;width:78%"></span>
+                <span class="sk" style="height:12px;width:60%"></span>
+                <div style="display:flex;align-items:center;gap:10px;margin-top:4px">
+                    <span class="sk" style="height:36px;width:36px;border-radius:999px"></span>
+                    <span class="sk" style="height:36px;width:130px"></span>
+                    <span class="sk" style="height:36px;flex:1"></span>
+                </div>
+            </div>
+            <div class="spec-meta"><span class="token">Skeleton &middot; SkeletonText</span><span class="note">Not-yet, never nothing. <span class="mono">EmptyState</span> is for nothing. Both respect reduced motion.</span></div>
         </div>
 
         <h3 style="font-size:15px;margin:30px 0 12px">Full inventory</h3>
@@ -1494,6 +1621,29 @@ td.mono { font-family: var(--font-mono); font-size: 12px; }
         requestAnimationFrame(function () { sync(); ticking = false; });
     }, { passive: true });
     sync();
+
+    /* ── Swatch captions are READ, never typed ──
+       A hex typed beside a colour chip can disagree with the paint under it,
+       and on the page that is supposed to settle such questions that is the
+       worst place for it. Every caption below is the computed value of the
+       token its chip is painted from, re-read whenever the theme changes. */
+    var swatchLabels = Array.prototype.slice.call(document.querySelectorAll('.hex[data-token]'));
+
+    function paintTokens() {
+        var styles = getComputedStyle(root);
+        swatchLabels.forEach(function (el) {
+            var value = styles.getPropertyValue(el.getAttribute('data-token')).trim();
+            el.textContent = value || '—';
+            el.title = el.getAttribute('data-token');
+        });
+    }
+
+    paintTokens();
+    new MutationObserver(paintTokens).observe(root, { attributes: true, attributeFilter: ['data-theme'] });
+    if (window.matchMedia) {
+        var scheme = window.matchMedia('(prefers-color-scheme: dark)');
+        if (scheme.addEventListener) scheme.addEventListener('change', paintTokens);
+    }
 
     /* ── Motion demo ── */
     var demo = document.getElementById('motionDemo');
