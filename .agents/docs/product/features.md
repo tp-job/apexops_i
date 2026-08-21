@@ -57,8 +57,8 @@ planning work would otherwise build on them:
 
 1. **There is no realtime on the board.** `useBugTrackerSocket.ts` is gone — `useConsoleMonitor.ts`
    replaced it for the console feed, and nothing took over the ticket side. The board is a
-   fetch-and-refetch surface. (Realtime for the *issue list* is a separate piece of work, on
-   `sprint-8/realtime-issue-stream` and not merged.)
+   fetch-and-refetch surface. The *issue list* is a different surface and **does** stream live
+   (merged 2026-08-21): see [`realtime-issue-stream.md`](../features/realtime-issue-stream.md).
 2. **Tickets are project-scoped and soft-deleted.** `projectId` is required, `DELETE /:id` archives
    rather than destroys, and `POST /:id/restore` brings it back. The old text described an
    unscoped, hard-deleting CRUD.
@@ -193,7 +193,6 @@ survives only as the lineage of the design system.
 
 ---
 
-**Verified against the tree on 2026-08-21.** Two branches from that day were unmerged and are
-therefore *not* described above: `sprint-8/realtime-issue-stream` (a live issue list) and
-`notes-calendar/g3-rich-notes` (read-time conversion of legacy HTML notes). Notes-SSOT phase 4 *is*
-described, because it removes a field and calling it present would be wrong.
+**Verified against the tree on 2026-08-21**, and re-checked the same day after the three open
+branches merged: notes-SSOT phase 4, the legacy-HTML note conversion, and the real-time issue
+stream are all on `main` and all described above.

@@ -72,8 +72,9 @@ Two claims in the 2026-07-24 version are now wrong, and both would mislead someo
 | "realtime already works" via `useBugTrackerSocket` | **That hook no longer exists.** `useConsoleMonitor.ts` took over the console feed; nothing took over tickets. The board fetches and refetches |
 | Ticket CRUD is the feature | Tickets are **project-scoped** (`projectId` required) and **soft-deleted**, and the interesting path into them is *promotion from an issue*, not manual creation |
 
-Live updating of the **issue list** — a different surface — is built on
-`sprint-8/realtime-issue-stream` and is not merged.
+Live updating of the **issue list** is a different surface and it **is** shipped (merged
+2026-08-21): the list patches counts in place, defers rows that do not match your filter behind an
+*N new issues* banner, and carries a three-state badge that never reads `live` over a dead feed.
 
 ## AI Assistant — shipped, and BYOK is the reason it cost what it did
 

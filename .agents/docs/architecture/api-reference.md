@@ -257,6 +257,8 @@ present but invalid is rejected outright — that combination is only ever a bug
 | `register` | client → server | `clientType: 'monitor' \| 'target-app' \| 'chat'`. `monitor` is **admin only**, re-checked against the database |
 | `chat-join` | client → server | Room id encodes its two participants; membership is verified server-side |
 | `chat-message`, `user-typing` | both | Sender identity is rebuilt from the token; anything the client claimed about *who sent this* is discarded |
+| `issues-join` | client → server | Subscribes to `project:<id>`. **Membership is checked**, not just authentication — the SDK's anonymous socket is refused |
+| `issue-activity` | server → client | One frame per ingested (or resolved, or promoted) issue: `{ issueId, projectId, fingerprint, level, status, count, lastSeen, ticketId, isNew }`. **`count` is the new total, never a delta** — an increment over a transport that drops and replays is how a counting tool starts lying |
 | `console-logs` | both | Only a registered target-app may relay; live view only, never persisted |
 | `target-app-connected` / `-disconnected` | server → client | Into the `monitors` room |
 
@@ -273,16 +275,10 @@ people's data checks membership on join rather than assuming the handshake did i
 - **Anything that writes logs without a session or a key.** That door was `/console-logs/realtime`
   and it is `410`.
 
-## Work not yet on `main`
+## Merge state
 
-Written 2026-08-21, when three branches from that day's sessions were unmerged. This file describes
-the tree **including** notes-SSOT phase 4 (`checklistItems` dropped), because that change removes a
-field and documenting it as present would be knowingly wrong. Two others are **not** reflected
-above:
-
-| Branch | What it adds |
-| --- | --- |
-| `sprint-8/realtime-issue-stream` | An `issue-activity` socket frame pushed into a `project:<id>` room by ingest, plus status and promote changes |
-| `notes-calendar/g3-rich-notes` | Read-time conversion of legacy HTML notes; no API change |
-
-If those merge, add `issue-activity` to the socket table and nothing else here moves.
+Written 2026-08-21 while three branches were still open, and **updated the same day once they
+merged**: notes-SSOT phase 4 (`checklistItems` dropped), `notes-calendar/g3-rich-notes` (read-time
+conversion of legacy HTML notes — no API change) and `sprint-8/realtime-issue-stream` (the
+`issues-join` / `issue-activity` events above) are all on `main`. Everything in this file describes
+merged code.
