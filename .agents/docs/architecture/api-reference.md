@@ -1,537 +1,288 @@
-# 📡 ApexOps - API Documentation
+# API reference — ApexOps
 
-## 🌐 Base URL
+> **Rewritten 2026-08-21**, enumerated from `app/server/src/server.ts`'s mounts and every router in
+> `app/server/src/api/*.ts`. The previous version documented a `/register` + `/login` + Ticket +
+> Log API with a `name` field on the user — a shape that predates project scoping, roles, ingest,
+> issues, tasks, calendar events, AI and docs. It described an app that no longer exists.
+>
+> **How to re-derive this** rather than trusting it: `grep -n "app.use('/api" app/server/src/server.ts`
+> for the mounts, then `grep -nE "^router\.(get|post|put|patch|delete)" app/server/src/api/*.ts` for
+> the routes. If this file and that output disagree, the output is right.
 
-```
-http://localhost:3000
-```
+## Conventions
 
----
+**Base URL.** `http://localhost:3000` in development (`PORT`). The Socket.IO server is a **separate
+port**, `8081` (`WS_PORT`) — see [Socket.IO events](#socketio-events).
 
-## 📋 Table of Contents
+**Authentication.** `Authorization: Bearer <accessToken>`. Access tokens are short-lived and carry
+`{ id, email, role, sid }`; `POST /api/auth/refresh` rotates them, and the refresh token is
+single-use — two concurrent refreshes are a bug, not a retry (see
+[`authSession.ts`](../../../app/client/src/lib/authSession.ts), which is the client's *only* refresh
+coordinator).
 
-- [Authentication](#-authentication)
-- [Logs API](#-logs-api)
-- [Tickets API](#-tickets-api)
-- [Console Logs API](#-console-logs-api)
-- [Health Check](#-health-check)
+**Authorization is read from the database, never from the token.** `authorize('admin')` re-reads
+`role` and `isActive` per request, so a demoted admin loses access immediately rather than when
+their token happens to expire. Project routes resolve membership the same way, through
+`lib/projectAccess.ts`.
 
----
+**Errors.** `{ "error": "<human sentence>" }`, plus `details[]` on validation failures. The AI routes
+additionally carry a stable `code` (see [AI](#ai-byok)) — match on `code`, never on the sentence.
 
-## 🔐 Authentication
+**A project you are not a member of returns `404`, not `403`.** A 403 confirms the slug exists,
+which turns every project route into a way to enumerate other people's project names one guess at a
+time. The same rule applies to issues, tickets and members nested under a project.
 
-### Register User
+**Rate limits** (`middleware/rateLimit.ts`), each closing a different door:
 
-**POST** `/register`
+| Limiter | Applies to |
+| --- | --- |
+| `authLoginLimiter` / `authRegisterLimiter` | credential stuffing and signup floods |
+| `inviteLimiter` | invite spam from one project |
+| `aiChatLimiter` | per-user AI spend |
+| `urlScanLimiter` | the admin URL-scan endpoint |
+| in-memory per-key + per-IP buckets | `POST /api/ingest` (see below) |
 
-สร้างผู้ใช้ใหม่
-
-**Request Body:**
-```json
-{
-  "name": "John Doe",
-  "email": "john@example.com",
-  "password": "password123"
-}
-```
-
-**Response:**
-```json
-{
-  "message": "User registered successfully"
-}
-```
-
-**Error Responses:**
-- `500` - Server error หรือ email ซ้ำ
-
----
-
-### Login
-
-**POST** `/login`
-
-เข้าสู่ระบบและรับ JWT token
-
-**Request Body:**
-```json
-{
-  "email": "john@example.com",
-  "password": "password123"
-}
-```
-
-**Response:**
-```json
-{
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-}
-```
-
-**Error Responses:**
-- `400` - Email หรือ password ไม่ครบถ้วน
-- `401` - Email หรือ password ไม่ถูกต้อง
-- `500` - Server error
+**CORS.** The app is pinned to `CORS_ORIGIN` (the frontend). `POST /api/ingest` is the one endpoint
+with its own permissive policy, because it legitimately accepts cross-origin posts from any site
+running the SDK. Do not loosen the global policy to serve ingest.
 
 ---
 
-### Get Profile (Protected)
+## Ingest — the SDK's only endpoint
 
-**GET** `/profile`
+`POST /api/ingest` · **key-authenticated, write-only, no session**
 
-รับข้อมูลผู้ใช้ปัจจุบัน (ต้องใช้ JWT token)
+Authenticated by a per-project ingest key (`X-Apexops-Key` header, or `key` in the body). The key is
+**public by design**: it authorizes writing events into exactly one project and can never read.
+Defences are blast-radius defences — per-key and per-IP rate limits, a 1 MB body cap, a bounded
+batch size, server-side level filtering and an optional origin allowlist.
 
-**Headers:**
-```
-Authorization: Bearer <token>
-```
+```http
+POST /api/ingest
+X-Apexops-Key: pk_...
+Content-Type: application/json
 
-**Response:**
-```json
-{
-  "message": "Welcome!",
-  "user": {
-    "id": 1,
-    "email": "john@example.com"
-  }
-}
+{ "events": [ { "level": "error", "message": "…", "stack": "…", "url": "…", "release": "1.4.0", "count": 1 } ] }
 ```
 
-**Error Responses:**
-- `401` - ไม่มี token
-- `403` - Token ไม่ถูกต้องหรือหมดอายุ
+| Status | Meaning |
+| --- | --- |
+| `202` | Accepted — `{ accepted, issues, dropped, regressions }`. Also the answer when every event was dropped by the project's capture levels |
+| `400` | Payload failed validation (`details[]`, `maxEvents`) |
+| `401` | Missing, malformed, unknown or archived-project key — deliberately the same answer for all four |
+| `403` | Origin not in the project's allowlist |
+| `413` | Body over 1 MB |
+| `429` | Per-key or per-IP limit; `Retry-After: 60` |
+
+Events collapse into `Issue` rows by fingerprint. An issue that was `resolved` and fires again is
+**reopened as a regression**, writes an `IssueStatusChange` audit row, and dispatches an alert after
+the response — never inside the request the SDK is waiting on.
 
 ---
 
-## 📝 Logs API
+## Auth and account — `/api/auth`
 
-### Get All Logs
+| Method | Path | Auth | Notes |
+| --- | --- | --- | --- |
+| POST | `/register` | — | Rate limited; password rules in `schemas/auth.schema.ts` |
+| POST | `/login` | — | Rate limited; returns `{ user, accessToken, refreshToken }` (plus `token`, a legacy alias for `accessToken`) |
+| POST | `/refresh` | refresh token in body | Rotates: the presented row is deleted and a new one issued |
+| POST | `/logout` | Bearer | Revokes the current session |
+| GET · PUT | `/profile` | Bearer | `firstName`/`lastName`/`email`/`phone`/`company`/`position`/`location`/`timezone`/`bio`/`avatarUrl`/`gender`/`birthDate`/`language`. **There is no `name` column** |
+| PUT | `/settings` | Bearer | `UserSettings`, including `sessionTimeout` — an idle window on the refresh token |
+| PUT | `/password` | Bearer | bcrypt, 12 rounds |
+| GET | `/sessions` | Bearer | Active sessions with device/IP context |
+| DELETE | `/sessions/:id` | Bearer | Revoke one |
+| POST | `/sessions/revoke-all` | Bearer | Revoke every other session |
 
-**GET** `/api/logs`
+## Users — `/api/users` · admin only
 
-รับรายการ logs ทั้งหมด (ล่าสุด 100 รายการ)
+`GET /` · `PATCH /:id/role` · `PATCH /:id/active`. The whole router is behind `authenticate` +
+`authorize('admin')`. Demoting or deactivating a user revokes their sessions — otherwise their
+existing token would outlive the decision.
 
-**Response:**
-```json
-[
-  {
-    "id": "1",
-    "timestamp": "2025-01-27T10:30:00.000Z",
-    "level": "error",
-    "message": "Failed to connect to database",
-    "source": "database.js",
-    "stack": "Error: Connection refused\n    at connect..."
-  },
-  {
-    "id": "2",
-    "timestamp": "2025-01-27T10:25:00.000Z",
-    "level": "warning",
-    "message": "Slow query detected",
-    "source": "query.js"
-  }
-]
-```
+## Projects — `/api/projects`
 
-**Query Parameters:**
-- ไม่มี (จะ return ล่าสุด 100 รายการ)
+The whole router is authenticated, and every `:slug` route resolves membership first.
 
----
+| Method | Path | Role | Notes |
+| --- | --- | --- | --- |
+| GET | `/` | member | Projects you belong to |
+| POST | `/` | — | Creates the project and its `owner` membership |
+| GET | `/rollup` | member | Cross-project dashboard aggregate; `?range=` |
+| GET · PATCH | `/:slug` | member · admin | Settings: capture levels, allowed origins, retention, alerting, webhook |
+| POST | `/:slug/rotate-key` | admin | New ingest key; the old one stops working immediately |
+| DELETE | `/:slug` | owner | **Archives** (soft) |
+| POST | `/:slug/restore` | owner | Un-archives |
+| GET | `/:slug/deletion-summary` | owner | What a permanent delete would destroy, counted |
+| DELETE | `/:slug/permanent` | owner | Irreversible |
+| GET | `/:slug/overview` | member | Per-project trend, release markers, regressions |
 
-### Create Log
+**Members and invites** (`api/team.ts`, mounted under the same prefix): `GET /:slug/members`,
+`POST /:slug/invites` (rate limited), `DELETE /:slug/invites/:id`, `PATCH` member role,
+`DELETE /:slug/members/:userId`, `POST /:slug/transfer-ownership`. Roles are `owner`, `admin`,
+`member`; `canAdminister` gates settings and membership, `isOwner` gates archive, restore and
+transfer.
 
-**POST** `/api/logs`
+**Source maps** (`api/sourcemaps.ts`): `POST /:slug/sourcemaps`, `GET /:slug/sourcemaps`,
+`DELETE /:slug/sourcemaps/:id`, `GET /:slug/releases`. Maps live in Postgres and are never written
+to disk; only `lib/sourcemaps.ts` may select the `content` column, and symbolication happens at
+**read** time so a map uploaded after a deploy retroactively resolves earlier events.
 
-สร้าง log ใหม่
+## Issues — `/api/projects/:slug/issues`
 
-**Request Body:**
-```json
-{
-  "level": "error",
-  "message": "Failed to connect to database",
-  "source": "database.js",
-  "stack": "Error: Connection refused\n    at connect..."
-}
-```
+| Method | Path | Notes |
+| --- | --- | --- |
+| GET | `/` | Server-filtered, sorted and paged: `level`, `status`, `q`, `sort`, `direction`, `limit`, `offset` |
+| GET | `/stats` | Counts for the header |
+| GET | `/:id` | Detail: latest event, symbolicated frames, timeline, browser/OS/release breakdown, `?range=` |
+| PATCH | `/:id` | `status` — `unresolved` \| `resolved` \| `ignored`. A no-op PATCH writes no audit row |
+| POST | `/:id/ticket` | Promote to a `Ticket`; `409` with the existing `ticketId` if already promoted |
 
-**Response:**
-```json
-{
-  "id": "1",
-  "timestamp": "2025-01-27T10:30:00.000Z",
-  "level": "error",
-  "message": "Failed to connect to database",
-  "source": "database.js",
-  "stack": "Error: Connection refused\n    at connect..."
-}
-```
+## Tickets — `/api/tickets`
 
-**Error Responses:**
-- `400` - Message ไม่ครบถ้วน
-- `500` - Server error
+Authenticated at the router. `Ticket` is `title`, `description`, `status`
+(`open` \| `in-progress` \| `resolved` \| `closed`), `priority` (`low` \| `medium` \| `high` \|
+`critical`), `assigneeId`/`reporterId` relations (with legacy free-text `assignee`/`reporter` kept
+as a display denorm), `tags`, `relatedLogs`, and a **required `projectId`**.
 
----
+`GET /` (filterable by `projectId`) · `GET /stats` · `GET /:id` · `POST /` · `PUT /:id` ·
+`DELETE /:id` — **archives, does not destroy** · `POST /:id/restore` ·
+`GET /:id/comments` · `POST /:id/comments`.
 
-## 🎫 Tickets API
+## Notes — `/api/notes`
 
-### Get All Tickets
+`GET /` · `GET /stats/overview` · `GET /calendar/:year/:month` · `GET /:id` · `POST /` ·
+`PUT /:id` · `PATCH /:id` · `DELETE /:id`.
 
-**GET** `/api/tickets`
+A note carries `title`, `content` (**always plain text**), `contentRich` (a TipTap document, null
+for plain notes), `type`, `isPinned`, `color`, `tags`, `imageUrl`, `linkUrl`, `quote`,
+`scheduledFor` and `dueDate`. **`checklistItems` is gone** — dropped in notes-SSOT phase 4; todos
+are `Task` rows. An old client that still sends the field gets a `201` with the key ignored.
 
-รับรายการ tickets ทั้งหมด
+`GET /calendar/:year/:month` buckets by `scheduledFor ?? createdAt` **in the viewer's timezone** and
+echoes the zone it used, alongside `tasksByDay` and `eventsByDay`.
 
-**Response:**
-```json
-[
-  {
-    "id": "TICK-001",
-    "title": "Fix login bug",
-    "description": "Users cannot login with email",
-    "status": "open",
-    "priority": "high",
-    "assignee": "John Doe",
-    "reporter": "System",
-    "createdAt": "2025-01-27T10:30:00.000Z",
-    "updatedAt": "2025-01-27T10:30:00.000Z",
-    "tags": ["bug", "auth"],
-    "relatedLogs": ["1", "2"]
-  }
-]
-```
+## Tasks — `/api/tasks`
 
----
+`GET /` · `GET /day/:date` · `PUT /day/:date` (whole-day sync, reconciled by client-generated id) ·
+`POST /` · `PATCH /:id` · `DELETE /:id`. Dates are `YYYY-MM-DD` and resolve in the user's zone.
 
-### Get Ticket by ID
+`GET /` takes `status` (`open` \| `done` \| `overdue`), `day`, `from`/`to`, `q`, `limit` (max 500)
+and `offset`, and answers `{ tasks, total, limit, offset }`. **`overdue` means a real deadline that
+has passed on unfinished work** — `dueDate` in the past and not done — not merely something planned
+for an earlier day, which is ordinary backlog.
 
-**GET** `/api/tickets/:id`
+## Calendar events — `/api/calendar-events`
 
-รับ ticket ตาม ID
+`GET /` (range) · `POST /` · `PATCH /:id` · `DELETE /:id` (soft). An event that crosses midnight
+appears on **every** day it covers — matching on the start day alone is the obvious implementation
+and it is wrong.
 
-**URL Parameters:**
-- `id` - Ticket ID (เช่น `TICK-001` หรือ `001`)
+## Day — `/api/day/:date`
 
-**Response:**
-```json
-{
-  "id": "TICK-001",
-  "title": "Fix login bug",
-  "description": "Users cannot login with email",
-  "status": "open",
-  "priority": "high",
-  "assignee": "John Doe",
-  "reporter": "System",
-  "createdAt": "2025-01-27T10:30:00.000Z",
-  "updatedAt": "2025-01-27T10:30:00.000Z",
-  "tags": ["bug", "auth"],
-  "relatedLogs": ["1", "2"]
-}
-```
+One call, one paint: the day's tasks, events and daily note together, resolved in the user's zone by
+the same helper the month grid uses, so the two can never disagree about which day something is on.
 
-**Error Responses:**
-- `404` - Ticket ไม่พบ
+## AI (BYOK)
 
----
+| Method | Path | Notes |
+| --- | --- | --- |
+| POST | `/api/ai/chat` | Authenticated, rate limited, prompt/history/output capped. Every refusal happens **before** the outbound call |
+| GET | `/api/ai/status` | Server-side readiness only: whether `GEMINI_API_KEY` is set, plus the model and the prompt/history/output caps. It says nothing about *your* stored key — read that from `GET /api/ai/key` |
+| GET · PUT · DELETE | `/api/ai/key` | The caller's own provider key |
 
-### Create Ticket
+`PUT /key` **validates the key against the provider before storing it**, using a list-models probe
+that spends none of the user's quota; a rejected key leaves the table untouched. Keys are encrypted
+(AES-256-GCM, `lib/crypto.ts`) and only `maskedKey` is ever returned — a plaintext key enters and
+never leaves. The key travels in the `x-goog-api-key` header, never a query string.
 
-**POST** `/api/tickets`
+Errors carry a typed `code` alongside `error`: `NO_KEY`, `INVALID_KEY`, `RATE_LIMITED`,
+`PROVIDER_ERROR`, `EMPTY_RESPONSE`, `INVALID_REQUEST`.
 
-สร้าง ticket ใหม่
+## Chat — `/api/chat`
 
-**Request Body:**
-```json
-{
-  "title": "Fix login bug",
-  "description": "Users cannot login with email",
-  "status": "open",
-  "priority": "high",
-  "assignee": "John Doe",
-  "reporter": "Current User",
-  "tags": ["bug", "auth"],
-  "relatedLogs": ["1", "2"]
-}
-```
+`GET /users` — the directory the contact rail renders. **That is the entire REST surface**, and it
+is deliberate: messages are relayed over Socket.IO and never stored (see
+[`features/chat.md`](../features/chat.md), decided 2026-08-21). There is no history endpoint and
+none is planned.
 
-**Required Fields:**
-- `title` (string)
-- `description` (string)
+## Notifications — `/api/notifications`
 
-**Optional Fields:**
-- `status` (string) - Default: `"open"`
-- `priority` (string) - Default: `"medium"` (low, medium, high, critical)
-- `assignee` (string) - Optional
-- `reporter` (string) - Default: `"System"`
-- `tags` (array) - Default: `[]`
-- `relatedLogs` (array) - Default: `[]`
+`GET /` · `POST /read-all` · `POST /:id/read`. Kinds: `regression`, `invite`.
 
-**Response:**
-```json
-{
-  "id": "TICK-001",
-  "title": "Fix login bug",
-  "description": "Users cannot login with email",
-  "status": "open",
-  "priority": "high",
-  "assignee": "John Doe",
-  "reporter": "Current User",
-  "createdAt": "2025-01-27T10:30:00.000Z",
-  "updatedAt": "2025-01-27T10:30:00.000Z",
-  "tags": ["bug", "auth"],
-  "relatedLogs": ["1", "2"]
-}
-```
+## Docs — `/api/docs` and `/api/admin/docs`
 
-**Error Responses:**
-- `400` - Title หรือ description ไม่ครบถ้วน
-- `500` - Server error
+Public: `GET /api/docs` (published pages, grouped and ordered) and `GET /api/docs/:slug`.
+Admin: `GET /`, `GET /:id`, `POST /`, `PATCH /:id`, `POST /reorder`, `DELETE /:id` — the whole admin
+router behind `authorize('admin')`.
+
+Bodies are Markdown plus a small directive dialect, rendered by the client's own parser. The table
+of contents is derived from headings at read time rather than stored, so there is one structure
+instead of two that can disagree. **Never render a page body with `dangerouslySetInnerHTML`.**
+
+`npm run seed:docs` seeds the shipped pages by slug and **unpublishes retired ones** (`RETIRED` in
+`scripts/seed-docs.ts`); it never deletes.
+
+## Console monitor — `/api/console-monitor` · `/api/console-logs`
+
+`GET /sessions` · `POST /sessions` · `DELETE /sessions/:sessionId` · `GET /logs/:sessionId` ·
+`GET /stats/:sessionId` · `POST /clear/:sessionId`. Sessions are gated to their owner.
+
+`POST /api/console-logs` (admin, rate limited) scans a URL; `GET /api/console-logs/script` returns
+the embed snippet. **`POST /api/console-logs/realtime` answers `410 Gone`** — it was an
+unauthenticated, unbounded write path, and it now points callers at `POST /api/ingest`.
+
+## Logs — `/api/logs`
+
+ApexOps' own internal application log, unrelated to a project's ingested events. `GET /` ·
+`GET /stats` · `GET /:id` · `POST /` · `POST /batch` · `DELETE /:id` and `DELETE /` (both admin).
+
+## Misc
+
+`GET /api/health` · `GET /api/mail/status` · `GET /api/invites/:token` and
+`POST /api/invites/:token/accept` (authenticated — accepting an invite requires an account).
+Static: `/sdk/v1.js`, `/sdk/demo`, `/sdk/test`, `/console-monitor`, `/ws-endpoint`.
 
 ---
 
-### Update Ticket
+## Socket.IO events
 
-**PUT** `/api/tickets/:id`
+Port `8081`. The handshake takes `auth.token` and is **optionally** authenticated: the SDK and the
+console-monitor target-app clients connect anonymously and must keep working. A token that is
+present but invalid is rejected outright — that combination is only ever a bug or an attack.
 
-อัปเดต ticket
+| Event | Direction | Notes |
+| --- | --- | --- |
+| `register` | client → server | `clientType: 'monitor' \| 'target-app' \| 'chat'`. `monitor` is **admin only**, re-checked against the database |
+| `chat-join` | client → server | Room id encodes its two participants; membership is verified server-side |
+| `chat-message`, `user-typing` | both | Sender identity is rebuilt from the token; anything the client claimed about *who sent this* is discarded |
+| `console-logs` | both | Only a registered target-app may relay; live view only, never persisted |
+| `target-app-connected` / `-disconnected` | server → client | Into the `monitors` room |
 
-**URL Parameters:**
-- `id` - Ticket ID (เช่น `TICK-001` หรือ `001`)
-
-**Request Body:**
-```json
-{
-  "title": "Fix login bug - Updated",
-  "description": "Users cannot login with email. Fixed.",
-  "status": "in-progress",
-  "priority": "critical",
-  "assignee": "Jane Doe"
-}
-```
-
-**Note:** ทุก field เป็น optional - จะอัปเดตเฉพาะ field ที่ส่งมา
-
-**Response:**
-```json
-{
-  "id": "TICK-001",
-  "title": "Fix login bug - Updated",
-  "description": "Users cannot login with email. Fixed.",
-  "status": "in-progress",
-  "priority": "critical",
-  "assignee": "Jane Doe",
-  "reporter": "System",
-  "createdAt": "2025-01-27T10:30:00.000Z",
-  "updatedAt": "2025-01-27T11:00:00.000Z",
-  "tags": ["bug", "auth"],
-  "relatedLogs": ["1", "2"]
-}
-```
-
-**Error Responses:**
-- `404` - Ticket ไม่พบ
-- `500` - Server error
+**Rooms authorize themselves.** Because the handshake is optional, a room that carries other
+people's data checks membership on join rather than assuming the handshake did it.
 
 ---
 
-### Delete Ticket
+## Not in this API
 
-**DELETE** `/api/tickets/:id`
+- **Invoices.** No model, no route. The old page was mock data and survives only as design lineage.
+- **Chat history.** Decided, not missing — see above.
+- **`Note.checklistItems`.** Dropped; todos are `Task` rows.
+- **Anything that writes logs without a session or a key.** That door was `/console-logs/realtime`
+  and it is `410`.
 
-ลบ ticket
+## Work not yet on `main`
 
-**URL Parameters:**
-- `id` - Ticket ID (เช่น `TICK-001` หรือ `001`)
+Written 2026-08-21, when three branches from that day's sessions were unmerged. This file describes
+the tree **including** notes-SSOT phase 4 (`checklistItems` dropped), because that change removes a
+field and documenting it as present would be knowingly wrong. Two others are **not** reflected
+above:
 
-**Response:**
-```json
-{
-  "deleted": true
-}
-```
+| Branch | What it adds |
+| --- | --- |
+| `sprint-8/realtime-issue-stream` | An `issue-activity` socket frame pushed into a `project:<id>` room by ingest, plus status and promote changes |
+| `notes-calendar/g3-rich-notes` | Read-time conversion of legacy HTML notes; no API change |
 
-**Error Responses:**
-- `404` - Ticket ไม่พบ
-- `500` - Server error
-
----
-
-## 🌐 Console Logs API
-
-### Fetch Console Logs from URL
-
-**POST** `/api/console-logs`
-
-ดึง console logs จาก browser URL โดยใช้ Puppeteer
-
-**Request Body:**
-```json
-{
-  "url": "http://localhost:5173/"
-}
-```
-
-**Response:**
-```json
-[
-  {
-    "id": "console-1706356800000-0",
-    "timestamp": "2025-01-27T10:30:00.000Z",
-    "level": "error",
-    "message": "Failed to load resource",
-    "source": "http://localhost:5173/",
-    "stack": "Error: Failed to load\n    at load..."
-  },
-  {
-    "id": "console-1706356800000-1",
-    "timestamp": "2025-01-27T10:30:00.000Z",
-    "level": "warning",
-    "message": "Deprecated API usage",
-    "source": "http://localhost:5173/"
-  }
-]
-```
-
-**Note:** 
-- Logs จะถูกบันทึกลง database อัตโนมัติ
-- ใช้ Puppeteer เพื่อเปิด headless browser และดึง console logs
-- อาจใช้เวลาสักครู่ (timeout 30 วินาที)
-
-**Error Responses:**
-- `400` - URL ไม่ถูกต้องหรือไม่ครบถ้วน
-- `500` - Server error หรือ Puppeteer error
-
----
-
-## ❤️ Health Check
-
-### Root Endpoint
-
-**GET** `/`
-
-ตรวจสอบว่า server ทำงานอยู่
-
-**Response:**
-```json
-{
-  "message": "ApexOps API Server is running!",
-  "version": "1.0.0",
-  "endpoints": {
-    "auth": ["/register", "/login", "/profile"],
-    "logs": ["/api/logs"],
-    "tickets": ["/api/tickets", "/api/tickets/:id"],
-    "console": ["/api/console-logs"]
-  }
-}
-```
-
----
-
-### Health Check
-
-**GET** `/api/health`
-
-ตรวจสอบสถานะ server และ database
-
-**Response:**
-```json
-{
-  "status": "ok",
-  "timestamp": "2025-01-27T10:30:00.000Z",
-  "database": "connected"
-}
-```
-
----
-
-## 🔒 Authentication Headers
-
-สำหรับ endpoints ที่ต้อง authentication:
-
-```
-Authorization: Bearer <token>
-```
-
-**Example:**
-```bash
-curl -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
-  http://localhost:3000/profile
-```
-
----
-
-## 📊 Response Status Codes
-
-| Code | Meaning |
-|------|---------|
-| `200` | Success |
-| `201` | Created |
-| `400` | Bad Request |
-| `401` | Unauthorized |
-| `403` | Forbidden |
-| `404` | Not Found |
-| `500` | Internal Server Error |
-
----
-
-## 🧪 Example Requests
-
-### Using cURL
-
-```bash
-# Register
-curl -X POST http://localhost:3000/register \
-  -H "Content-Type: application/json" \
-  -d '{"name":"John","email":"john@example.com","password":"pass123"}'
-
-# Login
-curl -X POST http://localhost:3000/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"john@example.com","password":"pass123"}'
-
-# Get Logs
-curl http://localhost:3000/api/logs
-
-# Create Ticket
-curl -X POST http://localhost:3000/api/tickets \
-  -H "Content-Type: application/json" \
-  -d '{"title":"Bug Fix","description":"Fix the bug"}'
-```
-
-### Using Axios (Frontend)
-
-```typescript
-import axios from 'axios';
-
-const api = axios.create({
-  baseURL: 'http://localhost:3000',
-});
-
-// Login
-const response = await api.post('/login', {
-  email: 'john@example.com',
-  password: 'pass123'
-});
-
-// Get Logs
-const logs = await api.get('/api/logs');
-
-// Create Ticket
-const ticket = await api.post('/api/tickets', {
-  title: 'Bug Fix',
-  description: 'Fix the bug',
-  priority: 'high'
-});
-```
-
----
-
-## 📝 Notes
-
-- ทุก timestamps เป็น ISO 8601 format
-- Ticket IDs จะเป็น format `TICK-XXX` (เช่น `TICK-001`)
-- Log levels: `info`, `warning`, `error`
-- Ticket statuses: `open`, `in-progress`, `resolved`, `closed`
-- Ticket priorities: `low`, `medium`, `high`, `critical`
-
----
-
-**Last Updated**: 2025-01-27
-
+If those merge, add `issue-activity` to the socket table and nothing else here moves.

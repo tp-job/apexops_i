@@ -20,6 +20,15 @@ import prisma from '../lib/prisma';
  * Without `--force` a page whose body has been edited since the seed is left
  * alone and reported: re-running a seed script should not be how someone's
  * afternoon of editing disappears.
+ *
+ * **Retiring a page unpublishes it; it never deletes it.** A slug that leaves
+ * `PAGES` used to leave its published row behind, live at `/docs/<slug>`, saying
+ * something the product no longer does — the comment below `Using ApexOps` said
+ * so and left the fix as a manual chore nobody was reminded to do. `RETIRED`
+ * closes that: seeding takes the page off the public route and leaves the row
+ * in `/admin/docs`, where deleting is a deliberate human act with a confirm
+ * dialog in front of it. A seed script is the wrong place to destroy content —
+ * it runs unattended, and an admin may have rewritten that page since.
  */
 
 interface SeedPage {
@@ -61,8 +70,8 @@ const PAGES: SeedPage[] = [
      * concluded that notes had to be written twice, in two places, because
      * nothing said otherwise.
      *
-     * This script never deletes, so retiring a page here leaves its published
-     * row behind — unpublish it from `/admin/docs`.
+     * Retiring a page means moving its slug from `PAGES` to `RETIRED` below —
+     * that unpublishes the row on the next seed rather than leaving it live.
      */
     {
         slug: 'tasks',
@@ -122,6 +131,26 @@ const PAGES: SeedPage[] = [
     },
 ];
 
+/**
+ * Pages that were seeded once and are no longer part of the documentation.
+ *
+ * Each entry carries the reason, because the next reader's question is always
+ * *"why is this here and can I delete it?"* — and the honest answer is a
+ * sentence, not a slug.
+ */
+interface RetiredPage {
+    slug: string;
+    /** Why it went, and where its content lives now. */
+    reason: string;
+}
+
+const RETIRED: RetiredPage[] = [
+    {
+        slug: 'daily-notes',
+        reason: "the /daily page it documented was folded into /notes and /tasks (notes-ssot blueprint phase 3.5); 'tasks' replaces it",
+    },
+];
+
 const CONTENT_DIR = path.join(__dirname, 'docs-content');
 
 async function main(): Promise<void> {
@@ -153,7 +182,34 @@ async function main(): Promise<void> {
         updated += 1;
     }
 
-    console.log(`Docs seed complete: ${created} created, ${updated} updated, ${skipped} skipped.`);
+    let retired = 0;
+    for (const page of RETIRED) {
+        const existing = await prisma.docPage.findUnique({
+            where: { slug: page.slug },
+            select: { id: true, status: true, title: true },
+        });
+
+        // Never seeded here, or already gone: nothing to do, and nothing to say.
+        if (!existing) continue;
+
+        if (existing.status !== 'published') {
+            console.log(`  already retired ${page.slug} — ${existing.status}`);
+            continue;
+        }
+
+        await prisma.docPage.update({ where: { id: existing.id }, data: { status: 'draft' } });
+        console.log(`  unpublished ${page.slug} — ${page.reason}`);
+        retired += 1;
+    }
+
+    console.log(
+        `Docs seed complete: ${created} created, ${updated} updated, ${skipped} skipped, ${retired} unpublished.`
+    );
+    if (retired) {
+        // Said once, at the end, rather than per page: the row is recoverable and
+        // deleting it is a decision, not a cleanup step this script should take.
+        console.log('  Retired pages are drafts, not deletions — remove them for good from /admin/docs.');
+    }
 }
 
 main()

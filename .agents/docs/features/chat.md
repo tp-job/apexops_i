@@ -1,6 +1,7 @@
 # Chat — feature spec (G0, security-first)
 
-> Status: **spec only, 2026-07-26. No UI work should start until G1 lands.**
+> Status: **shipped. G1, G3 and G4 closed; G2 closed as `won't build` on 2026-08-21 —
+> chat is ephemeral by decision, not by omission.**
 > Split out of the "Notes + Calendar + Chat" request deliberately — see
 > [`notes-calendar.md`](notes-calendar.md) for the features that shipped alongside this decision.
 
@@ -47,20 +48,46 @@ into.
 5. **Rate-limit** message and typing events per socket. The REST API has `express-rate-limit`; the
    socket has nothing.
 
-## Persistence decision (still open)
+## Persistence decision — DECIDED 2026-08-21: ephemeral
 
-There is no `ChatMessage` model and no history endpoint — `useChat` is ephemeral by design, so a
-reload loses the conversation. That was flagged as an open question in
-[`user-flow.md`](../product/user-flow.md) and is **still unanswered**.
+**Chat does not store messages, and that is the answer, not a gap.** There is no `ChatMessage`
+model, no `Conversation` table and no history endpoint; the server relays into the conversation's
+room and forgets. A reload starts an empty thread.
 
-It needs answering before G1, because it changes the room model: persisted conversations need a
-`Conversation` (or `ChatRoom`) row to attach participants and messages to, which is also the natural
-place to authorise room joins in requirement 2. Deciding "ephemeral" later means rebuilding the
-authorisation path.
+This section previously read *"still open"* and carried a recommendation to add
+`Conversation` + `ConversationParticipant` + `ChatMessage`. That recommendation is **rejected**, and
+the reasoning is worth keeping because it is the reason the question could be closed at all:
 
-Recommendation: add `Conversation` + `ConversationParticipant` + `ChatMessage`. 1:1 only for v1
-(the server comments the registry as an "Instagram-style DM demo", and nothing in the code implies
-group chat). Participants are what make room authorisation checkable at all.
+**The argument for persisting was authorisation, and G1 removed it.** The original case was that
+room membership needs a participants table to check against — so persistence had to be decided
+first or the auth path would be rebuilt. G1 solved membership without a table: a DM room id **is**
+its two participants (`"3_7"`, ascending), so `utils/chatRoom.ts` checks membership from the id
+alone. With that gone, persistence stopped being a structural question and became a product one.
+
+As a product question the answer is no, for three reasons:
+
+1. **Nothing asks for it.** This is a small-team side channel next to Notes, Tasks, Bug Tracker and
+   Issues — the surfaces where things that must survive a reload already live, each with a real
+   model behind it. A message that matters belongs in one of those.
+2. **Storing conversations is a commitment, not a column.** It brings retention, deletion,
+   moderation, export, and the expectation that "sent" means "kept" — with no owner for any of it.
+   `Event` already has a retention policy precisely because stored user content needs one.
+3. **The UI already tells the truth**, so the decision is visible rather than surprising: every
+   thread carries a **"not saved"** badge ([`Chat.tsx`](../../../app/client/src/pages/Chat.tsx)),
+   and the empty state says messages are relayed rather than implying a failed load. That page
+   header carries a standing instruction not to refactor either property away.
+
+**What would reopen this**, stated so the next person does not have to guess: a requirement that
+names a retention period and an owner for deletion — compliance, support transcripts, or handover
+between shifts. Absent that, "we might want history" is not a requirement, and building the table
+in advance means shipping the obligations without the reason.
+
+**Consequences that are now settled, not pending:**
+
+- No message-history endpoint will be added; `GET /api/chat/users` stays the entire REST surface.
+- The socket contract is the feature contract — see G1 below.
+- Offline delivery, unread counts and read receipts are **out of scope by construction**: each of
+  them needs a store, and there is none.
 
 ## Gates
 
@@ -69,7 +96,7 @@ group chat). Participants are what make room authorisation checkable at all.
 | **G0** | This document | Defect documented, plan agreed | ✅ done |
 | **G1** | Socket auth, per-conversation rooms, server-derived sender, payload validation, rate limiting | A second authenticated client provably cannot receive a conversation it is not a participant in | ✅ **done and verified** |
 | **G3** | Chat page UI on `useChat`, rewired to the new contract | Two users can hold a conversation | ✅ done — `pages/Chat.tsx` at `/chat` |
-| **G2** | `Conversation`/`ChatMessage` models + history endpoint | Reload restores the thread | ⬜ **still open** — persistence decision not made |
+| **G2** | ~~`Conversation`/`ChatMessage` models + history endpoint~~ | — | ❌ **closed 2026-08-21, won't build** — ephemeral by decision (above). G1 made the authorisation argument for it moot |
 | **G4** | QA: impersonation, cross-room leak, reconnect, empty states | Verified, not assumed | ✅ socket suite green; reconnect/offline still manual |
 
 ### G1 — how it was closed
@@ -79,8 +106,9 @@ user ids ascending (`"3_7"`), so membership is checkable from the id alone — n
 table needed. That is what allowed the socket to be secured **without** first settling
 persistence, which the original plan had as a blocker.
 
-Handshake auth is deliberately *optional*: console-monitor `target-app` clients and
-`useBugTrackerSocket` connect anonymously and must keep working. A token that is present but
+Handshake auth is deliberately *optional*: the SDK and console-monitor `target-app` clients connect
+anonymously and must keep working. (This sentence used to name `useBugTrackerSocket`, which has
+since been deleted — `useConsoleMonitor.ts` is the anonymous client that remains.) A token that is present but
 invalid is rejected outright; chat handlers require an authenticated socket.
 
 Verified by an automated socket suite, 10/10:
@@ -93,10 +121,11 @@ Verified by an automated socket suite, 10/10:
 - spoofed `senderId` / `senderName` overridden with the token's identity
 - whitespace-only messages dropped
 
-The UI is live but labels every thread **"not saved"**, because G2 is still open.
+The UI is live and labels every thread **"not saved"** — now a statement of the decision rather than a placeholder for G2.
 
 ## Non-goals (v1)
 
+- **Message persistence and history** — decided above, not deferred.
 - Group conversations.
 - Presence/online indicators (no presence source exists).
 - Attachments, reactions, read receipts, edit/delete.
