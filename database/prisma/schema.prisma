@@ -164,7 +164,6 @@ model Note {
   tags           Json     @default("[]")
   imageUrl       String?  @map("image_url")
   linkUrl        String?  @map("link_url")
-  checklistItems Json     @default("[]") @map("checklist_items")
   quote          Json     @default("{}")
   /// The day this note is *planned for*. Null means unscheduled, in which case
   /// the calendar falls back to `createdAt` — so existing rows keep appearing
@@ -195,8 +194,8 @@ model Note {
 /// expressible as a query against a JSON blob, so every one of them would have
 /// meant loading every note and filtering in memory.
 ///
-/// `checklistItems` is deliberately still on `Note` — it is read-only during the
-/// transition and is dropped once nothing reads it (blueprint phase 4).
+/// `Note.checklistItems` was dropped in blueprint phase 4 (2026-08-21) once no
+/// reader was left. The `legacy-` id prefix below is the only trace of it.
 model Task {
   id           Int       @id @default(autoincrement())
   userId       Int       @map("user_id")

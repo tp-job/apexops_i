@@ -45,7 +45,6 @@ export interface Note {
     tags?: string[];
     imageUrl?: string;
     linkUrl?: string;
-    checklistItems?: ChecklistItem[];
     quote?: Quote;
     /** ISO date the note is planned for. Null/absent means unscheduled. */
     scheduledFor?: string | null;

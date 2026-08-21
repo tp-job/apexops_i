@@ -62,7 +62,9 @@ export const createNoteSchema = z.object({
     tags: z.array(z.any()).optional().default([]),
     imageUrl: z.string().nullable().optional(),
     linkUrl: z.string().nullable().optional(),
-    checklistItems: z.array(z.any()).optional().default([]),
+    // No `checklistItems`. The column was dropped in Phase 4, and this object is
+    // NOT strict — a client still sending the key has it stripped and still gets
+    // its note. That is the reason not to reach for `.strict()` here.
     quote: z.any().optional().default({}),
     scheduledFor: isoDateField,
     dueDate: isoDateField,
@@ -82,7 +84,6 @@ export const updateNoteSchema = z.object({
     tags: z.array(z.any()).optional(),
     imageUrl: z.string().nullable().optional(),
     linkUrl: z.string().nullable().optional(),
-    checklistItems: z.array(z.any()).optional(),
     quote: z.any().optional(),
     scheduledFor: isoDateField,
     dueDate: isoDateField,

@@ -22,7 +22,6 @@ const formatNote = (n: any) => ({
     tags: n.tags || [],
     imageUrl: n.imageUrl,
     linkUrl: n.linkUrl,
-    checklistItems: n.checklistItems || [],
     quote: n.quote || {},
     scheduledFor: n.scheduledFor ?? null,
     dueDate: n.dueDate ?? null,
@@ -276,7 +275,10 @@ router.get('/:id', authenticate, async (req: Request, res: Response): Promise<vo
 // ── POST / ───────────────────────────────────────────────────
 router.post('/', authenticate, validate(createNoteSchema), async (req: Request, res: Response): Promise<void> => {
     try {
-        const { title, content, contentRich, type, isPinned, color, tags, imageUrl, linkUrl, checklistItems, quote, scheduledFor, dueDate } = req.body;
+        // `checklistItems` is deliberately absent: the column is gone (Phase 4).
+        // An old client that still sends it is not an error — zod strips the
+        // unknown key and the note is created without it.
+        const { title, content, contentRich, type, isPinned, color, tags, imageUrl, linkUrl, quote, scheduledFor, dueDate } = req.body;
 
         const note = await prisma.note.create({
             data: {
@@ -284,7 +286,7 @@ router.post('/', authenticate, validate(createNoteSchema), async (req: Request, 
                 ...(contentRich !== undefined && { contentRich: toJsonOrDbNull(contentRich) }),
                 isPinned, color: color || null, tags,
                 imageUrl: imageUrl || null, linkUrl: linkUrl || null,
-                checklistItems, quote,
+                quote,
                 scheduledFor: toDateOrNull(scheduledFor),
                 dueDate: toDateOrNull(dueDate),
             },
@@ -303,7 +305,7 @@ const updateNoteHandler = async (req: Request, res: Response): Promise<void> => 
 
     try {
         const data: any = {};
-        const fields = ['title', 'content', 'type', 'isPinned', 'color', 'tags', 'imageUrl', 'linkUrl', 'checklistItems', 'quote'];
+        const fields = ['title', 'content', 'type', 'isPinned', 'color', 'tags', 'imageUrl', 'linkUrl', 'quote'];
         for (const f of fields) {
             if (req.body[f] !== undefined) data[f] = req.body[f];
         }

@@ -10,7 +10,7 @@
  *
  * The persisted item keeps the legacy `{ text, checked }` shape and only *adds*
  * fields, so every existing checklist reader keeps working on rows this page
- * writes, and every legacy row is readable here (see `normalizeTodos`).
+ * writes, and legacy rows are gone: todos are rows in `tasks` (Phase 4).
  *
  * Everything in this file is pure. The network lives in `hooks/useDailyTodos`.
  */
@@ -42,73 +42,17 @@ export interface TodoProgress {
 
 // ── ids ───────────────────────────────────────────────────────
 
-const slug = (text: string): string =>
-    text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 24);
-
-/**
- * Ids for legacy `{ text, checked }` rows are *derived*, not random.
- *
- * A random id would change on every refetch, so React would tear down and
- * rebuild every row — and an in-flight edit would lose its target. Deriving from
- * position + text keeps the id stable until the item is next written, at which
- * point it carries a real id forever.
- */
-const legacyId = (text: string, index: number): string => `legacy-${index}-${slug(text)}`;
-
 export const newTodoId = (): string => {
     const uuid = globalThis.crypto?.randomUUID?.();
     return uuid ? `t-${uuid}` : `t-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 };
 
-// ── (de)serialisation ─────────────────────────────────────────
-
-const asString = (v: unknown): string => (typeof v === 'string' ? v : '');
-const asIsoOrNull = (v: unknown): string | null =>
-    typeof v === 'string' && !Number.isNaN(Date.parse(v)) ? v : null;
-
 /**
- * Coerces whatever is in `checklistItems` into todos.
- *
- * The column is `Json` and the server validates it as `z.array(z.any())`, so the
- * only guarantee is "an array, maybe". Anything that isn't an object with usable
- * text is dropped rather than rendered as a blank row.
+ * `normalizeTodos` and `serializeTodos` lived here and are GONE (Phase 4).
+ * They existed only to read and write `Note.checklistItems`, which no longer
+ * exists as a column — todos are rows in `tasks`. The operations below still
+ * apply: they work on `DailyTodo[]` in memory, whatever loaded it.
  */
-export const normalizeTodos = (raw: unknown): DailyTodo[] => {
-    if (!Array.isArray(raw)) return [];
-
-    return raw.flatMap((entry, index) => {
-        if (typeof entry === 'string') {
-            const text = entry.trim();
-            return text ? [{ id: legacyId(text, index), text, checked: false, createdAt: null, completedAt: null }] : [];
-        }
-        if (!entry || typeof entry !== 'object') return [];
-
-        const item = entry as Record<string, unknown>;
-        const text = asString(item.text).trim();
-        if (!text) return [];
-
-        const checked = item.checked === true || item.done === true;
-        const id = asString(item.id) || legacyId(text, index);
-
-        return [{
-            id,
-            text,
-            checked,
-            createdAt: asIsoOrNull(item.createdAt),
-            completedAt: checked ? asIsoOrNull(item.completedAt) : null,
-        }];
-    });
-};
-
-/** The wire shape. `checked` stays first-class so legacy readers are unaffected. */
-export const serializeTodos = (todos: DailyTodo[]): Array<Record<string, unknown>> =>
-    todos.map((t) => ({
-        id: t.id,
-        text: t.text,
-        checked: t.checked,
-        createdAt: t.createdAt,
-        completedAt: t.completedAt,
-    }));
 
 // ── operations (all return new arrays) ────────────────────────
 
