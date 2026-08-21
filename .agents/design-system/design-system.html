@@ -1248,13 +1248,13 @@ td.mono { font-family: var(--font-mono); font-size: 12px; }
             <p>
                 <b>This model is specified but no longer in use, and that is worth knowing before you
                 build on it.</b> Counting <span class="mono">Surface</span> variants across the
-                product: <span class="mono">panel</span> 64, <span class="mono">frost</span> 9,
-                <span class="mono">dark</span> 4, <span class="mono">accent</span> 1,
+                product: <span class="mono">panel</span> 64, <span class="mono">frost</span> 5,
+                <span class="mono">dark</span> 1, <span class="mono">accent</span> 0,
                 <span class="mono">blue</span> <b>0</b>.
             </p>
             <div class="spec-meta">
                 <span class="token">measured, not assumed</span>
-                <span class="note">Excludes this style guide, which is the only caller of the blue surface.</span>
+                <span class="note">Re-counted 2026-08-21 by attributing every <span class="mono">variant=</span> to the component it actually sits on. The earlier figures &mdash; frost 9, dark 4, accent 1 &mdash; also counted <span class="mono">StatTile</span>, <span class="mono">AccentButton</span> and <span class="mono">GlassPanel</span> variants, which are different components with the same prop name. Excludes this style guide, still the only caller of the blue surface.</span>
             </div>
         </div>
 

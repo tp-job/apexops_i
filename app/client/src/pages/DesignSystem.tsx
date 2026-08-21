@@ -58,7 +58,7 @@ import {
     type SortDirection,
     type GanttBar,
 } from '@/components/design-system';
-import { fadeUp, scaleIn, stagger, inViewOnce } from '@/lib/motion';
+import { EASE_LUX, fadeUp, scaleIn, stagger, inViewOnce } from '@/lib/motion';
 
 // ── Section wrapper ───────────────────────────────────────────
 const Section: FC<{ id: string; icon: React.ReactNode; title: string; children: React.ReactNode }> = ({
@@ -109,11 +109,12 @@ function useTokenValue(name: string): string {
     return value;
 }
 
-const Swatch: FC<{ name: string; token: string; className: string; dark?: boolean }> = ({
+const Swatch: FC<{ name: string; token: string; className: string; dark?: boolean; role?: string }> = ({
     name,
     token,
     className,
     dark,
+    role,
 }) => {
     const value = useTokenValue(token);
     return (
@@ -127,6 +128,9 @@ const Swatch: FC<{ name: string; token: string; className: string; dark?: boolea
                 <p className="truncate font-mono text-[10px] text-gray-500 dark:text-gray-400" title={token}>
                     {token}
                 </p>
+                {/* The job, not just the value. A palette without roles gets used
+                    by eye, and "which grey was the muted one" is how drift starts. */}
+                {role && <p className="mt-1 text-[11px] leading-snug text-gray-500 dark:text-gray-400">{role}</p>}
             </div>
         </div>
     );
@@ -138,6 +142,105 @@ const TypeRow: FC<{ label: string; cls: string; sample: string }> = ({ label, cl
         <span className="text-xs font-numbers text-gray-500 dark:text-gray-400 whitespace-nowrap">{label}</span>
     </div>
 );
+
+/**
+ * The six laws, carried over from the written reference
+ * (`.agents/design-system/design-system.html`) so the live guide states the rules
+ * it demonstrates. Two references that disagree are worse than one.
+ */
+const LAWS = [
+    {
+        n: '01',
+        rule: 'Contrast through opacity, not colour weight.',
+        why: 'Depth is built by stacking translucency - white/5 to white/10 to white/20 - never by reaching for a darker or more saturated fill.',
+        tag: 'law 01',
+        cost: 'breaking it produces the muddy, heavy look the glass base exists to avoid',
+    },
+    {
+        n: '02',
+        rule: 'One glowing element per view.',
+        why: 'The active state or the primary action, not both. Two glows and neither reads as focal.',
+        tag: 'law 02',
+        cost: 'on this page the budget is spent on the word "Luxe" in the title',
+    },
+    {
+        n: '03',
+        rule: 'Every number is monospaced.',
+        why: 'Money, IDs, dates, counts, durations. Values must not shift width between renders, and mono signals "this is precise".',
+        tag: 'font-numbers',
+        cost: 'JetBrains Mono, tabular-nums',
+    },
+    {
+        n: '04',
+        rule: 'Nothing is sharper than 12px.',
+        why: 'The radius floor is rounded-xl. There is no rounded-lg anywhere in the product.',
+        tag: 'law 04',
+        cost: 'a single square corner reads as a bug, not a variation',
+    },
+    {
+        n: '05',
+        rule: 'Motion comes from one file.',
+        why: 'Every transition uses a shared variant from @/lib/motion. No hand-rolled tween, ever.',
+        tag: 'law 05',
+        cost: 'ad-hoc easing is how a system stops feeling like one system',
+    },
+    {
+        n: '06',
+        rule: 'Cards compose on Surface.',
+        why: 'Never a raw div with background utilities. The primitive owns the blur, border, elevation and reveal.',
+        tag: 'law 06',
+        cost: 'hand-built cards drift within a sprint',
+    },
+];
+
+const RADII = [
+    { name: 'rounded-full', px: '9999px', cls: 'rounded-full', use: 'Avatars, nav pills, badges, icon buttons' },
+    { name: 'rounded-3xl', px: '24px', cls: 'rounded-3xl', use: 'Cards and main containers' },
+    { name: 'rounded-2xl', px: '16px', cls: 'rounded-2xl', use: 'List rows and inner panels' },
+    { name: 'rounded-xl', px: '12px - the floor', cls: 'rounded-xl', use: 'Buttons, inputs, dropdowns' },
+];
+
+const ELEVATIONS = [
+    { cls: 'ds-elev-1', use: 'Resting' },
+    { cls: 'ds-elev-2', use: 'Cards' },
+    { cls: 'ds-elev-3', use: 'Overlays' },
+    { cls: 'ds-glow', use: 'One per view' },
+];
+
+const DURATIONS = [
+    { name: 'DUR.fast - 160ms', use: 'Hover, colour, small state' },
+    { name: 'DUR.base - 280ms', use: 'Entrances and panel reveals. The default' },
+    { name: 'DUR.slow - 520ms', use: 'Count-ups, meter fills, hero sequences' },
+];
+
+const VARIANTS = [
+    { name: 'fadeUp', motion: 'opacity 0 to 1, y 16 to 0', use: 'cards, rows, hero blocks. The default entrance' },
+    { name: 'scaleIn', motion: 'opacity 0 to 1, scale .96 to 1', use: 'focal elements - KPIs, modals, badges' },
+    { name: 'fade', motion: 'opacity only, EASE_SOFT', use: 'when movement would be noise' },
+    { name: 'stagger(gap)', motion: 'children in sequence, 60ms default', use: 'lists and grids. Parent only' },
+    { name: 'hoverLift', motion: 'y -4 on hover, scale .985 on tap', use: 'interactive cards and tiles' },
+    { name: 'pressable', motion: 'scale 1.02 / 0.96', use: 'buttons. Press without lift' },
+    { name: 'SPRING', motion: 'stiffness 420, damping 32, mass 0.7', use: 'interactive lift and press. Snappy, never bouncy' },
+];
+
+/** Do / Don't, carried from the written reference. */
+const DOS = [
+    'Compose on Surface. It owns blur, border, elevation and reveal.',
+    'Spend the glow budget once - active state or CTA, never both.',
+    'Put every money value, ID, count and duration in font-numbers.',
+    'Layer white/5, white/10, white/20 for depth on dark surfaces.',
+    'Take all motion from @/lib/motion, and let reduced motion resolve to the end state.',
+    'Keep the shadow tint blue-violet so elevation belongs to the canvas.',
+];
+
+const DONTS = [
+    'Use brand-accent as a large background. It is a signal, and a signal cannot be a field.',
+    'Reach for blue or purple SaaS gradients. The palette is neutral plus lime, on purpose.',
+    'Nest glass-panel inside glass-dark - the contrast inversion breaks depth.',
+    'Ship rounded-lg or sharper. 12px is the floor.',
+    'Write a one-off transition object, however small.',
+    'Add new remixicon usage. React Icons (Fi) only.',
+];
 
 const GANTT_BARS: GanttBar[] = [
     { id: 'g1', label: 'Discovery & research', start: '2024-12-02', end: '2025-01-10', progress: 100, tone: 'neutral', done: true },
@@ -215,6 +318,9 @@ const DesignSystem: FC = () => {
     });
     const [dsPage, setDsPage] = useState(1);
     const [dsPill, setDsPill] = useState<'issues' | 'board' | 'members'>('issues');
+    /* Remounting the two dots is what replays them: a key change restarts the
+       animation, where re-running the same `animate` would be a no-op. */
+    const [motionRun, setMotionRun] = useState(0);
     const [dsModal, setDsModal] = useState(false);
     const [dsConfirm, setDsConfirm] = useState(false);
     const dsMenu = useContextMenu<string>();
@@ -253,6 +359,38 @@ const DesignSystem: FC = () => {
 
             <PageHeader title="Foundations" subtitle="Tokens, type, surfaces, motion & components" />
 
+            {/* The six laws — every rule below is a consequence of one of these */}
+            <Section id="laws" icon={<FiEye className="w-4 h-4" />} title="The six laws">
+                <p className="max-w-2xl text-sm text-gray-500 dark:text-gray-400">
+                    Everything else on this page is a consequence of these. When a new screen looks
+                    wrong, it has almost always broken one of them.
+                </p>
+                <motion.div
+                    variants={stagger()}
+                    initial="hidden"
+                    whileInView="show"
+                    viewport={inViewOnce}
+                    className="grid grid-cols-1 gap-4 md:grid-cols-2"
+                >
+                    {LAWS.map((law) => (
+                        <motion.div key={law.n} variants={fadeUp}>
+                            <Surface variant="panel" padding="md" radius="2xl" className="h-full">
+                                <div className="flex items-start gap-4">
+                                    <span className="font-numbers text-2xl font-bold text-brand-accent">{law.n}</span>
+                                    <div className="min-w-0">
+                                        <p className="text-sm font-semibold text-brand-dark dark:text-white">{law.rule}</p>
+                                        <p className="mt-1 text-xs leading-relaxed text-gray-500 dark:text-gray-400">{law.why}</p>
+                                        <p className="mt-2 text-[11px] font-medium text-gray-500 dark:text-gray-400">
+                                            <span className="font-mono">{law.tag}</span> - {law.cost}
+                                        </p>
+                                    </div>
+                                </div>
+                            </Surface>
+                        </motion.div>
+                    ))}
+                </motion.div>
+            </Section>
+
             {/* Colour */}
             <Section id="color" icon={<FiDroplet className="w-4 h-4" />} title="Colour">
                 <Surface variant="panel" padding="md">
@@ -265,12 +403,12 @@ const DesignSystem: FC = () => {
                         Brand
                     </p>
                     <div className="grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-6">
-                        <Swatch name="Accent" token="--color-brand-accent" className="bg-brand-accent" />
-                        <Swatch name="Accent hover" token="--color-brand-accentHover" className="bg-brand-accentHover" />
-                        <Swatch name="Accent soft" token="--color-brand-accentSoft" className="bg-brand-accentSoft" />
-                        <Swatch name="Dark" token="--color-brand-dark" className="bg-brand-dark" dark />
-                        <Swatch name="Near black" token="--color-brand-nearBlack" className="bg-brand-nearBlack" dark />
-                        <Swatch name="Steel" token="--color-brand-steel" className="bg-brand-steel" />
+                        <Swatch name="Accent" token="--color-brand-accent" className="bg-brand-accent" role="Active nav pill, focal CTA, meter fill. One per view." />
+                        <Swatch name="Accent hover" token="--color-brand-accentHover" className="bg-brand-accentHover" role="Hover only. Never a resting state." />
+                        <Swatch name="Accent soft" token="--color-brand-accentSoft" className="bg-brand-accentSoft" role="Tinted chip and badge grounds under accent text." />
+                        <Swatch name="Dark" token="--color-brand-dark" className="bg-brand-dark" dark role="Nav ground, headings, text on the accent." />
+                        <Swatch name="Near black" token="--color-brand-nearBlack" className="bg-brand-nearBlack" dark role="Dark-mode canvas, paired with #1C1C1C." />
+                        <Swatch name="Steel" token="--color-brand-steel" className="bg-brand-steel" role="Small marks only in practice - note dots, neutral track fills." />
                     </div>
 
                     {/* Semantic tones carry MEANING. Pick by what the value means
@@ -279,12 +417,12 @@ const DesignSystem: FC = () => {
                         Semantic - pick by meaning, never by hue
                     </p>
                     <div className="grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-6">
-                        <Swatch name="Success" token="--color-global-green" className="bg-global-green" />
-                        <Swatch name="Warning" token="--color-global-yellow" className="bg-global-yellow" />
-                        <Swatch name="Danger" token="--color-global-red" className="bg-global-red" />
-                        <Swatch name="Info" token="--color-global-blue" className="bg-global-blue" />
-                        <Swatch name="Gray" token="--color-brand-gray" className="bg-brand-gray" />
-                        <Swatch name="Glass" token="--color-brand-glass" className="glass-panel" />
+                        <Swatch name="Success" token="--color-global-green" className="bg-global-green" role="Success. Resolved, healthy, done." />
+                        <Swatch name="Warning" token="--color-global-yellow" className="bg-global-yellow" role="Warning. Open, degraded, needs a look." />
+                        <Swatch name="Danger" token="--color-global-red" className="bg-global-red" role="Danger. Errors, destructive actions, overdue." />
+                        <Swatch name="Info" token="--color-global-blue" className="bg-global-blue" role="Info. Neutral status, in progress." />
+                        <Swatch name="Gray" token="--color-brand-gray" className="bg-brand-gray" role="Chip fills, input grounds, muted surfaces." />
+                        <Swatch name="Glass" token="--color-brand-glass" className="glass-panel" role="The translucent register every panel sits on." />
                     </div>
                 </Surface>
             </Section>
@@ -297,6 +435,128 @@ const DesignSystem: FC = () => {
                     <TypeRow label="Card head · DM Sans · xl" cls="text-xl font-bold font-heading" sample="BlueRock" />
                     <TypeRow label="Body · Inter · sm" cls="text-sm font-medium font-body" sample="How to interpret failures and recover safely." />
                     <TypeRow label="Nano · uppercase tracked" cls="text-[10px] uppercase tracking-wider font-semibold" sample="Unsent" />
+                </Surface>
+            </Section>
+
+            {/* Radius */}
+            <Section id="radius" icon={<FiBox className="w-4 h-4" />} title="Radius">
+                <Surface variant="panel" padding="md">
+                    <p className="mb-5 max-w-2xl text-sm text-gray-500 dark:text-gray-400">
+                        Four steps and a floor. The floor is the part people break: a single square
+                        corner reads as a bug, not a variation.
+                    </p>
+                    <div className="grid grid-cols-2 gap-5 sm:grid-cols-4">
+                        {RADII.map((r) => (
+                            <div key={r.name} className="flex flex-col gap-2">
+                                <div className={`h-20 bg-brand-accentSoft border border-brand-accent/40 ${r.cls}`} />
+                                <div>
+                                    <p className="font-mono text-xs font-semibold text-brand-dark dark:text-white">{r.name}</p>
+                                    <p className="text-[11px] text-gray-500 dark:text-gray-400">{r.px}</p>
+                                    <p className="mt-1 text-[11px] leading-snug text-gray-500 dark:text-gray-400">{r.use}</p>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                    <p className="mt-5 text-xs text-gray-500 dark:text-gray-400">
+                        <span className="font-mono">rounded-lg</span> and sharper: <b>never</b>. The
+                        floor is 12px, and there is no <span className="font-mono">rounded-lg</span>
+                        {' '}anywhere in the product.
+                    </p>
+                </Surface>
+            </Section>
+
+            {/* Elevation */}
+            <Section id="elevation" icon={<FiLayers className="w-4 h-4" />} title="Elevation & glow">
+                <Surface variant="panel" padding="md">
+                    <p className="mb-5 max-w-2xl text-sm text-gray-500 dark:text-gray-400">
+                        Wide, soft, low opacity. Luxury reads as restraint - a hard drop shadow is the
+                        fastest way to make this system look cheap.
+                    </p>
+                    <div className="grid grid-cols-2 gap-5 lg:grid-cols-4">
+                        {ELEVATIONS.map((e) => (
+                            <div key={e.cls} className="flex flex-col gap-2">
+                                <div className={`h-20 rounded-2xl bg-white dark:bg-white/10 ${e.cls}`} />
+                                <div>
+                                    <p className="font-mono text-xs font-semibold text-brand-dark dark:text-white">{e.cls}</p>
+                                    <p className="text-[11px] text-gray-500 dark:text-gray-400">{e.use}</p>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                    {/* The tint is the part that gets "cleaned up" by someone who
+                        assumes a shadow should be neutral grey. It should not. */}
+                    <p className="mt-5 max-w-2xl text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                        The shadow colour carries a blue-violet tint, which ties elevation to the
+                        canvas gradient instead of dropping neutral grey onto a coloured ground. Grey
+                        shadows on this canvas read as dirt.
+                    </p>
+                </Surface>
+            </Section>
+
+            {/* Motion */}
+            <Section id="motion" icon={<FiZap className="w-4 h-4" />} title="Motion">
+                <Surface variant="panel" padding="md">
+                    <p className="mb-5 max-w-2xl text-sm text-gray-500 dark:text-gray-400">
+                        One signature curve. <span className="font-mono">EASE_LUX</span> leaves fast and
+                        settles slowly, which is what makes an interface feel responsive without feeling
+                        abrupt. The lime dot is the system; the steel dot is linear, for comparison only.
+                    </p>
+
+                    <div className="flex flex-col gap-3">
+                        <div className="h-8 rounded-xl bg-black/5 dark:bg-white/5">
+                            <motion.span
+                                key={`lux-${motionRun}`}
+                                className="mt-2.5 block h-3 w-3 rounded-full bg-brand-accent"
+                                initial={{ x: 6 }}
+                                animate={{ x: '92%' }}
+                                transition={{ duration: 1.1, ease: EASE_LUX }}
+                            />
+                        </div>
+                        <div className="h-8 rounded-xl bg-black/5 dark:bg-white/5">
+                            <motion.span
+                                key={`lin-${motionRun}`}
+                                className="mt-2.5 block h-3 w-3 rounded-full bg-brand-steel"
+                                initial={{ x: 6 }}
+                                animate={{ x: '92%' }}
+                                transition={{ duration: 1.1, ease: 'linear' }}
+                            />
+                        </div>
+                        <div>
+                            <AccentButton variant="ghost" size="sm" onClick={() => setMotionRun((n) => n + 1)}>
+                                Replay
+                            </AccentButton>
+                        </div>
+                    </div>
+
+                    <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+                        {DURATIONS.map((d) => (
+                            <div key={d.name}>
+                                <p className="font-mono text-xs font-semibold text-brand-dark dark:text-white">{d.name}</p>
+                                <p className="text-[11px] text-gray-500 dark:text-gray-400">{d.use}</p>
+                            </div>
+                        ))}
+                    </div>
+
+                    <div className="mt-6 border-t border-black/5 pt-5 dark:border-white/10">
+                        <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                            Variants - all of them from @/lib/motion
+                        </p>
+                        <div className="flex flex-col gap-2">
+                            {VARIANTS.map((v) => (
+                                <div key={v.name} className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                                    <span className="font-mono text-xs font-semibold text-brand-dark dark:text-white">{v.name}</span>
+                                    <span className="text-[11px] text-gray-500 dark:text-gray-400">{v.motion}</span>
+                                    <span className="text-[11px] text-gray-500 dark:text-gray-400">- {v.use}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    <p className="mt-5 max-w-2xl text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                        Reduced motion is a contract, not a courtesy: count-ups land on their final
+                        value, entrances resolve to their end state, and nothing depends on an
+                        animation completing for the interface to be usable.
+                    </p>
                 </Surface>
             </Section>
 
@@ -338,6 +598,46 @@ const DesignSystem: FC = () => {
                         <span className="text-sm font-semibold text-white">GlassPanel - blue</span>
                     </GlassPanel>
                 </div>
+
+                {/* The nesting model, and the census that says nobody uses it.
+                    Both belong on the same page: the rule without the count reads
+                    as current practice, and it has not been for a while. */}
+                <Surface variant="panel" padding="md">
+                    <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                        The nesting model
+                    </p>
+                    <p className="mb-4 max-w-2xl text-sm text-gray-500 dark:text-gray-400">
+                        Depth runs one direction: dark holds mid, mid holds translucent white. Putting
+                        a light panel inside a dark one inverts the contrast and breaks the model.
+                    </p>
+                    <div className="rounded-2xl bg-brand-dark p-4">
+                        <span className="text-[11px] font-medium text-white/70">dark - content panel</span>
+                        <div className="mt-2 rounded-2xl bg-brand-steel/90 p-4">
+                            <span className="text-[11px] font-medium text-white/80">blue - detail pane</span>
+                            <div className="mt-2 rounded-xl bg-white/10 p-3">
+                                <span className="text-[11px] font-medium text-white/80">white/10 - line item</span>
+                            </div>
+                        </div>
+                    </div>
+                    <p className="mt-4 max-w-2xl text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                        <b className="text-brand-dark dark:text-white">Specified, but no longer in use.</b>{' '}
+                        Counting <span className="font-mono">&lt;Surface variant&gt;</span> across the
+                        product on 2026-08-21, excluding this page:{' '}
+                        <span className="font-numbers">panel 64</span>,{' '}
+                        <span className="font-numbers">frost 5</span>,{' '}
+                        <span className="font-numbers">dark 1</span>,{' '}
+                        <span className="font-numbers">blue 0</span>,{' '}
+                        <span className="font-numbers">accent 0</span>. The model came from a
+                        master-detail layout on the old Invoices page, which was mock data throughout
+                        and was deleted in the 2026-07-24 reset. Everything rebuilt since composes flat
+                        panel cards directly on the canvas.
+                    </p>
+                    <p className="mt-3 max-w-2xl text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                        So: <b className="text-brand-dark dark:text-white">panel on the canvas is the default.</b>{' '}
+                        Reach for dark or blue only if you are genuinely rebuilding a master-detail
+                        screen - and if you do, you are the first, so expect gaps.
+                    </p>
+                </Surface>
 
                 <Surface variant="panel" padding="md">
                     <p className="mb-4 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
@@ -737,6 +1037,34 @@ const DesignSystem: FC = () => {
                         />
                     </div>
                 </Surface>
+            </Section>
+
+            {/* Do & Don't */}
+            <Section id="rules" icon={<FiCheckCircle className="w-4 h-4" />} title="Do & Don't">
+                <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                    <Surface variant="panel" padding="md" className="h-full">
+                        <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">Do</p>
+                        <ul className="flex flex-col gap-2.5">
+                            {DOS.map((rule) => (
+                                <li key={rule} className="flex gap-2.5 text-xs leading-relaxed text-gray-600 dark:text-gray-300">
+                                    <span aria-hidden className="font-numbers font-bold text-emerald-700 dark:text-emerald-400">+</span>
+                                    <span>{rule}</span>
+                                </li>
+                            ))}
+                        </ul>
+                    </Surface>
+                    <Surface variant="panel" padding="md" className="h-full">
+                        <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-red-600 dark:text-red-400">Don&apos;t</p>
+                        <ul className="flex flex-col gap-2.5">
+                            {DONTS.map((rule) => (
+                                <li key={rule} className="flex gap-2.5 text-xs leading-relaxed text-gray-600 dark:text-gray-300">
+                                    <span aria-hidden className="font-numbers font-bold text-red-600 dark:text-red-400">x</span>
+                                    <span>{rule}</span>
+                                </li>
+                            ))}
+                        </ul>
+                    </Surface>
+                </div>
             </Section>
 
             {/* ── Composition primitives (from .agents/template) ────────── */}
