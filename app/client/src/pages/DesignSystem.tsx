@@ -1,5 +1,5 @@
 import type { FC } from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import {
     FiActivity,
@@ -26,6 +26,10 @@ import {
 import {
     PageHeader,
     Surface,
+    GlassPanel,
+    KpiCard,
+    PillTabs,
+    Skeleton,
     StatTile,
     Meter,
     AccentButton,
@@ -79,25 +83,59 @@ const Section: FC<{ id: string; icon: React.ReactNode; title: string; children: 
     </motion.section>
 );
 
-const Swatch: FC<{ name: string; hex: string; className: string; dark?: boolean }> = ({
+/**
+ * The value of a design token, read from the document at runtime.
+ *
+ * Swatches used to carry a **hand-typed hex** beside the class name — a caption
+ * that can disagree with the paint it sits under. On a page whose whole job is to
+ * be the reference, a caption that lies is worse than no caption. Reading
+ * `--color-*` off `:root` means the label cannot drift from the token.
+ *
+ * Re-read when the `<html>` class changes: a token can resolve differently per
+ * theme, and this page is looked at in both.
+ */
+function useTokenValue(name: string): string {
+    const [value, setValue] = useState('');
+
+    useEffect(() => {
+        const read = () =>
+            setValue(getComputedStyle(document.documentElement).getPropertyValue(name).trim());
+        read();
+        const observer = new MutationObserver(read);
+        observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+        return () => observer.disconnect();
+    }, [name]);
+
+    return value;
+}
+
+const Swatch: FC<{ name: string; token: string; className: string; dark?: boolean }> = ({
     name,
-    hex,
+    token,
     className,
     dark,
-}) => (
-    <div className="flex flex-col gap-2">
-        <div className={`h-20 rounded-2xl ds-elev-1 ${className} ${dark ? '' : 'border border-black/5'}`} />
-        <div>
-            <p className="text-sm font-semibold text-brand-dark dark:text-white">{name}</p>
-            <p className="text-xs font-numbers text-gray-400">{hex}</p>
+}) => {
+    const value = useTokenValue(token);
+    return (
+        <div className="flex flex-col gap-2">
+            <div className={`h-20 rounded-2xl ds-elev-1 ${className} ${dark ? '' : 'border border-black/5'}`} />
+            <div className="min-w-0">
+                <p className="text-sm font-semibold text-brand-dark dark:text-white">{name}</p>
+                <p className="truncate text-xs font-numbers text-gray-500 dark:text-gray-400" title={value}>
+                    {value || '-'}
+                </p>
+                <p className="truncate font-mono text-[10px] text-gray-500 dark:text-gray-400" title={token}>
+                    {token}
+                </p>
+            </div>
         </div>
-    </div>
-);
+    );
+};
 
 const TypeRow: FC<{ label: string; cls: string; sample: string }> = ({ label, cls, sample }) => (
     <div className="flex items-baseline justify-between gap-6 py-3 border-b border-black/5 dark:border-white/10">
         <span className={`${cls} text-brand-dark dark:text-white`}>{sample}</span>
-        <span className="text-xs font-numbers text-gray-400 whitespace-nowrap">{label}</span>
+        <span className="text-xs font-numbers text-gray-500 dark:text-gray-400 whitespace-nowrap">{label}</span>
     </div>
 );
 
@@ -137,7 +175,7 @@ const dsColumns: Column<DsIssueRow>[] = [
         render: (r) => (
             <div className="flex flex-col">
                 <span className="font-medium truncate max-w-md">{r.title}</span>
-                <span className="font-mono text-[11px] text-gray-400">{r.culprit}</span>
+                <span className="font-mono text-[11px] text-gray-500 dark:text-gray-400">{r.culprit}</span>
             </div>
         ),
     },
@@ -176,6 +214,7 @@ const DesignSystem: FC = () => {
         direction: 'desc',
     });
     const [dsPage, setDsPage] = useState(1);
+    const [dsPill, setDsPill] = useState<'issues' | 'board' | 'members'>('issues');
     const [dsModal, setDsModal] = useState(false);
     const [dsConfirm, setDsConfirm] = useState(false);
     const dsMenu = useContextMenu<string>();
@@ -217,13 +256,35 @@ const DesignSystem: FC = () => {
             {/* Colour */}
             <Section id="color" icon={<FiDroplet className="w-4 h-4" />} title="Colour">
                 <Surface variant="panel" padding="md">
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-5">
-                        <Swatch name="Accent" hex="#C5F43A" className="bg-brand-accent" />
-                        <Swatch name="Dark" hex="#222222" className="bg-brand-dark" dark />
-                        <Swatch name="Near Black" hex="#141414" className="bg-brand-nearBlack" dark />
-                        <Swatch name="Steel" hex="#9CB3C4" className="bg-brand-steel" />
-                        <Swatch name="Gray" hex="#F3F4F6" className="bg-brand-gray" />
-                        <Swatch name="Glass" hex="rgba 255·.6" className="glass-panel" />
+                    <p className="mb-4 text-xs text-gray-500 dark:text-gray-400">
+                        Values are read from <span className="font-mono">:root</span> at runtime, so this
+                        page cannot disagree with the tokens it documents.
+                    </p>
+
+                    <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                        Brand
+                    </p>
+                    <div className="grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-6">
+                        <Swatch name="Accent" token="--color-brand-accent" className="bg-brand-accent" />
+                        <Swatch name="Accent hover" token="--color-brand-accentHover" className="bg-brand-accentHover" />
+                        <Swatch name="Accent soft" token="--color-brand-accentSoft" className="bg-brand-accentSoft" />
+                        <Swatch name="Dark" token="--color-brand-dark" className="bg-brand-dark" dark />
+                        <Swatch name="Near black" token="--color-brand-nearBlack" className="bg-brand-nearBlack" dark />
+                        <Swatch name="Steel" token="--color-brand-steel" className="bg-brand-steel" />
+                    </div>
+
+                    {/* Semantic tones carry MEANING. Pick by what the value means
+                        (resolved to success), never by what colour suits the mock. */}
+                    <p className="mt-8 mb-3 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                        Semantic - pick by meaning, never by hue
+                    </p>
+                    <div className="grid grid-cols-2 gap-5 sm:grid-cols-3 lg:grid-cols-6">
+                        <Swatch name="Success" token="--color-global-green" className="bg-global-green" />
+                        <Swatch name="Warning" token="--color-global-yellow" className="bg-global-yellow" />
+                        <Swatch name="Danger" token="--color-global-red" className="bg-global-red" />
+                        <Swatch name="Info" token="--color-global-blue" className="bg-global-blue" />
+                        <Swatch name="Gray" token="--color-brand-gray" className="bg-brand-gray" />
+                        <Swatch name="Glass" token="--color-brand-glass" className="glass-panel" />
                     </div>
                 </Surface>
             </Section>
@@ -261,6 +322,33 @@ const DesignSystem: FC = () => {
                         <span className="text-sm font-semibold">Blue</span>
                     </Surface>
                 </motion.div>
+
+                {/* GlassPanel is the raw glass register underneath `Surface`. Pages
+                    should reach for `Surface`; this is here because the system
+                    exports it, and an exported primitive nobody can see is one
+                    nobody checks. */}
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                    <GlassPanel variant="light" radius="2xl" padding="md" className="h-28">
+                        <span className="text-sm font-semibold text-brand-dark dark:text-white">GlassPanel - light</span>
+                    </GlassPanel>
+                    <GlassPanel variant="dark" radius="2xl" padding="md" className="h-28">
+                        <span className="text-sm font-semibold text-white">GlassPanel - dark</span>
+                    </GlassPanel>
+                    <GlassPanel variant="blue" radius="2xl" padding="md" className="h-28">
+                        <span className="text-sm font-semibold text-white">GlassPanel - blue</span>
+                    </GlassPanel>
+                </div>
+
+                <Surface variant="panel" padding="md">
+                    <p className="mb-4 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                        KpiCard - label, mono figure, optional icon
+                    </p>
+                    <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
+                        <KpiCard label="Unresolved issues" value={128} icon={<FiAlertTriangle className="h-4 w-4" />} />
+                        <KpiCard label="Events - 24h" value="12,904" icon={<FiActivity className="h-4 w-4" />} />
+                        <KpiCard label="Resolution rate" value={92} suffix="%" icon={<FiCheckCircle className="h-4 w-4" />} />
+                    </div>
+                </Surface>
             </Section>
 
             {/* Components */}
@@ -282,21 +370,21 @@ const DesignSystem: FC = () => {
                 {/* Buttons + badges + meter */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                     <Surface variant="panel" padding="md" className="flex flex-col gap-5">
-                        <p className="text-xs uppercase tracking-wider text-gray-400 font-semibold">Buttons</p>
+                        <p className="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400 font-semibold">Buttons</p>
                         <div className="flex flex-wrap items-center gap-3">
                             <AccentButton icon={<FiPlus className="w-4 h-4" />}>Create an invoice</AccentButton>
                             <AccentButton variant="dark">Pay out now</AccentButton>
                             <AccentButton variant="ghost">Cancel</AccentButton>
                             <AccentButton variant="accent" size="sm">Small</AccentButton>
                         </div>
-                        <p className="text-xs uppercase tracking-wider text-gray-400 font-semibold mt-2">Badges</p>
+                        <p className="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400 font-semibold mt-2">Badges</p>
                         <div className="flex flex-wrap items-center gap-2">
                             <Badge tone="accent">Active</Badge>
                             <Badge tone="solid">Unsent</Badge>
                             <Badge tone="neutral">Draft</Badge>
                             <Badge tone="outline">Viewed</Badge>
                         </div>
-                        <p className="text-xs uppercase tracking-wider text-gray-400 font-semibold mt-2">
+                        <p className="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400 font-semibold mt-2">
                             Semantic tones
                         </p>
                         <div className="flex flex-wrap items-center gap-2">
@@ -318,7 +406,7 @@ const DesignSystem: FC = () => {
 
                     <Surface variant="panel" padding="md" className="flex flex-col justify-between gap-6">
                         <div className="flex items-center justify-between">
-                            <p className="text-xs uppercase tracking-wider text-gray-400 font-semibold">
+                            <p className="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400 font-semibold">
                                 Meter · glowing knob
                             </p>
                             <span className="font-numbers text-lg font-bold text-brand-dark dark:text-white">
@@ -471,14 +559,14 @@ const DesignSystem: FC = () => {
                                 checked={dsAllowlist}
                                 onChange={(e) => setDsAllowlist(e.target.checked)}
                             />
-                            <p className="text-xs text-gray-400">
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
                                 <code className="font-mono">role=&quot;switch&quot;</code> — use only when the
                                 change applies on toggle. If it needs a Save button, it is a Checkbox.
                             </p>
                         </div>
                     </div>
 
-                    <p className="text-xs text-gray-400">
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
                         The third field shows the error state: the message is{' '}
                         <code className="font-mono">role=&quot;alert&quot;</code> and replaces the hint rather
                         than stacking under it, so there is only ever one line of guidance to read.
@@ -519,7 +607,16 @@ const DesignSystem: FC = () => {
                         <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-3">
                             Loading state
                         </p>
-                        <SkeletonText lines={3} />
+                        <div className="flex flex-col gap-4">
+                            <SkeletonText lines={3} />
+                            {/* The single block, for a placeholder that is not a
+                                paragraph - an avatar, a chart, a tile. */}
+                            <div className="flex items-center gap-3">
+                                <Skeleton height="h-10" width="w-10" radius="full" />
+                                <Skeleton height="h-10" width="w-40" radius="lg" />
+                                <Skeleton height="h-10" className="flex-1" radius="xl" />
+                            </div>
+                        </div>
                     </div>
                 </Surface>
             </Section>
@@ -593,7 +690,7 @@ const DesignSystem: FC = () => {
 
                         <div
                             onContextMenu={(e) => dsMenu.openAtCursor(e, 'demo')}
-                            className="flex items-center justify-between gap-3 rounded-2xl border border-dashed border-gray-300 px-4 py-6 text-sm text-gray-500 dark:border-white/15 dark:text-gray-400"
+                            className="flex items-center justify-between gap-3 rounded-2xl border border-dashed border-gray-300 px-4 py-6 text-sm text-gray-500 dark:border-white/15 dark:text-gray-500 dark:text-gray-400"
                         >
                             <span>Right-click anywhere in this box…</span>
                             <AccentButton
@@ -646,7 +743,7 @@ const DesignSystem: FC = () => {
             <Section id="composition" icon={<FiGrid className="w-4 h-4" />} title="Composition">
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                     <Surface variant="panel" padding="md" className="flex flex-col gap-5">
-                        <p className="text-xs uppercase tracking-wider text-gray-400 font-semibold">
+                        <p className="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400 font-semibold">
                             Timeline · activity feed
                         </p>
                         <Timeline
@@ -661,7 +758,7 @@ const DesignSystem: FC = () => {
 
                     <Surface variant="panel" padding="md" className="flex flex-col gap-6">
                         <div className="flex items-center justify-between gap-3">
-                            <p className="text-xs uppercase tracking-wider text-gray-400 font-semibold">
+                            <p className="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400 font-semibold">
                                 Stepper · stage progress
                             </p>
                             <AvatarStack
@@ -710,9 +807,27 @@ const DesignSystem: FC = () => {
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                     <Surface variant="panel" padding="md" className="flex flex-col gap-5">
-                        <p className="text-xs uppercase tracking-wider text-gray-400 font-semibold">
+                        <p className="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400 font-semibold">
                             SegmentedControl · exclusive & capped-multiple
                         </p>
+                        <div className="mb-6">
+                            <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                                PillTabs - navigation between destinations
+                            </p>
+                            <PillTabs
+                                tabs={[
+                                    { id: 'issues', label: 'Issues', count: 128 },
+                                    { id: 'board', label: 'Board', count: 12 },
+                                    { id: 'members', label: 'Members' },
+                                ]}
+                                activeId={dsPill}
+                                onChange={setDsPill}
+                            />
+                            {/* The distinction is worth stating where both are on
+                                screen: PillTabs moves you somewhere, SegmentedControl
+                                filters what you are already looking at. */}
+                        </div>
+
                         <SegmentedControl
                             segments={[
                                 { value: 'week', label: 'Week' },
@@ -736,7 +851,7 @@ const DesignSystem: FC = () => {
                                 value={charts}
                                 onChange={setCharts}
                             />
-                            <p className="text-xs text-gray-400">
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
                                 Maximum 2 overlaps — the rest disable at the cap.
                             </p>
                         </div>
@@ -758,7 +873,7 @@ const DesignSystem: FC = () => {
 
                 <Surface variant="panel" padding="md" className="flex flex-col gap-5 overflow-x-auto">
                     <div className="flex items-center justify-between gap-3">
-                        <p className="text-xs uppercase tracking-wider text-gray-400 font-semibold">
+                        <p className="text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400 font-semibold">
                             GanttTrack · long-horizon schedule
                         </p>
                         <SegmentedControl

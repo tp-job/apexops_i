@@ -39,6 +39,37 @@
 | `Badge` | nano status chip: `accent · solid · neutral · outline` |
 | `PageHeader` | 4xl DM-Sans title + subtitle + optional back-arrow + actions |
 
+**The table above is the v2 core, not the full export list.** The barrel exports **29** primitives —
+form kit, data surfaces, overlays, context menu and the composition set as well. The authoritative
+list is `components/design-system/index.ts`, and **every one of them is rendered on `/design-system`**
+as of 2026-08-21; that is checkable rather than aspirational:
+
+```bash
+# names exported by the barrel that the style guide does not import — must be empty
+```
+
+### Style-guide audit — 2026-08-21
+
+`/design-system` was drifting from the system it documents. Three things were wrong, and each is the
+kind that only shows up when someone looks:
+
+1. **Four primitives were never on the page** — `GlassPanel`, `KpiCard`, `PillTabs` and `Skeleton`
+   (only `SkeletonText` was shown). Now all present.
+2. **`PillTabs` had no dark mode at all.** A bare `bg-white/70` container with a white border, so on
+   a dark page it rendered as a bright slab. It had **zero call sites**, which is exactly why nobody
+   caught it — a primitive nothing renders is a primitive nothing checks. Fixed with `dark:`
+   siblings on the container, the inactive label and the count chip, and verified in the browser:
+   the container computes to white at 5% alpha in dark and 70% in light.
+3. **A light-mode contrast failure**, 26 occurrences: bare `text-gray-400` is **2.54:1** on white —
+   below the 4.5:1 AA floor for body text. Replaced with the repo's paired idiom
+   `text-gray-500 dark:text-gray-400`, which measures **4.83:1** light and **6.27:1** dark.
+
+**Swatches now read their value from `:root` at runtime** instead of carrying a hand-typed hex. A
+caption beside a colour chip that can disagree with the paint is worse than no caption, and on the
+one page whose job is to be the reference it is the worst place for it. The Colour section also
+gained the semantic tokens (`--color-global-green|yellow|red|blue`) and the accent variants, so the
+page shows the palette that exists rather than six of it.
+
 ### Rules (in addition to §2 Do/Don't below)
 - ✅ Compose on `Surface` — never raw `div` + background utilities for cards.
 - ✅ One glowing element (`ds-glow`/accent) per view — active state **or** CTA, not both.
