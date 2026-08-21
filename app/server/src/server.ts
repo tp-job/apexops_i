@@ -32,6 +32,9 @@ import {
     type MonitorAdmit,
 } from './lib/monitorAccess';
 import { scheduleRetentionPrune } from './lib/retention';
+import { resolveMembership } from './lib/projectAccess';
+import { attachIssueStream } from './lib/issueStreamHandler';
+import { registerRealtime } from './lib/realtime';
 
 // ── Express App ──────────────────────────────────────────────
 const app = express();
@@ -52,6 +55,11 @@ const server = http.createServer();
 const io = new SocketIOServer(server, {
     cors: { origin: '*', methods: ['GET', 'POST'] },
 });
+
+// Published through a registry rather than exported (R-D4). `api/ingest.ts` needs
+// a seam to push issue activity through, and importing this file from a router
+// that this file mounts is a cycle.
+registerRealtime(io);
 
 // The native WebSocket relay that used to listen on :8082 was REMOVED (spec D6,
 // .agents/docs/features/project-workspaces-and-sdk.md). It accepted unauthenticated
@@ -231,6 +239,25 @@ io.on('connection', (socket) => {
             if (r !== socket.id && parseDirectRoom(r)) socket.leave(r);
         });
         socket.join(room.id);
+    });
+
+    /**
+     * Subscribe to a project's issue activity (R-D3).
+     *
+     * Authorized, not merely authenticated: the room carries every error thrown
+     * inside one project, so `socketUsers` holding an entry is not enough — the
+     * socket passes the *same* `resolveMembership` the HTTP routes use, from the
+     * same module. An authenticated-only room here would be the third occurrence
+     * of the leak that deleted the :8082 relay and forced `monitors` to gate
+     * itself.
+     *
+     * The body lives in `lib/issueStreamHandler.ts` so a test can drive it over a
+     * real socket without a database — which is what makes "a non-member receives
+     * zero frames" an assertion on the wire rather than a look at an empty UI.
+     */
+    attachIssueStream(socket, {
+        getUser: (socketId) => socketUsers.get(socketId),
+        resolveMembership,
     });
 
     // Real-time chat message relay, scoped to the conversation's participants.

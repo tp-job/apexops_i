@@ -1,7 +1,7 @@
 import type { FC } from 'react';
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { FiAlertTriangle, FiInbox, FiRadio, FiRotateCcw, FiSearch, FiZap } from 'react-icons/fi';
+import { FiAlertTriangle, FiArrowUp, FiInbox, FiRadio, FiRotateCcw, FiSearch, FiZap } from 'react-icons/fi';
 import {
     PageHeader,
     AccentButton,
@@ -15,6 +15,7 @@ import {
     type Column,
 } from '@/components/design-system';
 import ProjectTabs from '@/components/layout/ProjectTabs';
+import StreamStatusBadge from '@/components/common/StreamStatusBadge';
 import { useIssues } from '@/hooks/useIssues';
 import { useProject } from '@/hooks/useProject';
 import { getErrorMessage } from '@/utils/error';
@@ -35,7 +36,8 @@ const ProjectIssues: FC = () => {
     const {
         issues, total, pageSize, query, loading, error, filtered,
         setFilter, setPage, setSort, clearFilters, promote,
-    } = useIssues(slug);
+        streamStatus, pendingNew, showPendingNew,
+    } = useIssues(slug, project?.id ?? null);
 
     const [promoting, setPromoting] = useState<number | null>(null);
     const [actionError, setActionError] = useState<string | null>(null);
@@ -198,6 +200,10 @@ const ProjectIssues: FC = () => {
                     />
 
                     <div className="flex items-center gap-2">
+                        {/* Next to the filters rather than in the header: the question
+                            it answers — "is what I am looking at current?" — is asked
+                            about the list, not about the project. */}
+                        <StreamStatusBadge status={streamStatus} />
                         <div className="w-56">
                             <Input
                                 id="issue-search"
@@ -215,6 +221,20 @@ const ProjectIssues: FC = () => {
                         )}
                     </div>
                 </div>
+
+                {pendingNew > 0 && (
+                    /* New issues that did not belong in this view (a filter is on, or
+                       this is not page 1). Injecting them would make the filter look
+                       broken, so they are counted and shown on request (R-D2). */
+                    <button
+                        type="button"
+                        onClick={() => void showPendingNew()}
+                        className="flex w-full items-center justify-center gap-2 rounded-lg border border-brand-accent/40 bg-brand-accent/10 px-3 py-2 text-sm font-semibold text-brand-dark transition hover:bg-brand-accent/20 dark:text-brand-accent"
+                    >
+                        <FiArrowUp size={14} />
+                        {pendingNew} new {pendingNew === 1 ? 'issue' : 'issues'} — show
+                    </button>
+                )}
 
                 <DataTable
                     caption={`Issues for ${project?.name ?? 'project'}`}

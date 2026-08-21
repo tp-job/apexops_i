@@ -372,10 +372,22 @@ SPF/DKIM.** That is operator work. Everything up to it is built and asserted.
 > rest of 5, and 7 all landed between 2026-08-01 and 2026-08-04. Sequencing has been **by dependency,
 > not by the calendar** — which is why Sprint 5's S3 waited for Sprint 3 rather than for its date.
 >
-> **Every sprint in this plan has now shipped.** What is left is named in each sprint's `progress.md`
-> gap list, not here; the largest are integration tests (everything covered today is a unit test), a
-> production sending domain for email, and the two release features cut from Sprint 4 pending a
-> decision on release ordering.
+> **Corrected 2026-08-20.** This paragraph used to read *"Every sprint in this plan has now shipped."*
+> It was not true. Sprint 3's **real-time issue stream** — *"socket.io → issue list, per-project room,
+> no double-applied optimistic updates"* — had never been built: `hooks/useIssues.ts` had no socket
+> and no poll, nothing on the server emitted for issues, and `io` was not even exported, so there was
+> no seam to emit from. Sprint 3's other four items did ship, which is the likely reason the row was
+> marked done. The gap was found by auditing the tree on 2026-08-07 and closed by **Sprint 8**
+> ([`.agents/harness/sprint-8-realtime-issue-stream/`](../../harness/sprint-8-realtime-issue-stream/),
+> decisions in [`realtime-issue-stream.md`](../features/realtime-issue-stream.md)) on 2026-08-20.
+>
+> **The lesson is the process one, and it is why this correction is verbose:** a plan row is a claim
+> about the tree, and only the tree can settle it. Verify before writing "shipped".
+>
+> Every sprint in this plan has now shipped, Sprint 3 included. What is left is named in each
+> sprint's `progress.md` gap list, not here; the largest are integration tests (most coverage today
+> is unit tests — Sprint 8 added the first wire-level socket tests), a production sending domain for
+> email, and the two release features cut from Sprint 4 pending a decision on release ordering.
 
 **Two items carried forward from the old plan — both closed by Sprint 5 on 2026-08-04:**
 

@@ -1,0 +1,176 @@
+{
+  "build": "Sprint 8 — the real-time issue stream",
+  "spec": "build-spec.md",
+  "decisions": ".agents/docs/features/realtime-issue-stream.md (R-D1..R-D6)",
+  "note": "Audited the tree on 2026-08-07 against sprint-plan.md's claim that every sprint has shipped. It has not: Sprint 3's real-time issue stream was never built. hooks/useIssues.ts has no socket and no poll; server.ts emits for chat, typing and console-logs but nothing for issues; io is not even exported, so there is no seam to emit from. The other four Sprint 3 items did ship, which is the likely reason the row was marked done. Sprint 7's ledger archived under .agents/docs/archive/sprint-7-hardening-*.",
+  "features": [
+    {
+      "id": "F001",
+      "title": "lib/realtime.ts registry — a seam to emit from",
+      "priority": "critical",
+      "depends_on": [],
+      "description": "R-D4. `io` is constructed in server.ts and never exported, so api/ingest.ts has nothing to call. Importing server.ts from a route is a cycle. A tiny set-at-boot registry is the seam.",
+      "steps": [
+        "server.ts registers the io instance at boot",
+        "api/ingest.ts imports only the registry, never server.ts",
+        "A call before boot is a no-op, not a crash",
+        "FAILURE CASE: no import cycle — verified by the build, not by reading"
+      ],
+      "passes": true,
+      "notes": "2026-08-20. server/src/lib/realtime.ts + realtime.test.ts (4 assertions). server.ts:60 registers io at boot. Before-boot emit returns false and does not throw; a throwing transport is swallowed and reported false. No-cycle proof is stronger than a read: the module's only import is `import type`, so dist/lib/realtime.js emits zero require() calls — there is no runtime edge to form a cycle through. The 'ingest imports only the registry' half of step 2 is asserted under F003, where that import is actually written."
+    },
+    {
+      "id": "F002",
+      "title": "project:<id> room, gated by resolveMembership",
+      "priority": "critical",
+      "depends_on": [
+        "F001"
+      ],
+      "description": "R-D3. Joining is authorized, not merely authenticated. An authenticated-only room is a cross-project leak — the third occurrence of the defect that deleted the :8082 relay and forced the monitors room to gate itself.",
+      "steps": [
+        "A member joining project:<id> succeeds",
+        "A signed-in NON-member joining is refused",
+        "The SDK's anonymous socket cannot join",
+        "FAILURE CASE: a non-member receives ZERO frames for that project, asserted on the wire, not by an empty UI"
+      ],
+      "passes": true,
+      "notes": "2026-08-20. lib/issueStream.ts (decision, 7 assertions) + lib/issueStreamHandler.ts driven by a REAL socket.io server and real clients in issueStreamHandler.test.ts (5 assertions). The failure case is a wire assertion as the step demands: a signed-in non-member is refused, then 5 frames are emitted into project:1 and the outsider's received array is [] after a 300ms window. Same for the anonymous SDK socket. Refusal string is identical for 'no such project' and 'not yours' so the socket is not a slug oracle. Membership lookup throwing fails CLOSED. Mutation-checked: admitting a null membership turns 4 of these red (named), and reverting turns them green."
+    },
+    {
+      "id": "F003",
+      "title": "Ingest emits absolute-valued deltas, post-commit and detached",
+      "priority": "critical",
+      "depends_on": [
+        "F001",
+        "F002"
+      ],
+      "description": "R-D1 + R-D4. count is the new total, never +1: sockets drop and replay, and an increment over an unreliable transport is how a counting tool starts lying. The emit runs after the transaction commits, wrapped, and can never fail or slow ingest.",
+      "steps": [
+        "An ingested error produces one frame on project:<id> within 2s",
+        "The frame carries absolute count, lastSeen, status and an isNew flag",
+        "The emit happens after commit, never inside the transaction",
+        "FAILURE CASE: with the emit forced to throw, ingest still answers 202, still writes event and issue, and is not measurably slower"
+      ],
+      "passes": true,
+      "notes": "2026-08-20. OBSERVED LIVE against the dev database, server on PORT=3010/WS=8091, a real member socket joined to project:1. Two POSTs of the same error produced exactly two frames, one each, at +858ms (cold Prisma) and +34ms — inside the 2s criterion. Frames carried absolute count 1 then 2, isNew true then false, level, status and ISO lastSeen; no issue body. FAILURE CASE observed, not argued: with emitToRoom patched to throw unconditionally and the server restarted on 3011/8092, ingest still answered 202 (149ms vs 108ms — noise, and the push runs after res.json so it cannot delay the response), the Issue row still incremented to count 2 and the Event row was still written; the throw surfaced only as 'issue activity emit failed' in the server log. The emit loop got its own try/catch: the outer catch would otherwise answer 500 after the 202 was already sent. The frame for a regression is built from the reopened row, so it arrives as unresolved rather than resolved. Unit side: buildIssueFrame, 5 assertions including an idempotence check that applying one frame twice lands on the same count."
+    },
+    {
+      "id": "F004",
+      "title": "useIssues patches in place — no reorder, no refetch",
+      "priority": "critical",
+      "depends_on": [
+        "F003"
+      ],
+      "description": "R-D2. A push for an issue already on screen updates count, lastSeen and status in place. Re-sorting a list under a reading cursor is the thing that makes people close the tab.",
+      "steps": [
+        "The count on a visible issue increments in place",
+        "The list does not reorder and does not refetch",
+        "Two windows on the same project both update, within 2s, once each"
+      ],
+      "passes": true,
+      "notes": "2026-08-20. OBSERVED in two browser windows on /p/default/issues. One ingest of an error already on screen: both windows changed EXACTLY ONCE (MutationObserver count 1 each), +156ms, count 3 -> 4, row order unchanged, and read_network_requests shows no issues GET after the push — patched in place, not refetched. The patched row was the LAST one under sort=lastSeen desc and stayed last, which is the no-reorder rule doing its job. Unit side: 6 assertions in client/src/lib/issueStream.test.ts including untouched-object identity for the rows that did not change."
+    },
+    {
+      "id": "F005",
+      "title": "New issues: conditional prepend, banner when filtered",
+      "priority": "critical",
+      "depends_on": [
+        "F004"
+      ],
+      "description": "R-D2. The server room does not know the client's filter, so insertion has to be decided where the query state lives. Injecting a row that does not match the active filter makes the filter look broken.",
+      "steps": [
+        "isNew on page 1 with no filters prepends and the list still holds exactly pageSize rows",
+        "isNew with a filter active does NOT insert; an 'N new issues' banner appears",
+        "isNew on page > 1 does NOT insert",
+        "Clicking the banner refetches the current query",
+        "FAILURE CASE: a push for a project the client is not viewing is ignored"
+      ],
+      "passes": true,
+      "notes": "2026-08-20. OBSERVED. Unfiltered page 1: a new fingerprint prepended within ~200ms and the row count grew by one. With ?q=hydrate active a new non-matching issue did NOT insert — the list stayed at its 2 matching rows and a '1 new issue — show' banner appeared; clicking it cleared the banner and refetched the current query. 'Holds exactly pageSize' is unit-tested rather than observed: the dev project has 7 issues against a pageSize of 25, so a full page could not be shown live. Page > 1 defer and the ignore-other-projects failure case are unit-tested. IMPLEMENTATION NOTE: the frame carries no title by design, so a prepended row is a placeholder and one debounced (600ms) refetch fills in its body; a burst of new fingerprints coalesces into a single request. KNOWN WART, recorded not hidden: the banner counts new issues for the PROJECT, so under a filter it can offer '1 new issue' and then show nothing new after the refetch, because the new issue does not match the filter."
+    },
+    {
+      "id": "F006",
+      "title": "No double-applied optimistic updates",
+      "priority": "critical",
+      "depends_on": [
+        "F004"
+      ],
+      "description": "The named risk in the plan and the top item in the pre-mortem. A local optimistic update and the echoed server push both land on the same row; absolute values are what make that harmless.",
+      "steps": [
+        "Resolve an issue in window A; window B shows resolved once",
+        "Window A shows no flicker and no doubled count",
+        "Promoting an issue to a ticket behaves the same way"
+      ],
+      "passes": true,
+      "notes": "2026-08-20. OBSERVED. Resolve clicked in window A (issue detail): window B's list changed exactly once, +163ms, to RESOLVED with count unchanged at 4 and no reorder; window A showed RESOLVED once and occurrences 4 — no doubling, no flicker. Then the same error was ingested again: one change, +186ms, back to UNRESOLVED with absolute count 5 — the regression flip propagates from the reopened row, not the pre-flip one. Promote is covered by the same push: PATCH /:id and POST /:id/ticket both emit (R-D1a amendment — the frame gained ticketId, because status alone cannot tell another window to stop offering 'Create ticket'). Idempotence is unit-asserted twice: applying one frame twice returns 'ignored' the second time."
+    },
+    {
+      "id": "F007",
+      "title": "Three-state connection badge, never 'live' over a dead feed",
+      "priority": "high",
+      "depends_on": [
+        "F004"
+      ],
+      "description": "R-D5. 'Nothing is happening' and 'the page stopped listening' look identical, and that is the worst failure a monitoring view has. A boolean cannot express the difference.",
+      "steps": [
+        "Kill the server: the badge goes reconnecting, then offline",
+        "It never reads live while the feed is dead",
+        "Restart: it reconnects, refetches the current query, and the list is correct",
+        "FAILURE CASE: pushes missed while disconnected are recovered by the refetch, not lost"
+      ],
+      "passes": true,
+      "notes": "2026-08-20. OBSERVED end to end on an isolated client (vite :5199 -> API :3013, WS :8099) so the developer's own dev server was never touched. Timeline from the page itself: LIVE -> server killed -> RECONNECTING at +10.6s (socket.io ping timeout) -> OFFLINE at +30.8s -> server restarted -> LIVE at +43.0s, and at +43.2s the list held 7 rows including 'S8 missed while offline', which was ingested while the feed was dead. Missed pushes are recovered by the refetch, exactly as R-D5 says, with no buffer. A separate run against a never-started server went RECONNECTING -> OFFLINE and never once read LIVE. The state machine's 'no sequence without a connect can reach live' is unit-asserted over 50 events."
+    },
+    {
+      "id": "F008",
+      "title": "Socket handshake refreshes its token once",
+      "priority": "critical",
+      "depends_on": [
+        "F007"
+      ],
+      "description": "R-D6, and the one that decides whether this sprint is real. lib/authSession.ts covers four HTTP transports and explicitly not sockets. A tab past token expiry reconnects with a stale token, io.use throws, and the feed dies silently while the page still renders signed-in — the exact shape of the Sprint 1 defect.",
+      "steps": [
+        "Leave a tab open past access-token expiry: it keeps streaming",
+        "The refresh goes through the existing single-flight coordinator, not a second implementation",
+        "A second consecutive auth failure signs out rather than looping",
+        "FAILURE CASE: the anonymous-socket path stays open for the SDK — do not tighten io.use as a side effect"
+      ],
+      "passes": true,
+      "notes": "2026-08-20. OBSERVED — the criterion Sprint 3 wrote and never ran. A tab was opened with an access token expiring in 60s and a REAL refresh-token row (minted through lib/sessions.ts, so the /refresh route behaves exactly as in production). Left past expiry, then the feed was killed and restarted to force a reconnect with the now-stale token: handshake refused, the hook called refreshOnce() in lib/authSession.ts, reconnected, and the badge was LIVE 2s after the server returned. localStorage then held a token expiring 8h later. It KEPT STREAMING — an ingest after the refresh moved the visible count 5 -> 6. The refresh went through the existing single-flight coordinator, not a second implementation; dev StrictMode mounts two sockets, and the two refresh POSTs observed are that, each succeeding through the coordinator's rotation-adoption path. FAILURE CASE observed: an anonymous socket still CONNECTS (the SDK path is untouched — io.use was not tightened) and is refused the room with 'Not a member of that project'. PARTIAL, stated plainly: sign-out-not-loop was observed with an unusable refresh token (tokens cleared, redirected to /login, no retry loop); the specific 'refresh succeeded but the new token was refused too' branch is code, not an observation — forcing it needs a server-side fault injector this repo does not have."
+    },
+    {
+      "id": "F009",
+      "title": "The suite proves its worth: reintroduce the count drift",
+      "priority": "critical",
+      "depends_on": [
+        "F003",
+        "F004"
+      ],
+      "description": "Same discipline as Sprint 7's F011. A test that has never failed has proven nothing, and count drift is the failure this whole design is shaped to prevent.",
+      "steps": [
+        "Reintroduce an increment-based count (count += 1) and the suite goes red naming the drift",
+        "Reintroduce a blind insert under an active filter and the suite goes red",
+        "Both revert clean and the suite goes green"
+      ],
+      "passes": true,
+      "notes": "2026-08-20. Both mutations were WATCHED TO FAIL, then reverted. (1) count += 1 instead of the absolute value: 3 assertions red, named — 'patches count, lastSeen and status in place', 'is idempotent: the same frame applied twice leaves the same count', 'ignores a replayed frame that changes nothing'. (2) blind insert with the filter check removed: 2 red — 'does NOT insert while a filter is active', 'does NOT insert on page 2'. A third mutation earlier in the sprint (admitting a null membership to the project room) turned 4 red across the pure decision and the real-socket test. Every mutation reverted clean: 143 client and 132 server tests green."
+    },
+    {
+      "id": "F010",
+      "title": "Clean build, green suite, and the plan corrected",
+      "priority": "high",
+      "depends_on": [
+        "F009"
+      ],
+      "description": "sprint-plan.md:375 claims every sprint has shipped. It is the document-precedence rule's own failure mode, and it gets fixed in the same PR as the code rather than 'at the end'.",
+      "steps": [
+        "tsc --noEmit, eslint src and npm run build clean in both workspaces",
+        "npm test green in CI from a clean checkout",
+        "sprint-plan.md's 'every sprint has now shipped' line corrected with what was actually missing",
+        "realtime-issue-stream.md gains its exit notes"
+      ],
+      "passes": true,
+      "notes": "2026-08-20. tsc clean in both workspaces, eslint clean on the client (the server workspace has no eslint config — CI lints the client only, and that is unchanged by this sprint), npm run build clean in both, 275 tests green (143 client + 132 server). CI runs this exact set. sprint-plan.md's 'Every sprint in this plan has now shipped' line is corrected in this same branch, naming what was actually missing and why the row was plausibly marked done, and realtime-issue-stream.md gained its exit notes with the five carried gaps."
+    }
+  ]
+}
