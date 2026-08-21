@@ -8,7 +8,7 @@ import Image from '@tiptap/extension-image';
 import EditorToolbar from './EditorToolbar';
 import {
     isEmptyRichDoc,
-    plainTextToRichDoc,
+    legacyContentToRichDoc,
     richDocKey,
     richDocToPlainText,
 } from '@/lib/richText';
@@ -170,7 +170,10 @@ const RichTextEditor: FC<RichTextEditorProps> = ({
     onBlurRef.current = onBlur;
 
     const initial = useMemo<JSONContent>(
-        () => doc ?? (plainFallback ? (plainTextToRichDoc(plainFallback) as JSONContent) : { type: 'doc', content: [{ type: 'paragraph' }] }),
+        // `legacyContentToRichDoc`, not `plainTextToRichDoc`: a note written
+        // before the UI reset holds HTML in `content`, and treating that as
+        // literal text put `<p>` on screen and froze it there on the first save.
+        () => doc ?? (legacyContentToRichDoc(plainFallback) as JSONContent),
         // Deliberately the mount-time value only: later changes go through the
         // `setContent` effect below, which knows how to guard the caret.
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -234,7 +237,7 @@ const RichTextEditor: FC<RichTextEditorProps> = ({
         if (!editor || editor.isDestroyed) return;
         if (doc && richDocKey(doc) === lastEmitted.current) return;
 
-        const next = doc ?? (plainFallback ? (plainTextToRichDoc(plainFallback) as JSONContent) : { type: 'doc', content: [{ type: 'paragraph' }] });
+        const next = doc ?? (legacyContentToRichDoc(plainFallback) as JSONContent);
         if (richDocKey(editor.getJSON()) === richDocKey(next)) return;
 
         lastEmitted.current = richDocKey(next);
