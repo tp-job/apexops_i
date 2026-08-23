@@ -1,5 +1,5 @@
 import type { FC } from 'react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { motion } from 'motion/react';
 import {
     FiActivity,
@@ -228,6 +228,9 @@ const LAWS = [
     },
 ];
 
+/** The easing-demo dot, in px. Also its inset from each end of the track. */
+const DOT_PX = 12;
+
 const RADII = [
     { name: 'rounded-full', px: '9999px', cls: 'rounded-full', use: 'Avatars, nav pills, badges, icon buttons' },
     { name: 'rounded-3xl', px: '24px', cls: 'rounded-3xl', use: 'Cards and main containers' },
@@ -356,6 +359,31 @@ const DesignSystem: FC = () => {
     /* Remounting the two dots is what replays them: a key change restarts the
        animation, where re-running the same `animate` would be a no-op. */
     const [motionRun, setMotionRun] = useState(0);
+
+    /**
+     * How far the easing dots travel.
+     *
+     * Measured, not expressed as a percentage. `x: '92%'` looks right and is not:
+     * a percentage transform resolves against **the element's own box**, so a
+     * 12px dot moved 11px and the demo showed two dots twitching in place. Caught
+     * by measuring the DOM in a real browser — both dots sat at
+     * `translateX(11.04px)` inside a 1350px track.
+     */
+    const trackRef = useRef<HTMLDivElement>(null);
+    const [travel, setTravel] = useState(0);
+
+    useEffect(() => {
+        const el = trackRef.current;
+        if (!el) return;
+        // Both tracks are siblings of identical width, so one measurement serves
+        // both. `ResizeObserver` rather than a one-off read: this page is wide and
+        // the sidebar-less layout reflows on any window resize.
+        const measure = () => setTravel(Math.max(0, el.clientWidth - DOT_PX * 2));
+        measure();
+        const ro = new ResizeObserver(measure);
+        ro.observe(el);
+        return () => ro.disconnect();
+    }, []);
 
     /* Scroll-spy for the rail. The threshold is a *little* below the sticky rail
        so the pill flips as a heading passes under it rather than when it is
@@ -600,12 +628,12 @@ const DesignSystem: FC = () => {
                     </p>
 
                     <div className="flex flex-col gap-3">
-                        <div className="h-8 rounded-xl bg-black/5 dark:bg-white/5">
+                        <div ref={trackRef} className="h-8 rounded-xl bg-black/5 dark:bg-white/5">
                             <motion.span
                                 key={`lux-${motionRun}`}
                                 className="mt-2.5 block h-3 w-3 rounded-full bg-brand-accent"
-                                initial={{ x: 6 }}
-                                animate={{ x: '92%' }}
+                                initial={{ x: DOT_PX / 2 }}
+                                animate={{ x: travel }}
                                 transition={{ duration: 1.1, ease: EASE_LUX }}
                             />
                         </div>
@@ -613,8 +641,8 @@ const DesignSystem: FC = () => {
                             <motion.span
                                 key={`lin-${motionRun}`}
                                 className="mt-2.5 block h-3 w-3 rounded-full bg-brand-steel"
-                                initial={{ x: 6 }}
-                                animate={{ x: '92%' }}
+                                initial={{ x: DOT_PX / 2 }}
+                                animate={{ x: travel }}
                                 transition={{ duration: 1.1, ease: 'linear' }}
                             />
                         </div>

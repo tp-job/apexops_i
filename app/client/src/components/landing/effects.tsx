@@ -1,5 +1,5 @@
 import type { FC, ReactNode } from 'react';
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { motion, useMotionValue, useReducedMotion, useSpring } from 'motion/react';
 import { EASE_LUX, SPRING } from '@/lib/motion';
 
@@ -15,11 +15,49 @@ import { EASE_LUX, SPRING } from '@/lib/motion';
  * one. So: same ideas, this system's curve, this system's palette, no new
  * dependency and nothing to keep in sync.
  *
- * **Reduced motion is a contract here, not a courtesy** (design.md). Every effect
- * below resolves to its end state when the user asks for less movement: text is
- * simply text, cards keep their spotlight but stop chasing the cursor, and the
- * magnet stops pulling. Nothing depends on an animation finishing to be readable.
+ * **Nothing here depends on an animation finishing to be readable**, and that
+ * covers two cases rather than one. Reduced motion is the expected one: text is
+ * simply text, the spotlight is not rendered, the magnet does not pull. The
+ * second was found by measuring — a page loaded in a **hidden tab** never starts
+ * its entrances, so anything that begins at `opacity: 0` stays there. Both go
+ * through `useEntranceEnabled` below.
  */
+
+// ── When an entrance may run at all ───────────────────────────
+
+/**
+ * True when an entrance animation is safe to play — i.e. it will actually run
+ * and finish.
+ *
+ * Two reasons it might not, and they need the same answer. Reduced motion is the
+ * obvious one. The second was found by measuring: **a document loaded in a
+ * background tab does not start these animations at all.** Checked in real Chrome
+ * with `visibilityState: "hidden"`, every word of the headline sat at
+ * `opacity: 0`, `translateY(54px)` indefinitely — and a headline that begins
+ * invisible and waits for an animation is a headline that can stay invisible.
+ * That is not hypothetical: ⌘-click, "open in new tab", and session restore all
+ * load a page hidden.
+ *
+ * (The first guess was that `filter: blur()` forced motion off the WAAPI path
+ * onto rAF. Removing the blur changed nothing — the words were still at opacity
+ * zero — so the cause is the hidden document, not the property being animated.
+ * The wrong guess is recorded because it is the one someone would otherwise make
+ * again.)
+ *
+ * So: when the page is hidden at mount, skip the entrance and render the end
+ * state, exactly as reduced motion does. Nothing animates in a tab nobody is
+ * looking at anyway; the difference is only whether the text is *there* when they
+ * arrive.
+ */
+function useEntranceEnabled(): boolean {
+    const reduce = useReducedMotion();
+    // Read once, at mount. A tab that becomes visible later has already been
+    // rendered in its end state, so there is nothing left to decide.
+    const [hiddenAtMount] = useState(
+        () => typeof document !== 'undefined' && document.visibilityState === 'hidden',
+    );
+    return !reduce && !hiddenAtMount;
+}
 
 // ── SplitText ─────────────────────────────────────────────────
 
@@ -36,7 +74,7 @@ export const SplitText: FC<{ text: string; className?: string; delay?: number }>
     className = '',
     delay = 0,
 }) => {
-    const reduce = useReducedMotion();
+    const animate = useEntranceEnabled();
     const words = text.split(' ');
 
     return (
@@ -46,7 +84,7 @@ export const SplitText: FC<{ text: string; className?: string; delay?: number }>
                     <motion.span
                         aria-hidden
                         className="inline-block"
-                        initial={reduce ? false : { y: '0.9em', opacity: 0, filter: 'blur(6px)' }}
+                        initial={animate ? { y: '0.9em', opacity: 0, filter: 'blur(6px)' } : false}
                         animate={{ y: 0, opacity: 1, filter: 'blur(0px)' }}
                         transition={{ duration: 0.62, delay: delay + i * 0.055, ease: EASE_LUX }}
                     >
@@ -228,12 +266,12 @@ export const Reveal: FC<{ children: ReactNode; delay?: number; className?: strin
     delay = 0,
     className = '',
 }) => {
-    const reduce = useReducedMotion();
+    const animate = useEntranceEnabled();
 
     return (
         <motion.div
             className={className}
-            initial={reduce ? false : { opacity: 0, y: 22 }}
+            initial={animate ? { opacity: 0, y: 22 } : false}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, margin: '-70px' }}
             transition={{ duration: 0.55, delay, ease: EASE_LUX }}
