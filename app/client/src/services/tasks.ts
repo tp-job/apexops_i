@@ -5,11 +5,12 @@ import type { DailyTodo } from '@/lib/dailyTodos';
  * The adapter between the UI's todo array and the `tasks` table
  * (blueprint phase 1, D1).
  *
- * **The UI contract does not change.** `/daily` has always worked on an
- * immutable `DailyTodo[]` — `toggleTodo(todos, id)` returns a new array — and the
- * pure functions in `lib/dailyTodos.ts` stay exactly as they are. This module
- * turns "here is the day as it should now be" into one request, and turns the
- * response back into the same array shape.
+ * **The UI contract does not change.** The surfaces above this module work on an
+ * immutable `DailyTodo[]`; this module turns "here is the day as it should now
+ * be" into one request and turns the response back into the same array shape.
+ * (`lib/dailyTodos.ts` used to hold pure helpers for that array. They lost their
+ * last caller when `/daily` was folded into `/notes` and `/tasks`, and were
+ * deleted on 2026-08-21 — only the `DailyTodo` shape and `DAILY_TAG` remain.)
  *
  * That whole-array model is why the server offers a reconcile endpoint at all.
  * Per-item calls would mean a reorder firing one request per row, any of which
@@ -113,13 +114,14 @@ export async function syncDayTasks(
 /**
  * `YYYY-MM-DD` -> the instant a task's `scheduledFor` is stored at: **UTC noon**.
  *
- * This is the one helper for it on the client. Do not reach for `dayAnchorIso`
- * in `lib/dailyTodos.ts` — it looks interchangeable and is not. That one returns
- * *local* noon (`12:00` in the browser's zone, converted to UTC), which is right
- * for `Note.scheduledFor` because the notes calendar resolves days through the
+ * This is the one helper for it on the client, and the distinction it encodes
+ * outlives the helper that used to sit opposite it: a **local**-noon anchor
+ * (`12:00` in the browser's zone, converted to UTC) is right for
+ * `Note.scheduledFor`, because the notes calendar resolves days through the
  * user's stored timezone. The tasks API resolves a day with a naive UTC range
- * (`api/tasks.ts` `dayRange`), so a task has to be anchored in UTC or the two
- * sides disagree about which day it belongs to.
+ * (`api/tasks.ts` `dayRange`), so a task has to be anchored in **UTC** or the two
+ * sides disagree about which day it belongs to. If you ever add a local-noon
+ * helper back, do not point tasks at it.
  *
  * Verified at UTC+7: local noon lands at 05:00Z and UTC noon at 12:00Z, and both
  * fall inside the server's day window, so the two are interchangeable *here*.

@@ -18,12 +18,13 @@ import {
  *
  * - **Per-item CRUD** (`POST` / `PATCH /:id` / `DELETE /:id`) is what a master
  *   list needs: change one row, leave the rest alone.
- * - **Whole-day reconcile** (`PUT /day/:date`) is what the daily page needs. That
- *   page has always worked on an immutable array — `toggleTodo(todos, id)`
- *   returns a new list — and rebuilding it around per-item calls would mean a
- *   reorder firing N requests, any of which can fail on its own and leave the day
- *   half-written. Reconciling one array inside one transaction keeps the page's
- *   existing contract *and* makes a save atomic.
+ * - **Whole-day reconcile** (`PUT /day/:date`) is what a day-at-a-time editor
+ *   needs. It works on an immutable array, and rebuilding it around per-item
+ *   calls would mean a reorder firing N requests, any of which can fail on its
+ *   own and leave the day half-written. Reconciling one array inside one
+ *   transaction keeps that contract *and* makes a save atomic. (Written for
+ *   `/daily`, which has since been folded into `/notes` and `/tasks`; the
+ *   endpoint outlived the page because the day view still saves this way.)
  *
  * Every row is scoped to `req.user.id`. There is deliberately no route that
  * accepts a user id: the absence of that path is what makes cross-user access
@@ -81,8 +82,11 @@ const parseId = (raw: unknown): number | null => {
  *
  * Midnight is within one UTC offset of the neighbouring day, so a task saved for
  * the 11th can read back as the 10th and the page stops finding what it just
- * wrote. Noon survives every real-world offset. This mirrors `dayAnchorIso` on
- * the client and `Note.scheduledFor`; the three must not drift apart.
+ * wrote. Noon survives every real-world offset, and it must agree with
+ * `Note.scheduledFor`'s anchor — note the client anchors *tasks* at UTC noon
+ * (`services/tasks.ts`), because this endpoint resolves a day with a naive UTC
+ * range. The two are interchangeable at real-world offsets; they are not
+ * interchangeable in principle, so do not "simplify" one into the other.
  */
 const dayAnchor = (dayKey: string): Date => new Date(`${dayKey}T12:00:00.000Z`);
 
