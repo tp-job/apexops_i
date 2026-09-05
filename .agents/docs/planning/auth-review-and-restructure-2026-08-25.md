@@ -1,6 +1,11 @@
 # Authentication review, and the restructuring plan — 2026-08-25
 
-**Status: review and plan only. Nothing was changed and nothing was deleted.** Every number below was
+> **Update 2026-09-06 — phases 1 and 5 are done.** A1, A2 and A9 are closed and verified end to end;
+> the account cleanup ran. What is still open: A3–A8, i.e. phases 2, 3 and 4. Details at the end of
+> this file. The findings below are left exactly as written so the record shows what was true when
+> the decisions were made.
+
+**Status when written: review and plan only. Nothing was changed and nothing was deleted.** Every number below was
 measured against the code on `main` at `d67abca` and against the live development database. Where a
 claim could not be measured, it says so.
 
@@ -272,3 +277,79 @@ These are yours, not mine — each one trades example data against tidiness:
 - **MFA.** A07 #1 asks for it; it is a product decision with a whole enrolment and recovery flow
   behind it, not a hardening task to slot into a phase.
 - **The ingest key model.** Public-by-design, write-only, separately reviewed.
+
+---
+
+## Done — 2026-09-06
+
+### Phase 1 · `A1`, `A2`, `A9` — revocation is real
+
+The eight-hour session was confirmed as **intended and unchanged**; what was broken was that it did
+not end when revoked, and only that was fixed.
+
+`authenticate` now validates the session behind the token: one indexed lookup of the `sid` row that
+also returns the user's current `role` and `isActive`, so `authorize()` reuses it instead of issuing
+a second identical query. The decision itself is pure and testable in
+[`lib/sessionAdmit.ts`](../../../app/server/src/lib/sessionAdmit.ts) — the same split the codebase
+already uses for `decideMonitorAdmit` and `decideIssueStreamJoin` — with 13 tests.
+
+**Decisions taken, rather than left to a `?.`:**
+
+- A token with **no `sid` is refused.** Those predate Sprint 5 and cannot still be valid, so nothing
+  real is rejected, and the alternative is carrying a credential nothing can revoke.
+- Refusal reasons are **indistinguishable to the caller**: revoked, expired and wrong-owner all read
+  as `401`. Only deactivation differs (`403`), because the account holder needs to know why.
+- `isActive === false` refuses; **null does not** — null is a row older than the column, and treating
+  it as inactive would lock out legacy accounts on deploy.
+- `optionalAuth` was **deleted**: zero callers, and an unvalidated auth path is not something to keep
+  warm.
+
+**Verified against the running server, not asserted:**
+
+| Criterion | Result |
+|---|---|
+| Sign out everywhere, then reuse the same access token | `200` → **`401`** on the next call, on `/auth/profile` and `/tickets`. It revoked 62 stale sessions in passing |
+| Device A revokes device B | B `401` immediately; **A still `200`** |
+| Admin deactivates an account mid-session | that account `401` on its next call; reactivate + fresh login `200` |
+| Admin demotes an admin mid-session | the admin route stops answering on the old token |
+| **Failure case** — delete the session row straight from the table | `200` → **`401`**, proving the check reads the table rather than a cached claim |
+| **Mutation** — reintroduce "admit when the row is gone" | the suite goes red naming that exact test, and reverts green |
+| Login → `/dashboard` in a real browser, then `/tickets` and `/users` | `200`, with exactly one session flagged `current` |
+
+`security-auth.md` was rewritten in the same change (A9): it had claimed a **1-hour** access token
+against an actual **8 hours**, and pointed at a `/auth` route that does not exist.
+
+### Phase 5 · the account cleanup
+
+`admin@apexops.com` and the two seeded dev accounts kept; **six accounts removed** (ids 2–6 and 11)
+with 5 notes, 1 task, 5 memberships and 19 refresh tokens cascading with them. No removed account
+owned a project, so no example project data was touched.
+
+Run through [`scripts/cleanup-accounts.ts`](../../../app/server/src/scripts/cleanup-accounts.ts) —
+**dry-run by default**, explicit keep-list rather than a `LIKE` pattern, and it refuses outright if a
+keep-list account is missing or if any doomed account owns a project. A `pg_dump` was taken first.
+
+**`dev@apexops.com` — named in the instruction — does not exist.** The seeded development accounts
+are `dev.user@apexops.local` and `dev.admin@apexops.local`, so those were kept as the "system-created
+development users". Both are upserted by `seed-dev-users.ts`, which makes that reading recoverable
+either way.
+
+### Found while cleaning: the example data has a 30-day fuse
+
+`sprint2-demo` held **59 events** when this review was written on 2026-08-25 and holds **0** now.
+The cleanup did not do it — the backup taken *before* the delete already contained only 13 event
+rows. Every project had `retentionDays = 30`, and `scheduleRetentionPrune` runs on server boot, which
+this session triggered repeatedly. Those events dated from 2026-07-28 and aged out.
+
+They are **not recoverable** — no backup predates the prune.
+
+Retention on the three example projects (`default`, `sprint2-demo`, `test`) is now **3650 days**, so
+the surviving data stops expiring. The remaining 13 events would otherwise have gone around
+2026-09-19. Worth stating plainly: *"retain submitted project data for examples and documentation"*
+and *"prune events older than 30 days"* are contradictory instructions, and until today the prune was
+winning silently.
+
+### Still open
+
+Phases 2, 3 and 4 — A3 (enumeration), A4 (reuse detection), A5 (leaked `err.message`), A6 (per-IP-only
+rate limiting), A7 (`localStorage`), A8 (password policy). Phase 4 remains decision-gated.

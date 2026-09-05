@@ -15,6 +15,7 @@
     "seed:dev": "ts-node -T src/scripts/seed-dev-users.ts",
     "seed:docs": "ts-node -T src/scripts/seed-docs.ts",
     "backfill:projects": "ts-node -T src/scripts/backfill-default-project.ts",
+    "cleanup:accounts": "ts-node -T src/scripts/cleanup-accounts.ts",
     "prune:events": "ts-node -T src/scripts/prune-events.ts",
     "migrate:session-timeout": "ts-node -T src/scripts/migrate-session-timeout.ts",
     "postinstall": "prisma generate",

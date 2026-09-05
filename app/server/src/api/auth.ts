@@ -170,16 +170,42 @@ router.post('/refresh', validate(refreshTokenSchema), async (req: Request, res: 
 });
 
 // ── POST /logout ─────────────────────────────────────────────
+/**
+ * End the calling session.
+ *
+ * **Revokes by `sid`, not by the request body.** It used to delete only the row
+ * matching a `refreshToken` in the body — and answer `200 Logout successful`
+ * when the body was absent or wrong, having revoked nothing. A client that
+ * forgot the field got a success message and a live session.
+ *
+ * The caller's own session id is already on `req.user`, verified against the
+ * table by `authenticate`, so it is the authoritative answer to "which session
+ * is this?". A body-supplied token stays supported as an extra — an old client
+ * sending one still has it honoured — but it is no longer what the endpoint
+ * depends on.
+ */
 router.post('/logout', authenticate, async (req: Request, res: Response): Promise<void> => {
     try {
-        const { refreshToken } = req.body;
-        if (refreshToken) {
-            await prisma.refreshToken.deleteMany({ where: { token: refreshToken } });
-        }
-        res.json({ message: 'Logout successful' });
+        const sid = req.user?.sid;
+        const { refreshToken } = req.body ?? {};
+
+        const { count } = await prisma.refreshToken.deleteMany({
+            where: {
+                OR: [
+                    ...(typeof sid === 'number' ? [{ id: sid, userId: req.user!.id }] : []),
+                    // Scoped to the caller: a token in a body is attacker-controlled,
+                    // and deleting by value alone would revoke another user's session.
+                    ...(typeof refreshToken === 'string' && refreshToken
+                        ? [{ token: refreshToken, userId: req.user!.id }]
+                        : []),
+                ],
+            },
+        });
+
+        res.json({ message: 'Logout successful', revoked: count });
     } catch (err: any) {
         console.error('Logout error:', err);
-        res.status(500).json({ error: err.message || 'Failed to logout' });
+        res.status(500).json({ error: 'Failed to sign out. Please try again.' });
     }
 });
 
