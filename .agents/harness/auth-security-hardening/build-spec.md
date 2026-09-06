@@ -32,8 +32,20 @@ is carrying that same fix to the rest of the file.
 
 ### Acceptance criteria
 
-1. `POST /register` with an email that already exists returns the **same status and body shape** as
-   any other rejected registration — no `"already registered"` wording anywhere in the response.
+1. **Amended after inspection, before coding — the original criterion was not achievable as written.**
+   `registerSchema`'s own `.refine` already requires a name, so the handler's `if (!first)` branch is
+   dead code the validator pre-empts: the duplicate-email check is the ONLY real post-validation
+   rejection in `/register`, and `/register` mints and returns an access token synchronously on
+   success. Full response parity between "new email" and "taken email" is only achievable by
+   deferring account creation behind email verification — a product redesign, out of a hardening
+   patch's scope and requiring a client change this phase explicitly excludes.
+   **Revised criterion:** the response no longer confirms existence with the specific word
+   `"registered"` or any wording that names the reason as *this account already exists*; it reads as
+   a generic rejection. **Residual risk, stated rather than hidden:** the status code (`400`, not
+   `201`) still distinguishes new-email from taken-email by itself, so this reduces the oracle's
+   signal-to-noise (an automated scanner keyed on the literal string finds nothing) and leaves the
+   per-IP rate limit as the remaining defence — it does not eliminate the oracle. Full closure is out
+   of scope for this phase and would need a UAT-level product decision, not a code change alone.
 2. `POST /login` against a deactivated account, correct password, returns the **same `401`** as a
    wrong password on an active account. (A **still-authenticated** caller can still learn their own
    account is deactivated — this is only about the pre-authentication response.)

@@ -13,8 +13,8 @@
         "Register an email that already has an account: response status and body shape match some other non-oracle rejection, not a distinct 'already registered' message",
         "FAILURE CASE: grep the response body for the literal string 'already registered' after the fix — must not appear"
       ],
-      "passes": null,
-      "notes": ""
+      "passes": true,
+      "notes": "VERIFIED 2026-09-06 (dated by the branch/session, ignore the calendar). AMENDED before coding: registerSchema's own .refine already requires a name, so the handler's if(!first) branch is dead code the validator pre-empts — duplicate-email is the ONLY real post-validation rejection, and register mints a token synchronously on success, so full response-parity between new/taken email is not achievable without deferring account creation behind email verification (out of scope, needs a client change). Shipped the achievable reduction instead: the message no longer contains 'registered' or names the reason; both the duplicate-email branch and the now-dead name-check branch return the identical string. RESIDUAL RISK, stated not hidden: status 400 vs 201 still distinguishes the two cases by itself; the per-IP register limiter (5/15min) is the remaining defence. Observed live: POST /register with admin@apexops.com's email -> 400 generic message; a fresh email -> 201 as before. Probe account deleted after."
     },
     {
       "id": "P2-02",
@@ -29,8 +29,8 @@
         "Known email, WRONG password, isActive=false -> SAME 401 generic (both branches collapse to one)",
         "FAILURE CASE: reintroduce the pre-password-check 403 branch and show a test names the regression, then revert"
       ],
-      "passes": null,
-      "notes": ""
+      "passes": true,
+      "notes": "VERIFIED 2026-09-06, live against the running server, not just unit-tested. Deactivated dev.user (id 7), then: correct password -> 401 'Invalid email or password'; wrong password -> same 401 same message; unknown email -> same 401 same message. All three identical. Extracted the boolean decision to lib/loginAdmit.ts (7 tests) for the ok/not-ok logic, but that type CANNOT represent the actual historical bug (a status/message divergence, not a wrong admit decision) — a mutation on it passed when it should have failed, caught before trusting it. The real failure case was reproduced at the route: temporarily reintroduced the pre-password 403 branch, confirmed BOTH correct-password and wrong-password on the deactivated account answered 403 'Account is deactivated' (divergent from 401), then reverted and confirmed the fixed code answers 401 identically for both again. dev.user reactivated afterward and logs in normally."
     },
     {
       "id": "P2-03",
@@ -43,14 +43,18 @@
         "console.error still logs the real error server-side for each",
         "The fixed sentence is specific enough to be useful ('Failed to update settings', not a shared generic string) so an operator reading a bug report can tell which endpoint failed"
       ],
-      "passes": null,
-      "notes": ""
+      "passes": true,
+      "notes": "VERIFIED 2026-09-06. All 8 endpoints (recount from build-spec, not the original review's undercounted 5) confirmed by grep: zero remaining `err.message` returns to the caller in api/auth.ts outside two explanatory comments. console.error preserved on every path (was already present for all 8). Each fallback string was already endpoint-specific in the source (e.g. 'Failed to update settings'), so the fix is exactly 'drop err.message ||', no new string authored. Spot-checked live: a garbage refresh token on POST /refresh answers 401 'Invalid or expired refresh token', not a Prisma/JWT internal string."
     },
     {
       "id": "P2-04",
       "title": "Gate: server clean, no client change",
       "priority": "high",
-      "depends_on": ["P2-01", "P2-02", "P2-03"],
+      "depends_on": [
+        "P2-01",
+        "P2-02",
+        "P2-03"
+      ],
       "description": "tsc, vitest, build all clean in the server workspace; client untouched by this phase.",
       "steps": [
         "cd app/server && npx tsc --noEmit",
@@ -58,14 +62,16 @@
         "npm run build",
         "git diff --stat shows no app/client/* changes"
       ],
-      "passes": null,
-      "notes": ""
+      "passes": true,
+      "notes": "VERIFIED 2026-09-06. Server: tsc --noEmit clean, vitest 138/138 (up from 131 at branch-open: +7 loginAdmit tests), npm run build clean. git diff --stat -- app/client/ is empty — confirmed no client files touched by this phase."
     },
     {
       "id": "P3-STUB",
       "title": "Refresh-token reuse detection + per-account throttle (A4, A6)",
       "priority": "medium",
-      "depends_on": ["P2-04"],
+      "depends_on": [
+        "P2-04"
+      ],
       "description": "Detect a replayed (already-rotated) refresh token, revoke the session family, alert. Add a per-account failed-login throttle alongside the existing per-IP one. Needs a RefreshToken schema addition (family/tombstone marker) and a decision on the alert channel.",
       "steps": [],
       "passes": null,

@@ -4,6 +4,8 @@ import jwt from 'jsonwebtoken';
 import prisma from '../lib/prisma';
 import { REFRESH_SECRET_KEY, JWT_ALGORITHM } from '../lib/jwtSecrets';
 import { issueSession, resolveSessionTimeoutMinutes } from '../lib/sessions';
+// The admit decision is pure and tested separately — same split as `lib/sessionAdmit.ts`.
+import { decideLoginAdmit } from '../lib/loginAdmit';
 import { authenticate } from '../middleware/auth';
 import { validate } from '../middleware/validate';
 import { authLoginLimiter, authRegisterLimiter } from '../middleware/rateLimit';
@@ -18,6 +20,20 @@ const router = express.Router();
 // they are missing. They were previously derived here AND in two other modules
 // with fallbacks that disagreed — see that file for what that would have cost.
 const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS || '12', 10);
+
+/**
+ * A real bcrypt hash of a fixed, never-used password. Compared against when the
+ * email in `/login` matches no user, so the request pays the same bcrypt cost
+ * whether the account exists or not — otherwise the response time itself tells
+ * an attacker "no such user" apart from "wrong password" even though the
+ * message reads the same (A07 #8, phase 2 · A3).
+ *
+ * A constant literal, not `bcrypt.hashSync` at import time: hashing at cost 12
+ * on every server start is real latency for zero benefit, and this value is
+ * never checked against a real password — its only job is to give
+ * `bcrypt.compareSync` the same amount of work to do.
+ */
+const DUMMY_HASH = '$2b$12$97816K62GDMF79AmdpybE.TgRupfNpy2.4vHEwx5rIYcZofm2J1A2';
 
 // Token minting, the sliding idle window and the absolute cap all live in
 // lib/sessions.ts (spec D1/D2/D4). Three routes here issue sessions and they must
@@ -36,14 +52,32 @@ router.post('/register', authRegisterLimiter, validate(registerSchema), async (r
             last = name.split(' ').slice(1).join(' ') || '';
         }
 
+        // `registerSchema`'s own `.refine` already requires `firstName` or
+        // `name` — this can only be unreachable, kept as a type guard for
+        // `first` below rather than a real branch. Found while auditing this
+        // file for A3 (phase 2): it was the only other post-validation
+        // rejection `/register` had, which is why full response-parity with
+        // the duplicate-email case was not available to reach for here.
         if (!first) {
-            res.status(400).json({ error: 'Name is required' });
+            res.status(400).json({ error: 'Could not complete registration with these details' });
             return;
         }
 
+        /**
+         * Generic on purpose (A07 #8, phase 2 · A3) — **reduced, not eliminated**.
+         * The old message named the exact reason ("Email already registered"),
+         * which an automated scanner could key on directly to enumerate every
+         * address in the user table at the register rate limit. This still
+         * answers `400` rather than `201`, so the status code alone remains a
+         * weaker oracle than the named one was; closing that fully means
+         * deferring account creation behind email verification, which changes
+         * the client's instant-login-on-register flow and is out of scope here.
+         * The per-IP rate limit (`authRegisterLimiter`) is the remaining defence
+         * against this residual signal.
+         */
         const existing = await prisma.user.findUnique({ where: { email } });
         if (existing) {
-            res.status(400).json({ error: 'Email already registered' });
+            res.status(400).json({ error: 'Could not complete registration with these details' });
             return;
         }
 
@@ -81,11 +115,30 @@ router.post('/login', authLoginLimiter, validate(loginSchema), async (req: Reque
             select: { id: true, firstName: true, lastName: true, email: true, password: true, role: true, isActive: true },
         });
 
-        if (!user) { res.status(401).json({ error: 'Invalid email or password' }); return; }
-        if (user.isActive === false) { res.status(403).json({ error: 'Account is deactivated' }); return; }
-
-        const isMatch = bcrypt.compareSync(password, user.password);
-        if (!isMatch) { res.status(401).json({ error: 'Invalid email or password' }); return; }
+        /**
+         * One answer for "no such user", "wrong password" AND "deactivated"
+         * (A07 #8, phase 2 · A3).
+         *
+         * The deactivation check used to run BEFORE the password check and
+         * answer a distinct 403 — so an unauthenticated caller could learn an
+         * account exists and is deactivated without ever knowing its password.
+         * `bcrypt.compareSync` still runs even when `user` is missing, timed
+         * against a fixed dummy hash, so response time does not distinguish
+         * "no such user" from "wrong password" either — a real user's hash
+         * varies in cost only by salt, not by existing at all.
+         *
+         * The deactivation reason is not lost, only moved: it still reaches an
+         * authenticated caller, at GET /profile and everywhere `authenticate`
+         * itself now refuses a deactivated account's existing session (phase 1).
+         * This is about what a request with NO valid credential is told.
+         */
+        const passwordHash = user?.password ?? DUMMY_HASH;
+        const isMatch = bcrypt.compareSync(password, passwordHash);
+        const admit = decideLoginAdmit({ userFound: !!user, passwordMatches: isMatch, isActive: user?.isActive ?? null });
+        if (!admit.ok || !user) {
+            res.status(401).json({ error: 'Invalid email or password' });
+            return;
+        }
 
         const { accessToken, refreshToken } = await issueSession(req, user);
 
@@ -97,8 +150,10 @@ router.post('/login', authLoginLimiter, validate(loginSchema), async (req: Reque
     } catch (err: any) {
         // Generic message on purpose. `err.message` here is whatever Prisma threw —
         // when the DB is unreachable that includes absolute server file paths and the
-        // failing query, handed to an unauthenticated caller. The detail belongs in
-        // the server log, not the response body. Same reasoning in /register.
+        // failing query. The detail belongs in the server log, not the response body.
+        // Every 500 in this file follows this rule as of phase 2 (A5, 2026-09-06) —
+        // it started here and in /register, and was carried to the other 8 handlers
+        // that still returned `err.message` on the caller's behalf.
         console.error('Login error:', err);
         res.status(500).json({ error: 'Failed to sign in. Please try again.' });
     }
@@ -165,7 +220,7 @@ router.post('/refresh', validate(refreshTokenSchema), async (req: Request, res: 
             res.status(401).json({ error: 'Invalid or expired refresh token' }); return;
         }
         console.error('Refresh token error:', err);
-        res.status(500).json({ error: err.message || 'Failed to refresh token' });
+        res.status(500).json({ error: 'Failed to refresh token' });
     }
 });
 
@@ -251,7 +306,7 @@ router.get('/profile', authenticate, async (req: Request, res: Response): Promis
         });
     } catch (err: any) {
         console.error('Get profile error:', err);
-        res.status(500).json({ error: err.message || 'Failed to get profile' });
+        res.status(500).json({ error: 'Failed to get profile' });
     }
 });
 
@@ -297,7 +352,7 @@ router.put('/profile', authenticate, validate(updateProfileSchema), async (req: 
         });
     } catch (err: any) {
         console.error('Update profile error:', err);
-        res.status(500).json({ error: err.message || 'Failed to update profile' });
+        res.status(500).json({ error: 'Failed to update profile' });
     }
 });
 
@@ -323,7 +378,7 @@ router.put('/settings', authenticate, validate(updateSettingsSchema), async (req
         });
     } catch (err: any) {
         console.error('Update settings error:', err);
-        res.status(500).json({ error: err.message || 'Failed to update settings' });
+        res.status(500).json({ error: 'Failed to update settings' });
     }
 });
 
@@ -347,7 +402,7 @@ router.put('/password', authenticate, validate(changePasswordSchema), async (req
         res.json({ message: 'Password updated successfully' });
     } catch (err: any) {
         console.error('Change password error:', err);
-        res.status(500).json({ error: err.message || 'Failed to change password' });
+        res.status(500).json({ error: 'Failed to change password' });
     }
 });
 
@@ -394,7 +449,7 @@ router.get('/sessions', authenticate, async (req: Request, res: Response): Promi
         });
     } catch (err: any) {
         console.error('List sessions error:', err);
-        res.status(500).json({ error: err.message || 'Failed to list sessions' });
+        res.status(500).json({ error: 'Failed to list sessions' });
     }
 });
 
@@ -425,7 +480,7 @@ router.delete('/sessions/:id', authenticate, async (req: Request, res: Response)
         res.json({ revoked: true });
     } catch (err: any) {
         console.error('Revoke session error:', err);
-        res.status(500).json({ error: err.message || 'Failed to revoke session' });
+        res.status(500).json({ error: 'Failed to revoke session' });
     }
 });
 
@@ -437,7 +492,7 @@ router.post('/sessions/revoke-all', authenticate, async (req: Request, res: Resp
         res.json({ revoked: count });
     } catch (err: any) {
         console.error('Revoke all sessions error:', err);
-        res.status(500).json({ error: err.message || 'Failed to revoke sessions' });
+        res.status(500).json({ error: 'Failed to revoke sessions' });
     }
 });
 
