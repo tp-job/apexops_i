@@ -77,8 +77,8 @@
         "issueSession accepts an optional carry-forward family, exactly mirroring how it already accepts carryAbsoluteExpiry",
         "server typecheck green"
       ],
-      "passes": null,
-      "notes": ""
+      "passes": true,
+      "notes": "VERIFIED 2026-09-06. prisma migrate diff --script confirmed additive-only (2 nullable columns + 1 index, zero DROP) before db push. issueSession's 4th param carryFamily mirrors carryAbsoluteExpiry exactly; a fresh login stamps randomUUID(), a rotation passes the prior row's family through. tsc --noEmit clean."
     },
     {
       "id": "P3-02",
@@ -95,8 +95,8 @@
         "Ordinary idle/absolute expiry unaffected",
         "An email is dispatched to the account's address on detected reuse, observable via the mail driver's dev output; dispatch never throws into the request"
       ],
-      "passes": null,
-      "notes": ""
+      "passes": true,
+      "notes": "VERIFIED 2026-09-06, live against the running server. Logged in, rotated A->B via POST /refresh, then replayed A: both the never-existed-token control and the reuse replay answered the identical `401 {\"error\":\"Invalid or expired refresh token\"}`; the still-legitimate token B (rotated to, never itself replayed) was also revoked as part of the family delete, confirmed by presenting it afterward and getting the same 401. Server log showed `[security] refresh token reuse detected — revoked 2 session(s) in family <uuid> for user 7`. Console mail driver showed the sessionReuseEmail dispatched to dev.user@apexops.local, subject 'ApexOps: you were signed out of every device'. DB inspection confirmed the reused family's rows were gone while an untouched, still-active family from an earlier legitimate rotation chain was intact. Also caught and fixed mid-build (not pre-scoped): GET /sessions was missing `rotatedAt: null` in its where clause, which would have let tombstoned rows reappear as phantom active sessions — added the filter and verified live that the session count is unchanged immediately after a rotation (6 before, 6 after, not 7)."
     },
     {
       "id": "P3-03",
@@ -110,8 +110,8 @@
         "Attempts against DIFFERENT emails from the same IP are counted independently of this throttle (the per-IP limiter is unaffected and unchanged)",
         "FAILURE CASE, stated as accepted not discovered: the 31st attempt with the CORRECT password inside the window is still refused until the window rolls over"
       ],
-      "passes": null,
-      "notes": ""
+      "passes": true,
+      "notes": "VERIFIED 2026-09-06, live. Found mid-verification: at default thresholds (per-account MAX_FAILURES=30, per-IP authLoginLimiter max=10/15min), the pre-existing per-IP limiter fires first and masks the per-account throttle entirely, since 10 attempts trips it well before 30 does — an earlier run against defaults produced 429s from attempt 9 onward, including against an UNRELATED email, which would have been misreported as the new throttle if not checked against rateLimit.ts's actual config. Re-ran isolated: restarted the server with RATE_LIMIT_AUTH_MAX_LOGIN=1000 (so the per-IP limiter stays out of the way) and LOGIN_THROTTLE_MAX_FAILURES=5 (so the per-account throttle trips fast) for this verification only, then reverted to defaults afterward. With the per-IP limiter isolated out: 4 wrong-password attempts for one throwaway email all answered plain 401; the 5th also 401; the 6th answered 429 identical in body/status to authLoginLimiter's own message; a second, different throwaway email was unaffected (plain 401); the real account (dev.user) with its correct password succeeded normally throughout, confirming per-account isolation. Not separately re-verified live: the exact 30/60min production default and the counter-reset-on-success path — both are covered by loginThrottle.test.ts's 7 unit tests (window rollover and clear-on-success included) and were not re-run against a live threshold of 30 given how long that would take against the real window."
     },
     {
       "id": "P3-04",
@@ -127,8 +127,8 @@
         "npm run test",
         "npm run build"
       ],
-      "passes": null,
-      "notes": ""
+      "passes": true,
+      "notes": "VERIFIED 2026-09-06. tsc --noEmit clean, npx vitest run 155/155 across 17 files (up from 138 at phase-2 close: +10 refreshOutcome + 7 loginThrottle), npm run build clean."
     },
     {
       "id": "P4-STUB",

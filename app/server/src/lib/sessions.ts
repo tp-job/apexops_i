@@ -63,6 +63,8 @@ export interface IssuedSession {
     sessionId: number;
     expiresAt: Date;
     absoluteExpiresAt: Date;
+    /** The rotation lineage this row belongs to (phase 3, A4). */
+    family: string;
 }
 
 /**
@@ -103,11 +105,21 @@ export async function issueSession(
     req: Request,
     user: SessionUser,
     carryAbsoluteExpiry?: Date | null,
+    /**
+     * The lineage a rotation carries forward — same shape as
+     * `carryAbsoluteExpiry` above, and for the same reason (phase 3, A4): a
+     * fresh UUID per rotation would sever the chain a reuse check needs to
+     * revoke. `undefined` (a brand-new login) mints one; `null` is not a valid
+     * input and is treated as absent rather than as "no family", so a caller
+     * cannot accidentally strip a family by passing through a nullable field.
+     */
+    carryFamily?: string,
 ): Promise<IssuedSession> {
     const minutes = await resolveSessionTimeoutMinutes(user.id);
     const now = Date.now();
 
     const absoluteExpiresAt = carryAbsoluteExpiry ?? new Date(now + ABSOLUTE_MAX_DAYS * MS_PER_DAY);
+    const family = carryFamily ?? randomUUID();
 
     // The refresh JWT expires exactly when the session does. Signing it for a flat
     // 7d while the row is capped elsewhere would leave two disagreeing clocks, and
@@ -141,6 +153,7 @@ export async function issueSession(
             token: refreshToken,
             expiresAt,
             absoluteExpiresAt,
+            family,
             ...sessionContext(req),
         },
         select: { id: true },
@@ -152,7 +165,7 @@ export async function issueSession(
         { expiresIn: minutes * 60 } as jwt.SignOptions,
     );
 
-    return { accessToken, refreshToken, sessionId: row.id, expiresAt, absoluteExpiresAt };
+    return { accessToken, refreshToken, sessionId: row.id, expiresAt, absoluteExpiresAt, family };
 }
 
 /**

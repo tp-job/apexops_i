@@ -6,6 +6,9 @@ import { REFRESH_SECRET_KEY, JWT_ALGORITHM } from '../lib/jwtSecrets';
 import { issueSession, resolveSessionTimeoutMinutes } from '../lib/sessions';
 // The admit decision is pure and tested separately — same split as `lib/sessionAdmit.ts`.
 import { decideLoginAdmit } from '../lib/loginAdmit';
+import { decideRefreshOutcome } from '../lib/refreshOutcome';
+import { revokeFamilyAndAlert } from '../lib/refreshReuse';
+import { isThrottled, recordFailure, clearFailures } from '../lib/loginThrottle';
 import { authenticate } from '../middleware/auth';
 import { validate } from '../middleware/validate';
 import { authLoginLimiter, authRegisterLimiter } from '../middleware/rateLimit';
@@ -110,6 +113,22 @@ router.post('/login', authLoginLimiter, validate(loginSchema), async (req: Reque
     try {
         const { email, password } = req.body;
 
+        /**
+         * Per-ACCOUNT throttle, on top of `authLoginLimiter`'s per-IP one
+         * (phase 3, A6). Checked before any database or bcrypt work — the
+         * whole point is to stop paying that cost once an account is under a
+         * distributed attack, not merely to record that it happened.
+         *
+         * The response is BYTE-IDENTICAL to the per-IP limiter's own 429 —
+         * same status, same body — so a caller cannot tell which counter
+         * fired. See `lib/loginThrottle.ts` for why this is a backstop with a
+         * deliberately high threshold, not a primary control.
+         */
+        if (isThrottled(email)) {
+            res.status(429).json({ error: 'Too many login attempts. Please try again later.' });
+            return;
+        }
+
         const user = await prisma.user.findUnique({
             where: { email },
             select: { id: true, firstName: true, lastName: true, email: true, password: true, role: true, isActive: true },
@@ -136,9 +155,20 @@ router.post('/login', authLoginLimiter, validate(loginSchema), async (req: Reque
         const isMatch = bcrypt.compareSync(password, passwordHash);
         const admit = decideLoginAdmit({ userFound: !!user, passwordMatches: isMatch, isActive: user?.isActive ?? null });
         if (!admit.ok || !user) {
+            // Recorded against the SUBMITTED email, not a resolved user id — an
+            // attacker probing nonexistent addresses still fills a bucket, which
+            // is harmless (memory-bounded by the sweeper) and keeps the throttle
+            // from needing to special-case "no such account" as a different kind
+            // of failure.
+            recordFailure(email);
             res.status(401).json({ error: 'Invalid email or password' });
             return;
         }
+
+        // A legitimate sign-in clears this account's failure count — the
+        // throttle exists to catch an attacker who never succeeds, not to
+        // penalize a real user's own mistyped attempts once they get it right.
+        clearFailures(email);
 
         const { accessToken, refreshToken } = await issueSession(req, user);
 
@@ -160,27 +190,50 @@ router.post('/login', authLoginLimiter, validate(loginSchema), async (req: Reque
 });
 
 // ── POST /refresh ────────────────────────────────────────────
-// Refresh token rotation: old token is invalidated and a new one is issued (single-use)
+/**
+ * Refresh token rotation: old token is invalidated and a new one is issued
+ * (single-use), with reuse detection as of phase 3 (A4, 2026-09-06).
+ *
+ * **The lookup no longer filters by `expiresAt` in the query itself.** It used
+ * to — `findFirst({ where: { token, expiresAt: { gt: now } } })` — which made
+ * an ordinary idle timeout indistinguishable from "no such row" for free. That
+ * same indistinguishability is now produced deliberately, in
+ * `decideRefreshOutcome`, because the lookup has a second job: a row CAN
+ * exist, unexpired, and still be the wrong thing to rotate — a tombstone left
+ * by an earlier rotation, meaning this exact token is being presented again.
+ */
 router.post('/refresh', validate(refreshTokenSchema), async (req: Request, res: Response): Promise<void> => {
     try {
         const { refreshToken: oldToken } = req.body;
         const decoded = jwt.verify(oldToken, REFRESH_SECRET_KEY, { algorithms: [JWT_ALGORITHM] }) as { id: number; email: string };
 
         const now = new Date();
+        const stored = await prisma.refreshToken.findFirst({ where: { token: oldToken } });
+        const outcome = decideRefreshOutcome({ row: stored, now });
 
-        // `expiresAt` is the sliding IDLE window (spec D1). A row past it means the
-        // session went quiet for longer than the user's timeout, which is exactly
-        // what that setting promises — so this 401 is the feature, not a fault.
-        const stored = await prisma.refreshToken.findFirst({
-            where: { token: oldToken, expiresAt: { gt: now } },
-        });
-        if (!stored) { res.status(401).json({ error: 'Invalid or expired refresh token' }); return; }
+        if (outcome.kind === 'not-found') {
+            res.status(401).json({ error: 'Invalid or expired refresh token' });
+            return;
+        }
 
-        // The absolute cap (D2), checked separately so the reason stays legible.
-        // Null means the row predates this column: treated as uncapped and stamped
-        // on this rotation, rather than logging every existing session out on deploy.
-        if (stored.absoluteExpiresAt && stored.absoluteExpiresAt <= now) {
-            await prisma.refreshToken.deleteMany({ where: { id: stored.id } });
+        if (outcome.kind === 'reuse') {
+            // Deliberately the SAME response as `not-found` — the caller must
+            // not be able to tell "this token never existed" apart from "this
+            // token was already used once", or an attacker learns their replay
+            // was caught and can adapt. `stored` is guaranteed non-null here:
+            // `decideRefreshOutcome` only answers `reuse` when a row was found.
+            await revokeFamilyAndAlert(stored!.family ?? String(stored!.id));
+            res.status(401).json({ error: 'Invalid or expired refresh token' });
+            return;
+        }
+
+        if (outcome.kind === 'idle-expired') {
+            res.status(401).json({ error: 'Invalid or expired refresh token' });
+            return;
+        }
+
+        if (outcome.kind === 'absolute-expired') {
+            await prisma.refreshToken.deleteMany({ where: { id: stored!.id } });
             res.status(401).json({ error: 'Session expired' });
             return;
         }
@@ -200,7 +253,13 @@ router.post('/refresh', validate(refreshTokenSchema), async (req: Request, res: 
             return;
         }
 
-        await prisma.refreshToken.deleteMany({ where: { token: oldToken } });
+        // TOMBSTONED, not deleted (phase 3, A4). A hard delete here is exactly
+        // what made a reused token indistinguishable from one that never
+        // existed. `family` carries forward into the new row below just like
+        // `absoluteExpiresAt` already does; a null `family` means this row
+        // predates phase 3, and `issueSession` mints a fresh one to start the
+        // lineage from here.
+        await prisma.refreshToken.update({ where: { id: stored!.id }, data: { rotatedAt: now } });
 
         // The absolute expiry is CARRIED FORWARD, not recomputed. Recomputing it is
         // what made sessions immortal before: every rotation handed out a fresh
@@ -208,7 +267,8 @@ router.post('/refresh', validate(refreshTokenSchema), async (req: Request, res: 
         const { accessToken, refreshToken: newRefreshToken } = await issueSession(
             req,
             user,
-            stored.absoluteExpiresAt,
+            stored!.absoluteExpiresAt,
+            stored!.family ?? undefined,
         );
 
         res.json({
@@ -419,7 +479,13 @@ router.put('/password', authenticate, validate(changePasswordSchema), async (req
 router.get('/sessions', authenticate, async (req: Request, res: Response): Promise<void> => {
     try {
         const rows = await prisma.refreshToken.findMany({
-            where: { userId: req.user!.id, expiresAt: { gt: new Date() } },
+            // `rotatedAt: null` excludes tombstones (phase 3, A4). Without it a
+            // rotated row's OWN `expiresAt` — stamped while it was still live —
+            // keeps it inside this window after rotation, so it would appear as
+            // a phantom, apparently-revokable device that no longer protects
+            // anything. Found while building the tombstone design, not guessed
+            // at when this phase was scoped.
+            where: { userId: req.user!.id, expiresAt: { gt: new Date() }, rotatedAt: null },
             orderBy: { createdAt: 'desc' },
             select: { id: true, token: true, userAgent: true, ipAddress: true, createdAt: true, expiresAt: true },
         });

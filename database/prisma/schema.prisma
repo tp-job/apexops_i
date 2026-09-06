@@ -761,10 +761,33 @@ model RefreshToken {
   /// stamped on their first rotation, rather than logging everyone out on deploy.
   absoluteExpiresAt DateTime? @map("absolute_expires_at")
 
+  /// The rotation lineage this row belongs to, stamped once at login and
+  /// CARRIED FORWARD through every rotation — same discipline as
+  /// `absoluteExpiresAt` above, for the reason phase 3 (2026-09-06) exists:
+  /// without a shared id, a refresh token presented a SECOND time (the signal
+  /// that it was stolen) is indistinguishable from one that never existed, and
+  /// there is nothing to revoke beyond the one row already gone.
+  ///
+  /// Nullable so rows predating this column still authenticate — a token from
+  /// before phase 3 simply cannot be reuse-checked, which is strictly the
+  /// pre-phase-3 behaviour, not a regression.
+  family String? @map("family")
+
+  /// Null: this row is the current end of its family. Set: a rotation
+  /// consumed this row and it is kept as a TOMBSTONE rather than deleted, so a
+  /// second presentation of the same token can be told apart from a token that
+  /// never existed at all. Tombstones are removed the moment their family is
+  /// revoked by any path (logout, revoke-all, deactivation, demotion, or a
+  /// detected reuse) — see `.agents/harness/auth-security-hardening/build-spec.md`
+  /// for the one gap this leaves: a session that only ever idles out, never
+  /// explicitly ended, leaves its tombstones until then.
+  rotatedAt DateTime? @map("rotated_at")
+
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([token])
+  @@index([family])
   @@map("refresh_tokens")
 }
 

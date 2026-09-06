@@ -110,3 +110,44 @@ export function regressionEmail(input: RegressionMailInput): MailMessage {
 
     return { to, subject: `Regression: ${issueTitle}`.slice(0, 160), text, html };
 }
+
+export interface SessionReuseMailInput {
+    to: string;
+    /** When the affected session was originally created — the account holder's
+     *  own anchor point for "was this me?", since the attacker's IP/UA are not
+     *  reliably useful to show a non-technical reader. */
+    sessionCreatedAt: Date;
+}
+
+/**
+ * Sent when `/refresh` detects a refresh token presented a second time (phase
+ * 3, A4) — the signal that it was copied and the copy is now racing the
+ * original device. The whole session family is already revoked by the time
+ * this is sent; the email is a notification, not a request for action beyond
+ * "sign in again, and change your password if this was not you".
+ */
+export function sessionReuseEmail(input: SessionReuseMailInput): MailMessage {
+    const { to, sessionCreatedAt } = input;
+    const created = sessionCreatedAt.toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
+
+    const text = [
+        'ApexOps signed you out of every device.',
+        '',
+        `A sign-in session created ${created} was used from two places at once — ` +
+            'the sign of a copied credential, not an ordinary reconnect.',
+        '',
+        'As a precaution, every device using that session has been signed out. ' +
+            'Sign in again to continue.',
+        '',
+        'If this was not you, change your password now.',
+    ].join('\n');
+
+    const html = wrap('You were signed out of every device', [
+        `<p>A sign-in session created <strong>${escapeHtml(created)}</strong> was used from two places at ` +
+            'once — the sign of a copied credential, not an ordinary reconnect.</p>',
+        '<p>As a precaution, every device using that session has been signed out. Sign in again to continue.</p>',
+        '<p style="font-size:12px;color:#666">If this was not you, change your password now.</p>',
+    ].join(''));
+
+    return { to, subject: 'ApexOps: you were signed out of every device', text, html };
+}
