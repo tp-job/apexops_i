@@ -1,0 +1,85 @@
+{
+  "build": "auth security hardening — phases 2-4, branch auth/security-hardening",
+  "spec": "build-spec.md",
+  "features": [
+    {
+      "id": "P2-01",
+      "title": "Register no longer reveals whether an email exists",
+      "priority": "critical",
+      "depends_on": [],
+      "description": "POST /register answers identically whether the email is new or already taken.",
+      "steps": [
+        "Register a brand-new email: succeeds normally, unaffected by this change",
+        "Register an email that already has an account: response status and body shape match some other non-oracle rejection, not a distinct 'already registered' message",
+        "FAILURE CASE: grep the response body for the literal string 'already registered' after the fix — must not appear"
+      ],
+      "passes": null,
+      "notes": ""
+    },
+    {
+      "id": "P2-02",
+      "title": "Login gives one answer for wrong-password, deactivated, and unknown-email",
+      "priority": "critical",
+      "depends_on": [],
+      "description": "The pre-auth response to POST /login must not distinguish a deactivated account from a wrong password or a nonexistent user.",
+      "steps": [
+        "Unknown email -> 401 generic (already correct, unchanged)",
+        "Known email, wrong password -> 401 generic (already correct, unchanged)",
+        "Known email, correct password, isActive=false -> SAME 401 generic, not 403 'deactivated'",
+        "Known email, WRONG password, isActive=false -> SAME 401 generic (both branches collapse to one)",
+        "FAILURE CASE: reintroduce the pre-password-check 403 branch and show a test names the regression, then revert"
+      ],
+      "passes": null,
+      "notes": ""
+    },
+    {
+      "id": "P2-03",
+      "title": "The eight remaining 500s stop returning err.message",
+      "priority": "high",
+      "depends_on": [],
+      "description": "GET /profile, PUT /profile, PUT /settings, PUT /password, POST /refresh, GET /sessions, DELETE /sessions/:id, POST /sessions/revoke-all each answer a fixed sentence on 500, matching the pattern already applied to /login, /register and /logout.",
+      "steps": [
+        "For each of the 8 endpoints, force a throw (e.g. a bad DB call) and confirm the response body carries no file path, no query text, no Prisma error shape",
+        "console.error still logs the real error server-side for each",
+        "The fixed sentence is specific enough to be useful ('Failed to update settings', not a shared generic string) so an operator reading a bug report can tell which endpoint failed"
+      ],
+      "passes": null,
+      "notes": ""
+    },
+    {
+      "id": "P2-04",
+      "title": "Gate: server clean, no client change",
+      "priority": "high",
+      "depends_on": ["P2-01", "P2-02", "P2-03"],
+      "description": "tsc, vitest, build all clean in the server workspace; client untouched by this phase.",
+      "steps": [
+        "cd app/server && npx tsc --noEmit",
+        "npm run test",
+        "npm run build",
+        "git diff --stat shows no app/client/* changes"
+      ],
+      "passes": null,
+      "notes": ""
+    },
+    {
+      "id": "P3-STUB",
+      "title": "Refresh-token reuse detection + per-account throttle (A4, A6)",
+      "priority": "medium",
+      "depends_on": ["P2-04"],
+      "description": "Detect a replayed (already-rotated) refresh token, revoke the session family, alert. Add a per-account failed-login throttle alongside the existing per-IP one. Needs a RefreshToken schema addition (family/tombstone marker) and a decision on the alert channel.",
+      "steps": [],
+      "passes": null,
+      "notes": "Not sized. See build-spec.md phase 3."
+    },
+    {
+      "id": "P4-STUB",
+      "title": "Token transport + password policy (A7, A8)",
+      "priority": "low",
+      "depends_on": [],
+      "description": "Decision-gated: localStorage vs httpOnly cookie for tokens; composition-based vs NIST 800-63B password policy.",
+      "steps": [],
+      "passes": null,
+      "notes": "Blocked on user decision. See build-spec.md phase 4."
+    }
+  ]
+}
