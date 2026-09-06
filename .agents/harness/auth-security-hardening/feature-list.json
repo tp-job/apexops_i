@@ -66,16 +66,69 @@
       "notes": "VERIFIED 2026-09-06. Server: tsc --noEmit clean, vitest 138/138 (up from 131 at branch-open: +7 loginAdmit tests), npm run build clean. git diff --stat -- app/client/ is empty — confirmed no client files touched by this phase."
     },
     {
-      "id": "P3-STUB",
-      "title": "Refresh-token reuse detection + per-account throttle (A4, A6)",
-      "priority": "medium",
-      "depends_on": [
-        "P2-04"
+      "id": "P3-01",
+      "title": "RefreshToken gains family + rotatedAt; issueSession carries family forward",
+      "priority": "critical",
+      "depends_on": [],
+      "description": "Additive schema change: family (UUID, stamped at login, carried through every rotation like absoluteExpiresAt already is) and rotatedAt (null = current row, set = tombstoned by a rotation).",
+      "steps": [
+        "prisma migrate diff / db push preview shows a purely additive change: two new nullable-safe columns, no DROP",
+        "A brand-new login stamps a fresh family UUID",
+        "issueSession accepts an optional carry-forward family, exactly mirroring how it already accepts carryAbsoluteExpiry",
+        "server typecheck green"
       ],
-      "description": "Detect a replayed (already-rotated) refresh token, revoke the session family, alert. Add a per-account failed-login throttle alongside the existing per-IP one. Needs a RefreshToken schema addition (family/tombstone marker) and a decision on the alert channel.",
-      "steps": [],
       "passes": null,
-      "notes": "Not sized. See build-spec.md phase 3."
+      "notes": ""
+    },
+    {
+      "id": "P3-02",
+      "title": "Rotation tombstones instead of deleting; reuse revokes the family and emails the account",
+      "priority": "critical",
+      "depends_on": [
+        "P3-01"
+      ],
+      "description": "POST /refresh: a live token rotates as before but sets rotatedAt on the old row instead of deleting it; a token whose row is already rotatedAt-set is a reuse — deletes every row in that family and sends a security email.",
+      "steps": [
+        "Normal rotation: caller-visible behaviour unchanged, old row survives in the DB with rotatedAt set and the same family as the new row",
+        "FAILURE CASE: rotate A->B, then present A again -> generic 401, and the family's rows (including B) are gone from the table",
+        "Presenting a token that never existed answers the identical 401 body/status as the reuse case",
+        "Ordinary idle/absolute expiry unaffected",
+        "An email is dispatched to the account's address on detected reuse, observable via the mail driver's dev output; dispatch never throws into the request"
+      ],
+      "passes": null,
+      "notes": ""
+    },
+    {
+      "id": "P3-03",
+      "title": "Per-account login throttle, keyed by email, same response shape as the per-IP limiter",
+      "priority": "high",
+      "depends_on": [],
+      "description": "In-memory Map<string,Bucket> keyed by lowercased email, mirroring api/ingest.ts's bucket+sweeper pattern. 30 failures / 60 minutes by default, both env-overridable. Increments only on failure; a success clears it.",
+      "steps": [
+        "30 failed attempts for one email inside the window trips it; response status+body byte-identical to authLoginLimiter's own 429",
+        "A successful login after prior failures resets that email's counter to zero",
+        "Attempts against DIFFERENT emails from the same IP are counted independently of this throttle (the per-IP limiter is unaffected and unchanged)",
+        "FAILURE CASE, stated as accepted not discovered: the 31st attempt with the CORRECT password inside the window is still refused until the window rolls over"
+      ],
+      "passes": null,
+      "notes": ""
+    },
+    {
+      "id": "P3-04",
+      "title": "Gate: server clean",
+      "priority": "high",
+      "depends_on": [
+        "P3-02",
+        "P3-03"
+      ],
+      "description": "tsc, vitest, build clean in the server workspace.",
+      "steps": [
+        "cd app/server && npx tsc --noEmit",
+        "npm run test",
+        "npm run build"
+      ],
+      "passes": null,
+      "notes": ""
     },
     {
       "id": "P4-STUB",
