@@ -427,3 +427,37 @@ P5 แยกเป็นสองส่วน (แต่ละส่วนเป
 ticket ที่ Report จาก element มี selector ที่ `document.querySelector` หา element เดิมเจอ
 
 **ประมาณการรวมใหม่:** 14.5–17.5 วันถ้าใช้ฐาน VisBug · 23.5–27.5 วันถ้าสร้างเอง (รวม P6 screenshot)
+
+---
+
+## 10. ผล P0 — ล็อก 2026-09-19
+
+ผู้ใช้สั่ง "make follow plan" = **ถือตามคำแนะนำทุกข้อ X1–X18** และถือการตีความใน 8.8 ข้อ 1 (วาง URL ของ project ใน ApexOps)
+กับการอ่านไอคอนใน 9.1 เป็นค่าที่ใช้ จนกว่าผู้ใช้จะแก้ · 8.8 ข้อ 3 (Store หรือไม่) ยังเปิดอยู่ แต่ไม่ขวาง P1–P5
+
+| รายการ P0 | ผล |
+|---|---|
+| ล็อก X1–X18 | ✅ ตามคำแนะนำ พร้อมแก้ X10 และ X17 ด้านล่าง |
+| หมายเหตุ X3 ในแผน auth phase 4 | ✅ `planning/auth-review-and-restructure-2026-08-25.md` |
+| F10 `ingest.schema.ts` รับ `context` | ✅ `context: z.record(z.string(), z.unknown())` (`schemas/ingest.schema.ts:34`) ไม่ต้องแก้ schema |
+| Spike CSP + iframe | ✅ ผ่านบน Chrome 131 และ Edge 153 ทุก CSP — ดู `.agents/harness/browser-extension/spikes/p0-csp/README.md` |
+| ตรวจ VisBug | ⚠️ **archive แล้ว** (read-only, push ล่าสุด 2026-08-03) · Apache-2.0 · MV3 · ESM ไม่มี framework · deps 6 ตัว · ทุก tool มี test ของตัวเอง · package `visbug` บน npm **ไม่ใช่ของ Google** (ISC, 2022) |
+
+**แก้ X17 → vendor ไม่ใช่ dependency:** คัดลอก source ของ VisBug มาไว้ใน repo (`app/extension/vendor/visbug/` ตอน P5b) พร้อม
+`LICENSE` + `NOTICE` ที่ระบุว่าแก้อะไร เราเป็นเจ้าของโค้ดส่วนนี้เองตั้งแต่วันแรก เพราะ upstream จะไม่มี fix อีก
+build ด้วย WXT/Vite แทน rollup ของ VisBug · ตัดส่วนที่ไม่อยู่ในดีไซน์ (`imageswap`, `screenshot`, tutorial gif)
+
+**แก้ X10 ให้ตรงกับที่สังเกตได้ — สามโซน:**
+
+| โซน | world | อะไรอยู่ที่นี่ | หน้าเว็บอ่าน/แก้ได้ไหม |
+|---|---|---|---|
+| **Rail + เครื่องมือ (VisBug)** | MAIN (`content_scripts[].world: "MAIN"`) | `<vis-bug>`, overlay, การแก้สไตล์ | **ได้** — ห้ามมีข้อมูล ApexOps และห้ามมีช่องทางใดที่ทำให้ SW ทำอะไรนอกจาก "เปิด panel" / "เติมฟอร์ม report" |
+| **ปุ่ม ApexOps + ตัวรับข้อความ** | ISOLATED | ปุ่มโลโก้ใน closed shadow root, รับ `postMessage` รูปแบบตายตัวจาก rail | ไม่ได้ (spike ยืนยัน) |
+| **Panel** | extension origin (iframe) | login, project, ingest key, issue, ฟอร์ม Report bug | ไม่ได้ (spike ยืนยัน) |
+
+ข้อมูล element ที่ rail ส่งให้ Report bug มาจาก MAIN world จึง**ปลอมได้** — ใช้แค่เติมฟอร์มที่ผู้ใช้เห็นก่อนกดส่งเสมอ ห้ามส่งอัตโนมัติ
+
+**แก้ R16:** การ patch `attachShadow` **ดัก closed root ที่สร้างจาก ISOLATED world ไม่ได้** (แต่ละ world มี prototype ของตัวเอง)
+ความเสี่ยงจริงอยู่ที่โค้ดใน MAIN world ซึ่งคือ VisBug → กฎสามโซนด้านบน · **R17 ปิด** บน Chromium (Firefox ทดสอบใน P7)
+
+**ถัดไป: P1** — branch `ext/p1-auth-storage` แตกจาก `ext/dev` · ledger อยู่ที่ `.agents/harness/browser-extension/feature-list.json`

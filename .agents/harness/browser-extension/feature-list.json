@@ -1,0 +1,153 @@
+{
+  "build": "browser extension — floating toolbar + connect by project URL, integration branch ext/dev",
+  "spec": "build-spec.md",
+  "target": ".agents/docs/features/browser-extension.md",
+  "features": [
+    {
+      "id": "P0-01",
+      "title": "Decisions X1-X18 locked",
+      "priority": "critical",
+      "depends_on": [],
+      "description": "User said 'make follow plan': every recommendation stands. Spec section 10 records the result and the X10/X17 amendments.",
+      "steps": ["Spec section 10 lists X1-X18 as locked, with the X10 three-zone table and the X17 vendor amendment"],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-19. 8.8 Q3 (Web Store or internal) is still open and does not block P1-P5."
+    },
+    {
+      "id": "P0-02",
+      "title": "Auth phase 4 carries the Bearer-path constraint (X3)",
+      "priority": "critical",
+      "depends_on": [],
+      "description": "planning/auth-review-and-restructure-2026-08-25.md says non-web clients keep Bearer whatever phase 4 picks.",
+      "steps": ["grep 'Constraint added 2026-09-19' in the auth plan under A7"],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-19."
+    },
+    {
+      "id": "P0-03",
+      "title": "Ingest accepts context (F10)",
+      "priority": "high",
+      "depends_on": [],
+      "description": "context.source = 'extension' needs no schema change.",
+      "steps": ["schemas/ingest.schema.ts:34 declares context as z.record(z.string(), z.unknown())"],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-19 by reading the schema."
+    },
+    {
+      "id": "P0-04",
+      "title": "Extension iframe panel survives hostile CSP and is unreadable by the page (R16/R17)",
+      "priority": "critical",
+      "depends_on": [],
+      "description": "spikes/p0-csp: four CSPs, with a hostile page script that patches attachShadow.",
+      "steps": [
+        "Panel iframe loads under default-src 'none' / frame-src 'none'",
+        "Page gets null for iframe.contentDocument and the secret is absent from page HTML",
+        "FAILURE CASE: an open shadow root IS read by the page (instrument control)",
+        "Closed root made in the ISOLATED world is NOT read, not even through a patched attachShadow"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-19 on Chrome for Testing 131.0.6778.204 and Edge 153.0.4234.32: all four variants pass and the control fails as it should. Firefox is untested and belongs to P7."
+    },
+    {
+      "id": "P0-05",
+      "title": "VisBug can be hosted (X17)",
+      "priority": "high",
+      "depends_on": [],
+      "description": "Where VisBug runs, and whether it can be reused.",
+      "steps": [
+        "Repo status, licence and manifest version checked through the GitHub API",
+        "world:'MAIN' content script runs under every CSP variant, and customElements exists there",
+        "customElements is null in the ISOLATED world, so <vis-bug> cannot live there"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-19. The repo is ARCHIVED (last push 2026-08-03), Apache-2.0, MV3. Decision: vendor it, do not depend on it. Its script-tag injection was refused on Chrome on every page, including the one with no CSP, by an extension-side policy while use_dynamic_url was on; Edge ran it. We use world:'MAIN' instead."
+    },
+    {
+      "id": "P1-01",
+      "title": "One door for session storage",
+      "priority": "critical",
+      "depends_on": ["P0-01"],
+      "description": "Every read or write of accessToken / refreshToken / user goes through lib/authSession.ts. build-spec.md lists the 12 sites.",
+      "steps": [
+        "grep -rn \"localStorage\" app/client/src returns token/user keys ONLY inside the web StorageAdapter",
+        "FAILURE CASE: the grep run on main before the change DOES list config.ts, AuthContext.tsx, services/auth.ts and devSessions.ts"
+      ],
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "P1-02",
+      "title": "authSession runs on an async StorageAdapter",
+      "priority": "critical",
+      "depends_on": ["P1-01"],
+      "description": "StorageAdapter { get, set, remove } returns promises. The web passes a localStorage adapter, and an extension can pass chrome.storage.local.",
+      "steps": [
+        "Unit test: an in-memory adapter round-trips persist/read/clear",
+        "Unit test: an adapter that throws on get/set does not crash the caller, and reads come back as null",
+        "npm run build (client) passes — erasableSyntaxOnly"
+      ],
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "P1-03",
+      "title": "Refresh coordination unchanged by the async move",
+      "priority": "critical",
+      "depends_on": ["P1-02"],
+      "description": "refreshOnce() still coalesces, still picks up a token another tab already rotated (accessAtStart), and endSession still fires only on 401/403.",
+      "steps": [
+        "Test: two concurrent callers produce exactly ONE POST /auth/refresh",
+        "Test: refresh answers 401 → endSession fires and the tokens are cleared",
+        "Test: refresh answers 500 or the network drops → session kept and tokens intact",
+        "Test: storage already holds a newer access token than the one at start → no refresh call made"
+      ],
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "P1-04",
+      "title": "No flash to /login on reload",
+      "priority": "high",
+      "depends_on": ["P1-02"],
+      "description": "AuthContext's initial state used a sync localStorage read. With async storage, the first render must stay 'loading' until storage resolves.",
+      "steps": [
+        "Logged in, reload /dashboard: URL never becomes /login (observe with a MutationObserver or a navigation log, not by eye)",
+        "Logged out, open /dashboard: redirected to /login"
+      ],
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "P1-05",
+      "title": "API base URL is a runtime value",
+      "priority": "high",
+      "depends_on": [],
+      "description": "configureApi({ baseUrl }) replaces the build-time-only read. The web passes VITE_API_URL at startup.",
+      "steps": ["Web app calls reach the same API as before (network log)", "Unit test: configureApi changes the URL a request goes to"],
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "P1-06",
+      "title": "P1 browser close-out",
+      "priority": "critical",
+      "depends_on": ["P1-01", "P1-02", "P1-03", "P1-04", "P1-05"],
+      "description": "Spec P1 exit, observed in a real browser.",
+      "steps": [
+        "login → reload → still logged in",
+        "two tabs, access token expired in both, both fire a request → neither is logged out, and the server sees no reuse alarm",
+        "revoke the session from another browser → the next call gets 401 and lands on /login",
+        "client CI suite + npm run build + typecheck green"
+      ],
+      "passes": false,
+      "notes": ""
+    },
+    { "id": "P2", "title": "packages/shared + sdk-core split", "priority": "critical", "depends_on": ["P1-06"], "description": "Spec section 4, P2.", "steps": [], "passes": false, "notes": "Expand into features when P2 starts." },
+    { "id": "P3", "title": "Extension capture (WXT scaffold, bridge, SW ingest)", "priority": "critical", "depends_on": ["P2"], "description": "Spec P3 as amended in 8.5.", "steps": [], "passes": false, "notes": "" },
+    { "id": "P4", "title": "Connect by project URL + binding + web-app card", "priority": "critical", "depends_on": ["P3"], "description": "Spec 8.5 P4.", "steps": [], "passes": false, "notes": "" },
+    { "id": "P5a", "title": "Rail shell + ApexOps button + iframe panel", "priority": "critical", "depends_on": ["P4"], "description": "Spec 9.4 / 10 three-zone model.", "steps": [], "passes": false, "notes": "" },
+    { "id": "P5b", "title": "Vendored VisBug tools + Report bug with element", "priority": "high", "depends_on": ["P5a"], "description": "Spec 9.4, X17 amended (vendor).", "steps": [], "passes": false, "notes": "" },
+    { "id": "P6", "title": "Screenshot", "priority": "medium", "depends_on": ["P5a"], "description": "Waits on X7 storage.", "steps": [], "passes": false, "notes": "" },
+    { "id": "P7", "title": "Packaging + Firefox", "priority": "medium", "depends_on": ["P5b"], "description": "Waits on 8.8 Q3.", "steps": [], "passes": false, "notes": "" }
+  ]
+}
