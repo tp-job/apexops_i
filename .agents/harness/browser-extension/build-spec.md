@@ -28,3 +28,13 @@ the `user` key too, which is part of the session, the real number is **12 reads/
 `api/config.ts:14` · `context/AuthContext.tsx:28,72,132,146,217` · `services/auth.ts:93,96` ·
 `dev/devSessions.ts:85,228-230`.
 Theme, assistant-panel and dev-session-list keys are device preferences and stay in `localStorage`.
+
+**Where things live after P2 (2026-09-20).**
+- `packages/shared/src/auth/authSession.ts` is the session coordinator (was `app/client/src/lib/authSession.ts`).
+- `packages/shared/src/api/` holds `configureApi`, `fetchWithAuth` and the auth headers (was `app/client/src/api/{config,client}.ts`).
+- `packages/shared/src/sdk-core/` holds the capture core and the v1 entry. `app/server/public/sdk/v1.js` is GENERATED from it.
+- `app/client/src/lib/localStorageAdapter.ts` is the web's StorageAdapter. The extension will bring a `chrome.storage` one.
+
+**Checks.** `checks/p1-browser.mjs` covers the web session (rig). `checks/p2-sdk-parity.mjs <baseRef>` compares the old and new v1.js.
+Neither check needs the DB, except p1 (it logs in). Run p1 sparingly: each run logs in twice, and the per-account
+login throttle answered 429 after a day of runs. Restarting the rig API clears it.

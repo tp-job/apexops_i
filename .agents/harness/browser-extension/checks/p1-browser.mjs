@@ -92,13 +92,20 @@ try {
     }, session);
     await a.goto(`${APP}/dashboard`, { waitUntil: 'networkidle0' });
     await clearRoutes(a);
+    // "Never visited /login" is also true of an app that failed to boot and
+    // rendered nothing — P2 got exactly that past this check once. So the
+    // reload must also have validated the session with the server.
+    const profile = a
+        .waitForResponse((r) => r.url().endsWith('/api/auth/profile'), { timeout: 10_000 })
+        .catch(() => null);
     await a.reload({ waitUntil: 'networkidle0' });
+    const profileRes = await profile;
     await sleep(1000);
     const afterReload = await routes(a);
     check(
-        'signed in: reload never passes through /login',
-        !afterReload.includes('/login') && new URL(a.url()).pathname === '/dashboard',
-        JSON.stringify(afterReload)
+        'signed in: reload validates the session and never passes through /login',
+        profileRes?.status() === 200 && !afterReload.includes('/login') && new URL(a.url()).pathname === '/dashboard',
+        `profile=${profileRes?.status() ?? 'none'} routes=${JSON.stringify(afterReload)}`
     );
 
     // ── two tabs, both expired, both request at once (P1-06) ─

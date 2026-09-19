@@ -97,7 +97,7 @@
         "npm run build (client) passes — erasableSyntaxOnly"
       ],
       "passes": true,
-      "notes": "VERIFIED 2026-09-19 by authSession.test.ts (16 tests). DESIGN DEVIATION from spec P1 step 2, taken on purpose: the adapter is async, but authSession keeps an in-memory cache, so the getters stay SYNC. initSession() fills the cache before React mounts (main.tsx, .then because the es2020 build target has no top-level await). adapter.subscribe feeds other contexts' writes into the cache. This avoided pushing await into axios, socket handshakes and first render (R4). Writes update memory synchronously and persistTokens can be awaited; refreshOnce awaits it (R3). The throwing adapter reads as signed out, and the lazy localStorage lookup keeps a blocked store from crashing at startup. npm run build passes."
+      "notes": "VERIFIED 2026-09-19 by authSession.test.ts (16 tests). DESIGN DEVIATION from spec P1 step 2, taken on purpose: the adapter is async, but authSession keeps an in-memory cache, so the getters stay SYNC. initSession() fills the cache before React mounts (main.tsx; .then is a style choice — Vite 7's default target does support top-level await, and an earlier comment claiming otherwise was corrected in P2). adapter.subscribe feeds other contexts' writes into the cache. This avoided pushing await into axios, socket handshakes and first render (R4). Writes update memory synchronously and persistTokens can be awaited; refreshOnce awaits it (R3). The throwing adapter reads as signed out, and the lazy localStorage lookup keeps a blocked store from crashing at startup. npm run build passes."
     },
     {
       "id": "P1-03",
@@ -166,16 +166,111 @@
       "notes": "VERIFIED 2026-09-19 with checks/p1-browser.mjs on the rig (API :3013, Vite :5199, Chrome for Testing 131): 8/8, then 5/5 on a rerun. In 5 race rounds with both tabs expired, the refreshes were [B:200, A:401] every time, both tabs stayed on /projects, and the token was renewed. Revoke-all from another login sent the next call to /login. FAILURE CASE observed: with the adopt branch removed, BOTH tabs ended at /login (the loser's endSession clears the shared store), so the check detects the regression. Client lint, typecheck (tsc -b), vitest 141/141 and build are clean. RESIDUAL, not reproduced: the loser's 401 could arrive before the winner has persisted (during the claim/issueSession window). The old code had the same exposure, and it was not seen in 5/5 rounds. The extension avoids it by construction, because its service worker is the only refresher (X2)."
     },
     {
-      "id": "P2",
-      "title": "packages/shared + sdk-core split",
+      "id": "P2-01",
+      "title": "packages/shared workspace exists and CI runs it",
       "priority": "critical",
       "depends_on": [
         "P1-06"
       ],
-      "description": "Spec section 4, P2.",
-      "steps": [],
-      "passes": false,
-      "notes": "Expand into features when P2 starts."
+      "description": "@apexops/shared: TypeScript source, no build of its own; exports ./auth ./api ./types/auth ./sdk-core.",
+      "steps": [
+        "npm ls @apexops/shared resolves to the workspace link",
+        "npm run typecheck/test --workspaces includes it",
+        "package-lock.json carries packages/shared"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-20. Root workspaces = packages/shared, app/client, app/server. Lockfile +15 lines. CI needed no new steps (it already runs --workspaces); step names changed from \"both\" to \"all\". React is NOT a dependency: nothing in shared renders yet, so the spec's peerDependency rule has nothing to apply to. It applies the day shared gains a component."
+    },
+    {
+      "id": "P2-02",
+      "title": "Session, API client and auth types moved, one import door each",
+      "priority": "critical",
+      "depends_on": [
+        "P2-01"
+      ],
+      "description": "authSession, api/config + fetchWithAuth, types/auth moved with git mv; client imports @apexops/shared/*; no shims.",
+      "steps": [
+        "grep finds no @/lib/authSession, @/api/config, @/api/client, @/types/auth in app/client/src",
+        "client 189 tests (128 existing + 61 module-load) and shared 29 tests pass",
+        "client build + lint clean"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-20 (commit e905f90). getApiBaseUrl has NO default and throws when unconfigured; main.tsx configures it from VITE_API_URL. localStorageAdapter stays in the client, with its own test file."
+    },
+    {
+      "id": "P2-03",
+      "title": "No module reads API config or session at load time",
+      "priority": "critical",
+      "depends_on": [
+        "P2-02"
+      ],
+      "description": "Found by the browser check. services/api.ts had axios.create({ baseURL: getApiBaseUrl() }) at module scope, which runs before main.tsx configures the URL: blank page. tsc, the unit tests and vite build all passed it.",
+      "steps": [
+        "moduleLoad.test.ts imports all 60 non-UI modules with nothing configured",
+        "FAILURE CASE: put the module-scope read back, and the test fails on services/api.ts and its importer"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-20. Fixed by reading baseURL in the request interceptor. The AST scan (every module-scope call to the session/API getters) found exactly that one site. The P1 reload check was ALSO blind to a blank app (\"never visited /login\" is true of an app that never booted). It now requires GET /api/auth/profile to answer 200, shown failing with the bug put back (profile=none)."
+    },
+    {
+      "id": "P2-04",
+      "title": "sdk-core split: startCapture(config, transport, host)",
+      "priority": "critical",
+      "depends_on": [
+        "P2-01"
+      ],
+      "description": "capture.ts ported line for line from v1.js; v1-entry.ts keeps script-tag config + fetch/sendBeacon. Extension inputs: context, mapUrl (optional).",
+      "steps": [
+        "15 capture tests with a fake window: level patching, page prints first, dedupe count, sampling spares errors, context/mapUrl, internal throw stays inside, no recursion from transport logging, global hooks, unload path, circuit breaker, rejected send, batch halving"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-20 (commit 600aa72). The X9 marker (window.__apexopsSdk) was deliberately NOT added here: P2 promises identical v1 behaviour. It moves to P3."
+    },
+    {
+      "id": "P2-05",
+      "title": "/sdk/v1.js is generated and cannot drift, and it behaves exactly as before",
+      "priority": "critical",
+      "depends_on": [
+        "P2-04"
+      ],
+      "description": "esbuild (es2018, IIFE, unminified) writes app/server/public/sdk/v1.js, which is committed. v1-build.test.ts compares it with a fresh build.",
+      "steps": [
+        "checks/p2-sdk-parity.mjs: old vs new v1.js on the same page in Chrome, same scenario, all ingest requests diffed",
+        "FAILURE CASE: one string changed in the new file → FAIL at the exact line",
+        "FAILURE CASE: hand edit to the committed file → drift test fails"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-20. Parity: 2 requests (fetch with X-Apexops-Key: 9 events; sendBeacon on unload: 1 event), identical apart from timestamps; same page errors. esbuild absWorkingDir is pinned: output embeds module paths, and a build from the repo root differed from one inside the package. Found when the drift test failed from root. Target es2018 (object spread native); v1 was ES5 by hand, which no supported browser needs. The spec's exit named /sdk/test and /sdk/demo. Those pages drive the same script against the real server, and the parity check replaces them with a stricter byte-level comparison. The full regression → alert loop on /sdk/test was not re-run."
+    },
+    {
+      "id": "P2-06",
+      "title": "Found bug fixed: oversized batch dropped its tail",
+      "priority": "high",
+      "depends_on": [
+        "P2-05"
+      ],
+      "description": "buildBatch halved to fit 64 KB and never re-queued the rest: 40 large events sent 10, lost 30. The comment said the opposite.",
+      "steps": [
+        "Test failed first (sent 0-9 of 40), passes after the fix",
+        "Parity against 600aa72 still identical for the ordinary scenario"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-20 (commit 4a0a93c), its own commit so the port stays a pure move. Remaining limitation, unchanged: an unload flush sends one batch, so a backlog larger than one batch at teardown still loses the rest."
+    },
+    {
+      "id": "P2-07",
+      "title": "P2 close-out: web app passes the P1 browser checklist again",
+      "priority": "critical",
+      "depends_on": [
+        "P2-02",
+        "P2-03"
+      ],
+      "description": "Spec P2 exit: the web app passes P1 again after the move.",
+      "steps": [
+        "checks/p1-browser.mjs on the isolated rig"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-20: 8/8 (5 race rounds). Before the P2-03 fix it was 1/8, which is how the blank page was found. The rig API had to be restarted once: the per-account login throttle returned 429 after many check runs in one day."
     },
     {
       "id": "P3",

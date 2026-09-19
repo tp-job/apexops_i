@@ -52,16 +52,16 @@ jobs:
       - name: Generate Prisma client
         run: npm run db:generate --workspace app/server
 
-      - name: Typecheck (both workspaces)
+      - name: Typecheck (all workspaces)
         run: npm run typecheck --workspaces --if-present
 
       - name: Lint (client)
         run: npm run lint --workspace app/client
 
-      # Both suites are pure functions — no database, no server, no .env. If a
+      # All suites are pure functions — no database, no server, no .env. If a
       # test here ever needs one of those, it is an integration test and this job
       # gains a service container as a deliberate, reviewed change.
-      - name: Test (both workspaces)
+      - name: Test (all workspaces)
         run: npm run test --workspaces --if-present
 
       - name: Build (client)
