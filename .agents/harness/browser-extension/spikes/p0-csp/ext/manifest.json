@@ -1,0 +1,39 @@
+{
+  "manifest_version": 3,
+  "name": "ApexOps P0 CSP spike",
+  "version": "0.0.1",
+  "content_scripts": [
+    {
+      "matches": [
+        "http://127.0.0.1:8799/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "http://127.0.0.1:8799/*"
+      ],
+      "js": [
+        "main-world.js"
+      ],
+      "world": "MAIN",
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "panel.html",
+        "panel.js",
+        "tag.js"
+      ],
+      "matches": [
+        "http://127.0.0.1:8799/*"
+      ],
+      "use_dynamic_url": true
+    }
+  ]
+}
