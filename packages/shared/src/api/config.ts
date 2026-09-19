@@ -1,20 +1,23 @@
 /**
- * Centralized API base URL and auth header helpers.
- * Single place for noteApi, calendarApi, auth, and other fetch callers.
+ * API base URL and auth header helpers.
+ * Single place for every fetch caller in the web app and the extension.
  */
 
-import { getAccessToken } from '@/lib/authSession';
+import { getAccessToken } from '../auth/authSession';
 
-// A runtime value, not a build-time constant: the web app keeps the build-time
-// default, and the browser extension calls `configureApi` with whatever server
-// the user connected to (extension spec X11).
-let apiBaseUrl: string = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+// A runtime value with no default. Each consumer says where its API is: the web
+// app from `VITE_API_URL` in `main.tsx`, the extension from the server the user
+// connected to (extension spec X11). No default on purpose — a forgotten
+// `configureApi` must fail loudly, not send relative `/api/...` requests to
+// whatever origin happens to be serving the page.
+let apiBaseUrl: string | null = null;
 
 export function configureApi({ baseUrl }: { baseUrl: string }): void {
     apiBaseUrl = baseUrl.replace(/\/+$/, '');
 }
 
 export function getApiBaseUrl(): string {
+    if (apiBaseUrl === null) throw new Error('configureApi({ baseUrl }) has not been called');
     return apiBaseUrl;
 }
 

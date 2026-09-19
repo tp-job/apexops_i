@@ -5,7 +5,7 @@ import {
     refreshOnce,
     endSession,
     SessionExpiredError,
-} from '@/lib/authSession';
+} from '@apexops/shared/auth';
 import {
     advanceConnection,
     initialConnection,
@@ -36,7 +36,7 @@ interface UseIssueStreamOptions {
  *
  * 1. **The badge is driven by transport events only** — `live` is never set
  *    optimistically, so the page cannot claim to be current over a dead feed.
- * 2. **An expired token refreshes through `lib/authSession.ts`** (R-D6), the one
+ * 2. **An expired token refreshes through `packages/shared/src/auth/authSession.ts`** (R-D6), the one
  *    coordinator, rather than a second implementation. Its `/refresh` route is
  *    single-use, so a private refresh here would race the HTTP transports and
  *    log people out at random — the exact bug that module exists to prevent.

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
-import { getAuthToken } from '@/api/config';
+import { getAuthToken } from '@apexops/shared/api';
 import type { ChatMessage, TypingEvent } from '@/types/chat';
 
 interface UseChatOptions {

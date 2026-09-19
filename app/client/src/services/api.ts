@@ -1,14 +1,15 @@
 import axios from 'axios';
 import type { InternalAxiosRequestConfig } from 'axios';
-import { getApiBaseUrl, getAuthToken } from '@/api/config';
-import { isExpired, refreshOnce } from '@/lib/authSession';
+import { getApiBaseUrl, getAuthToken } from '@apexops/shared/api';
+import { isExpired, refreshOnce } from '@apexops/shared/auth';
 import type { Log, Ticket, TicketComment, TicketPriority, TicketStatus } from '@/types/bugTrackerApp';
 import type { LogsStats, TicketsStats, WithMockFlagArray } from '@/types/api';
 import { createReadOnlyOfflineError, isMockEnabled, isNetworkFailure } from '@/utils/offlineMock';
 import { mockLogs, mockTickets } from '@/utils/mockData';
 
+// No `baseURL` here: this module is evaluated before `main.tsx` calls
+// `configureApi`, so the base URL is read per request in the interceptor below.
 const api = axios.create({
-    baseURL: getApiBaseUrl(),
     headers: {
         'Content-Type': 'application/json',
     },
@@ -23,6 +24,7 @@ const api = axios.create({
  * they answer 401 no matter who is signed in.
  */
 api.interceptors.request.use(async (config) => {
+    config.baseURL = getApiBaseUrl();
     // Pre-flight refresh, same rule as `fetchWithAuth`: a token already past
     // `exp` makes this request a guaranteed 401, so spend the refresh instead of
     // the round trip. Failure is ignored here — the response interceptor below
@@ -45,7 +47,7 @@ api.interceptors.request.use(async (config) => {
  * This instance is separate from `fetchWithAuth` and had no 401 handling at all,
  * so logs and tickets would have kept breaking silently past token expiry even
  * after the fetch path was fixed. The policy is deliberately identical to
- * `api/client.ts`: refresh once, replay once, never loop.
+ * `fetchWithAuth`: refresh once, replay once, never loop.
  *
  * `_retried` is stamped on the request config rather than tracked in a module
  * variable — the flag has to travel with the individual request, or two

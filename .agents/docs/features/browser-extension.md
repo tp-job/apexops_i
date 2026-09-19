@@ -461,3 +461,26 @@ build ด้วย WXT/Vite แทน rollup ของ VisBug · ตัดส่
 ความเสี่ยงจริงอยู่ที่โค้ดใน MAIN world ซึ่งคือ VisBug → กฎสามโซนด้านบน · **R17 ปิด** บน Chromium (Firefox ทดสอบใน P7)
 
 **ถัดไป: P1** — branch `ext/p1-auth-storage` แตกจาก `ext/dev` · ledger อยู่ที่ `.agents/harness/browser-extension/feature-list.json`
+
+---
+
+## 11. ผล P2 และการตัดสินใจเพิ่ม — 2026-09-20
+
+**8.8 ข้อ 3 ตอบแล้ว: ใช้แบบ unpacked ไปก่อน** (ผู้ใช้ตอบ 2026-09-20) · P7 เหลือแค่ zip + คู่มือโหลด unpacked บน Chrome/Edge + ตรึง `key` ใน manifest
+ไม่ต้องทำ privacy policy / เหตุผล permission สำหรับ Web Store / R10 ตอนนี้ — กลับมาทำเมื่อจะขึ้น Store · R19 ยังต้องทำ (เกี่ยวกับความปลอดภัย ไม่ใช่ Store)
+
+**P2 เสร็จ** (ledger P2-01…P2-07):
+- `packages/shared` = `@apexops/shared` (TS source ล้วน) export `./auth`, `./api`, `./types/auth`, `./sdk-core`
+- client import จาก `@apexops/shared/*` ทางเดียว ไม่มีไฟล์ re-export ค้าง
+- `getApiBaseUrl()` **ไม่มีค่า default** — web ตั้งใน `main.tsx`, extension จะตั้งจาก URL ที่ผู้ใช้วาง (X11)
+- `/sdk/v1.js` **build จาก `sdk-core` แล้ว commit** — `npm run build:sdk --workspace packages/shared` · แก้ไฟล์นั้นตรงๆ ไม่ได้ (test จับ)
+- `startCapture(config, transport, host)` รับ `context` และ `mapUrl` สำหรับ extension (X5 ตัด query/hash ทำผ่าน `mapUrl`)
+
+**สิ่งที่พบระหว่าง P2:**
+1. **bug ใน v1.js เดิม:** batch ที่ใหญ่เกิน 64 KB ถูกแบ่งครึ่งแล้ว**ทิ้งส่วนที่เหลือ** (40 event ส่ง 10 หาย 30) — แก้แล้วใน commit แยก
+2. **`services/api.ts` อ่าน base URL ตอนโหลด module** → หน้าขาว · typecheck/test/build ไม่จับ มีแค่ check ในเบราว์เซอร์ที่จับได้ → เพิ่ม `moduleLoad.test.ts` ให้ CI จับครั้งต่อไป
+3. check ของ P1 เรื่อง reload **ผ่านได้แม้แอปขาว** → แก้ให้ต้องเห็น `/api/auth/profile` ตอบ 200
+
+**ย้ายไป P3:** marker `window.__apexopsSdk` (X9) — ไม่ได้ใส่ใน P2 เพราะเงื่อนไขปิด P2 คือ v1 ต้องทำงานเหมือนเดิมทุกอย่าง
+
+**ถัดไป: P3** — branch `ext/p3-capture` แตกจาก `ext/dev`

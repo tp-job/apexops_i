@@ -1,5 +1,5 @@
-import { getApiBaseUrl } from '@/api/config';
-import type { RefreshResponse } from '@/types/auth';
+import { getApiBaseUrl } from '../api/config';
+import type { RefreshResponse } from '../types/auth';
 
 /**
  * Token lifecycle, owned outside React.

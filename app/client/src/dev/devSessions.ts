@@ -20,9 +20,9 @@
  *
  * Run `npm run seed:dev --workspace app/server` once to create the accounts.
  */
-import { getApiBaseUrl } from '@/api/config';
-import { getStoredUser, persistTokens } from '@/lib/authSession';
-import type { User } from '@/types/auth';
+import { getApiBaseUrl } from '@apexops/shared/api';
+import { getStoredUser, persistTokens } from '@apexops/shared/auth';
+import type { User } from '@apexops/shared/types/auth';
 
 export type DevRole = 'user' | 'admin';
 

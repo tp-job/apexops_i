@@ -1,4 +1,4 @@
-import { fetchWithAuth } from '@/api/client';
+import { fetchWithAuth } from '@apexops/shared/api';
 import type { DailyTodo } from '@/lib/dailyTodos';
 
 /**
@@ -18,7 +18,7 @@ import type { DailyTodo } from '@/lib/dailyTodos';
  * cannot.
  *
  * Everything goes through `fetchWithAuth`, so the 401 refresh-and-replay in
- * `lib/authSession.ts` is inherited rather than reimplemented.
+ * `packages/shared/src/auth/authSession.ts` is inherited rather than reimplemented.
  */
 
 /** What the server sends back for one task. `id` is the client-side id. */

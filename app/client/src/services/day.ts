@@ -1,4 +1,4 @@
-import { fetchWithAuth } from '@/api/client';
+import { fetchWithAuth } from '@apexops/shared/api';
 
 /**
  * Calendar events and the whole-day read (blueprint phase 3, US-07).
@@ -9,7 +9,7 @@ import { fetchWithAuth } from '@/api/client';
  * merging them would put two unrelated wire formats behind one name.
  *
  * Goes through `fetchWithAuth`, so the 401 refresh-and-replay in
- * `lib/authSession.ts` is inherited rather than reimplemented.
+ * `packages/shared/src/auth/authSession.ts` is inherited rather than reimplemented.
  */
 
 export interface CalendarEvent {
