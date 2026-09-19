@@ -18,6 +18,7 @@ import path from 'path';
 import { Server as SocketIOServer } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import type { ChatMessage } from './utils/chat';
+import ingestRoutes from './api/ingest';
 import {
     parseDirectRoom,
     isParticipant,
@@ -39,6 +40,15 @@ import { registerRealtime } from './lib/realtime';
 // ── Express App ──────────────────────────────────────────────
 const app = express();
 app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
+
+// Ingest goes FIRST, above the app-wide CORS and JSON parser. It is the one
+// route that takes posts from sites we do not control, so it brings its own
+// permissive CORS and 1MB body cap (`api/ingest.ts`). Until 2026-09-20 it was
+// mounted below both: the global `cors` answered every preflight with the
+// frontend's origin, so browsers refused every cross-origin SDK post, and the
+// global 100kB `express.json` had already parsed the body, so the 1MB cap never
+// applied. Same-origin harness pages could not show either.
+app.use('/api/ingest', ingestRoutes);
 
 // CORS: allow frontend dev server (Vite 5173) and explicit preflight
 const corsOrigin = process.env.CORS_ORIGIN || 'http://localhost:5173';
@@ -433,14 +443,10 @@ import chatRoutes from './api/chat';
 import notificationsRoutes from './api/notifications';
 import projectsRoutes from './api/projects';
 import invitesRoutes from './api/invites';
-import ingestRoutes from './api/ingest';
 import docsRoutes from './api/docs';
 import adminDocsRoutes from './api/admin-docs';
 
-// Mounted before the JSON-body and CORS defaults matter to it: `api/ingest` sets
-// its own permissive CORS and 1MB body cap, because it is the only route that
-// legitimately accepts cross-origin posts from sites we do not control.
-app.use('/api/ingest', ingestRoutes);
+// `/api/ingest` is mounted near the top, above the global CORS — see there.
 
 app.use('/api/auth', authRoutes);
 // Admin-only throughout — the router gates itself, so it is safe to mount here
