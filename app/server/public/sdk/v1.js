@@ -66,6 +66,7 @@
     const recent = /* @__PURE__ */ Object.create(null);
     const signature = (ev) => `${ev.level} ${ev.message} ${ev.stack || ""}`;
     function enqueue(ev) {
+      if (config.shouldCapture && !config.shouldCapture()) return;
       const now = Date.now();
       const sig = signature(ev);
       const hit = recent[sig];
@@ -212,6 +213,11 @@
     const d = script.dataset || {};
     const key = d.project || "";
     if (!key) return;
+    if ("__apexopsSdk" in window) return;
+    try {
+      Object.defineProperty(window, "__apexopsSdk", { value: Object.freeze({ version: 1 }), enumerable: false });
+    } catch (e) {
+    }
     const origin = (() => {
       if (d.endpoint) return d.endpoint.replace(/\/$/, "");
       try {

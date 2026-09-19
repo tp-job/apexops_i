@@ -28,6 +28,13 @@ export interface CaptureConfig {
     context?: Record<string, unknown>;
     /** Rewrite the page URL before it is recorded, e.g. to strip query and hash. */
     mapUrl?: (href: string) => string;
+    /**
+     * Asked before each event is queued; `false` drops it. The extension uses it
+     * to stand down once the page's own SDK is present (spec X9), which can
+     * happen long after capture started — an SDK loaded with `async`, or by a
+     * button. Checked per event rather than once at startup for that reason.
+     */
+    shouldCapture?: () => boolean;
 }
 
 export type SendOutcome = 'ok' | 'failure';
@@ -162,6 +169,7 @@ export function startCapture(
     const signature = (ev: CaptureEvent) => `${ev.level} ${ev.message} ${ev.stack || ''}`;
 
     function enqueue(ev: CaptureEvent): void {
+        if (config.shouldCapture && !config.shouldCapture()) return;
         const now = Date.now();
         const sig = signature(ev);
         const hit = recent[sig];

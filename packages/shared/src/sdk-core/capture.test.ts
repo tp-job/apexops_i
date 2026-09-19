@@ -124,6 +124,23 @@ describe('console capture', () => {
         expect(t.events()[0].count).toBe(MAX_EVENT_COUNT);
     });
 
+    it('shouldCapture can switch capture off per event without unpatching', () => {
+        const h = fakeHost();
+        const t = fakeTransport();
+        let sdkPresent = false;
+        const cap = startCapture(config({ shouldCapture: () => !sdkPresent }), t.transport, h.host);
+
+        h.console.error('before the SDK');
+        sdkPresent = true;
+        h.console.error('after the SDK');
+        h.fire('unhandledrejection', { reason: new Error('also after') });
+        cap.flush(false);
+
+        expect(t.events().map((e) => e.message)).toEqual(['before the SDK']);
+        // The page's own output is never affected.
+        expect(h.printed.map((p) => p[1])).toEqual(['before the SDK', 'after the SDK']);
+    });
+
     it('samples warnings but never errors', () => {
         const h = fakeHost();
         const t = fakeTransport();

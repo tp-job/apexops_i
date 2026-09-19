@@ -43,6 +43,18 @@ function boot(): void {
     // console is the SDK making its problem into their problem.
     if (!key) return;
 
+    // "This page runs its own SDK" (extension spec X9). The ApexOps browser
+    // extension checks it before every event and stands down, instead of
+    // sending everything twice. It also stops a second copy of this script —
+    // two <script> tags — from patching the console on top of the first.
+    // A presence flag, not a handle: nothing here is reachable through it.
+    if ('__apexopsSdk' in window) return;
+    try {
+        Object.defineProperty(window, '__apexopsSdk', { value: Object.freeze({ version: 1 }), enumerable: false });
+    } catch {
+        /* a frozen window or a getter already there — carry on without the flag */
+    }
+
     const origin = (() => {
         if (d.endpoint) return d.endpoint.replace(/\/$/, '');
         try {
