@@ -18,11 +18,40 @@ import type { RefreshResponse } from '@/types/auth';
  * presents a row that no longer exists, receives a 401, and ends a session that
  * was perfectly healthy. That is the "random logouts" bug the sprint plan priced
  * this item at two days for. One promise, shared by every caller, is the fix.
+ *
+ * **Why storage is an adapter behind a cache (extension P1, 2026-09-19).** The
+ * browser extension's service worker has no `localStorage`, only the async
+ * `chrome.storage`. Making every getter async would push `await` into axios
+ * interceptors, socket handshakes and React's first render. Instead the adapter
+ * is async and this module keeps an in-memory copy: `initSession()` fills it once
+ * before anything reads it, writes update it synchronously and then persist, and
+ * changes made by *another* context (a second tab, the extension's popup) arrive
+ * through `adapter.subscribe`. The getters stay synchronous and are exactly as
+ * fresh as before, because the cache is updated from the change event itself
+ * rather than from a later read.
  */
+
+/**
+ * Where a session is persisted. Web: `localStorage`. Extension: `chrome.storage.local`.
+ *
+ * Every method may reject; this module treats a failing store as "nothing stored"
+ * and keeps the in-memory session working for the current context.
+ */
+export interface StorageAdapter {
+    get(key: string): Promise<string | null>;
+    set(key: string, value: string): Promise<void>;
+    remove(keys: string[]): Promise<void>;
+    /**
+     * Report writes made by *other* contexts. `key: null` means the whole store was
+     * cleared. Optional: a store with a single context has nothing to report.
+     */
+    subscribe?(onChange: (key: string | null, value: string | null) => void): () => void;
+}
 
 const ACCESS_KEY = 'accessToken';
 const REFRESH_KEY = 'refreshToken';
 const USER_KEY = 'user';
+const SESSION_KEYS = [ACCESS_KEY, REFRESH_KEY, USER_KEY];
 
 /**
  * Treat a token as expired this long before it actually is.
@@ -35,40 +64,131 @@ const EXPIRY_SKEW_MS = 10_000;
 
 // ── storage ──────────────────────────────────────────────────
 
-const read = (key: string): string | null => {
+let adapter: StorageAdapter | null = null;
+let unsubscribeAdapter: (() => void) | null = null;
+let ready: Promise<void> = Promise.resolve();
+const cache = new Map<string, string>();
+
+type Listener = () => void;
+const changeListeners = new Set<Listener>();
+
+const notifyChanged = () => {
+    changeListeners.forEach((l) => {
+        try {
+            l();
+        } catch (err) {
+            console.error('Session-changed listener threw:', err);
+        }
+    });
+};
+
+// A failing store is "nothing stored" (Safari private mode, a blocked embedding,
+// a quota error). A missing token is a correct answer here; throwing is not.
+const safely = async <T>(op: () => Promise<T>, fallback: T): Promise<T> => {
     try {
-        return localStorage.getItem(key);
+        return await op();
     } catch {
-        // Safari in private mode, and any embedding that blocks storage. A
-        // missing token is a correct answer here; throwing is not.
-        return null;
+        return fallback;
     }
 };
 
-export const getAccessToken = (): string | null => read(ACCESS_KEY);
-export const getRefreshToken = (): string | null => read(REFRESH_KEY);
+const setCached = (key: string, value: string | null) => {
+    if (value === null) cache.delete(key);
+    else cache.set(key, value);
+};
 
-/** Writes what a login/refresh response returned. `user` and `refreshToken` are optional. */
-export function persistTokens(data: {
-    accessToken: string;
-    refreshToken?: string;
-    user?: unknown;
-}): void {
+/**
+ * Load the stored session into memory and start following other contexts' writes.
+ *
+ * Must resolve before anything reads a token — the web app calls it before React
+ * mounts (`main.tsx`). Calling it again swaps the adapter (tests do this).
+ */
+export function initSession(next: StorageAdapter): Promise<void> {
+    unsubscribeAdapter?.();
+    adapter = next;
+    cache.clear();
+
+    unsubscribeAdapter =
+        next.subscribe?.((key, value) => {
+            if (key === null) cache.clear();
+            else if (SESSION_KEYS.includes(key)) setCached(key, value);
+            else return;
+            notifyChanged();
+        }) ?? null;
+
+    ready = (async () => {
+        const values = await Promise.all(SESSION_KEYS.map((k) => safely(() => next.get(k), null)));
+        SESSION_KEYS.forEach((k, i) => {
+            // A write that landed while we were reading is newer than what we read.
+            if (!cache.has(k)) setCached(k, values[i]);
+        });
+    })();
+    return ready;
+}
+
+/** Resolves once `initSession`'s initial read has finished. */
+export const whenSessionReady = (): Promise<void> => ready;
+
+export const getAccessToken = (): string | null => cache.get(ACCESS_KEY) ?? null;
+export const getRefreshToken = (): string | null => cache.get(REFRESH_KEY) ?? null;
+
+/** The last user a login, refresh or profile call returned. Display only — never an authorization input. */
+export function getStoredUser<T>(): T | null {
+    const raw = cache.get(USER_KEY);
+    if (!raw) return null;
     try {
-        localStorage.setItem(ACCESS_KEY, data.accessToken);
-        if (data.refreshToken) localStorage.setItem(REFRESH_KEY, data.refreshToken);
-        if (data.user) localStorage.setItem(USER_KEY, JSON.stringify(data.user));
+        return JSON.parse(raw) as T;
     } catch {
-        // Nothing useful to do — the in-memory session still works for this tab.
+        return null;
     }
 }
 
-export function clearTokens(): void {
-    try {
-        [ACCESS_KEY, REFRESH_KEY, USER_KEY].forEach((k) => localStorage.removeItem(k));
-    } catch {
-        /* see above */
-    }
+/**
+ * Writes what a login/refresh response returned. `user` and `refreshToken` are optional.
+ *
+ * Memory is updated before this returns, so this context sees the new token even
+ * if the caller does not await. Awaiting guarantees it reached storage — which
+ * matters in an extension service worker that can be stopped at any moment.
+ */
+export async function persistTokens(data: {
+    accessToken: string;
+    refreshToken?: string;
+    user?: unknown;
+}): Promise<void> {
+    const writes: [string, string][] = [[ACCESS_KEY, data.accessToken]];
+    if (data.refreshToken) writes.push([REFRESH_KEY, data.refreshToken]);
+    if (data.user) writes.push([USER_KEY, JSON.stringify(data.user)]);
+
+    writes.forEach(([k, v]) => setCached(k, v));
+    const store = adapter;
+    if (!store) return;
+    await Promise.all(writes.map(([k, v]) => safely(() => store.set(k, v), undefined)));
+}
+
+/** Replace the stored user (after a profile read or update) without touching the tokens. */
+export async function setStoredUser(user: unknown): Promise<void> {
+    const value = JSON.stringify(user);
+    setCached(USER_KEY, value);
+    const store = adapter;
+    if (!store) return;
+    await safely(() => store.set(USER_KEY, value), undefined);
+}
+
+export async function clearTokens(): Promise<void> {
+    cache.clear();
+    const store = adapter;
+    if (!store) return;
+    await safely(() => store.remove(SESSION_KEYS), undefined);
+}
+
+/**
+ * Another context changed the stored session — signed out, or signed in as
+ * someone else. Fires after the in-memory copy is updated, so listeners can read
+ * the getters. Does not fire for this context's own writes.
+ */
+export function onSessionChanged(listener: Listener): () => void {
+    changeListeners.add(listener);
+    return () => changeListeners.delete(listener);
 }
 
 // ── expiry ───────────────────────────────────────────────────
@@ -108,7 +228,6 @@ export function isExpired(token: string | null, skewMs = EXPIRY_SKEW_MS): boolea
 
 // ── session-ended notification ───────────────────────────────
 
-type Listener = () => void;
 const listeners = new Set<Listener>();
 
 /**
@@ -125,7 +244,8 @@ export function onSessionExpired(listener: Listener): () => void {
 }
 
 export function endSession(): void {
-    clearTokens();
+    // Memory is cleared synchronously inside; the store catches up on its own.
+    void clearTokens();
     listeners.forEach((l) => {
         try {
             l();
@@ -165,6 +285,9 @@ export function refreshOnce(): Promise<string> {
     if (inFlight) return inFlight;
 
     const attempt = (async () => {
+        // An extension service worker can wake straight into a refresh; never
+        // decide "no refresh token" before the stored one has been read.
+        await ready;
         const presented = getRefreshToken();
         if (!presented) throw new SessionExpiredError();
 
@@ -185,14 +308,17 @@ export function refreshOnce(): Promise<string> {
         if (res.ok) {
             const data = (await res.json()) as RefreshResponse;
             if (!data.accessToken) throw new SessionExpiredError('Refresh returned no token.');
-            persistTokens(data);
+            // Awaited: the server has already burned the old refresh token, so a
+            // context that stops before this write lands has lost the session (R3).
+            await persistTokens(data);
             return data.accessToken;
         }
 
         // The refresh token is single-use. If two tabs raced, the loser lands
         // here holding a 401 for a session that is actually fine — the winner
-        // already wrote a working token to the storage both tabs share. Adopt it
-        // rather than ending a live session.
+        // already wrote a working token to the storage both tabs share, and the
+        // adapter's change event has put it in our cache. Adopt it rather than
+        // ending a live session.
         const current = getAccessToken();
         if (current && current !== accessAtStart) return current;
 

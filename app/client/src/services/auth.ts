@@ -22,6 +22,7 @@
 
 import { getApiBaseUrl } from '@/api/config';
 import { fetchWithAuth } from '@/api/client';
+import { getAccessToken, getRefreshToken } from '@/lib/authSession';
 import type { LoginResponse, ProfileResponse, User, UserSettings } from '@/types/auth';
 
 export const authApi = {
@@ -90,10 +91,10 @@ export const authApi = {
     },
 
     async logout(): Promise<void> {
-        const refreshTokenValue = typeof localStorage !== 'undefined' ? localStorage.getItem('refreshToken') : null;
+        const refreshTokenValue = getRefreshToken();
         if (!refreshTokenValue) return;
 
-        const token = typeof localStorage !== 'undefined' ? localStorage.getItem('accessToken') : null;
+        const token = getAccessToken();
         await fetch(`${getApiBaseUrl()}/api/auth/logout`, {
             method: 'POST',
             headers: {

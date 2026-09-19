@@ -6,9 +6,12 @@ import { getApiBaseUrl } from '@/api/config';
 import {
     clearTokens,
     getAccessToken,
+    getStoredUser,
+    onSessionChanged,
     onSessionExpired,
     persistTokens,
     refreshOnce,
+    setStoredUser,
 } from '@/lib/authSession';
 import { isMockEnabled, isNetworkFailure, readOnlyOfflineMessage } from '@/utils/offlineMock';
 import { AuthContext, type AuthContextType } from './auth-context';
@@ -19,18 +22,11 @@ import { AuthContext, type AuthContextType } from './auth-context';
 const clearSession = clearTokens;
 
 function persistSession(accessToken: string, refreshToken: string, user: User): void {
-    persistTokens({ accessToken, refreshToken, user });
+    void persistTokens({ accessToken, refreshToken, user });
 }
 
 /** Last-known user, for painting the shell while `/profile` is still in flight. */
-function readCachedUser(): User | null {
-    try {
-        const raw = localStorage.getItem('user');
-        return raw ? (JSON.parse(raw) as User) : null;
-    } catch {
-        return null;
-    }
-}
+const readCachedUser = (): User | null => getStoredUser<User>();
 
 /**
  * Turns a thrown error into something a person can act on.
@@ -52,7 +48,7 @@ function toUserMessage(err: unknown): Error {
  * used to seed `user` from `getMockLoginResponse()` and keep its mount effect
  * empty (`// BYPASS LOGIN`), which made `isAuthenticated` permanently true — any
  * route guard on top of it would have been decorative. It now hydrates from
- * `localStorage` and validates against `GET /api/auth/profile`.
+ * the session store (`lib/authSession`) and validates against `GET /api/auth/profile`.
  *
  * The offline-mock fallback was also removed from `login`/`register`. Everywhere
  * else in the app, falling back to fixtures on a network failure degrades a panel;
@@ -69,7 +65,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const [settings, setSettings] = useState<UserSettings | null>(null);
     // Starts true only when there's a token worth validating; otherwise the app is
     // immediately, knowably signed out and there is nothing to wait for.
-    const [loading, setLoading] = useState(() => !!localStorage.getItem('accessToken'));
+    // `main.tsx` loads the session before this first render, so the answer is already known.
+    const [loading, setLoading] = useState(() => !!getAccessToken());
 
     const logout = useCallback(async () => {
         try {
@@ -78,7 +75,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             // A failed logout call must not strand the user in a signed-in shell.
             console.error('Logout request failed; clearing local session anyway:', err);
         } finally {
-            clearSession();
+            void clearSession();
             setUser(null);
             setSettings(null);
         }
@@ -107,21 +104,24 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     /**
      * Another tab signed out, or signed in as someone else.
      *
-     * `storage` only fires in the *other* tabs, which is exactly what is wanted:
-     * the tab that acted already updated its own state. Without this, signing out
-     * in one tab leaves every other tab showing a workspace whose tokens are gone.
+     * The notice comes from `authSession`, not straight from the `storage` event:
+     * both would fire on the same event, and whichever listener happened to run
+     * first would decide whether React read the old token or the new one. The
+     * session module updates its copy and *then* tells us. It only reports other
+     * contexts' writes — this tab already updated its own state. Without this,
+     * signing out in one tab leaves every other tab showing a workspace whose
+     * tokens are gone.
      */
-    useEffect(() => {
-        const onStorage = (e: StorageEvent) => {
-            if (e.key !== null && e.key !== 'accessToken') return;
-            if (!getAccessToken()) {
-                setUser(null);
-                setSettings(null);
-            }
-        };
-        window.addEventListener('storage', onStorage);
-        return () => window.removeEventListener('storage', onStorage);
-    }, []);
+    useEffect(
+        () =>
+            onSessionChanged(() => {
+                if (!getAccessToken()) {
+                    setUser(null);
+                    setSettings(null);
+                }
+            }),
+        []
+    );
 
     // Validate the stored token once on mount. A cached user is shown meanwhile so
     // a reload doesn't flash an empty shell, but the server has the final say.
@@ -129,8 +129,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         let cancelled = false;
 
         const hydrate = async () => {
-            if (!localStorage.getItem('accessToken')) {
-                clearSession();
+            if (!getAccessToken()) {
+                void clearSession();
                 if (!cancelled) {
                     setUser(null);
                     setLoading(false);
@@ -143,7 +143,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 if (cancelled) return;
                 setUser(data.user);
                 setSettings(data.settings);
-                localStorage.setItem('user', JSON.stringify(data.user));
+                void setStoredUser(data.user);
             } catch (err) {
                 if (cancelled) return;
                 // A network blip is not proof the session is invalid — keep the
@@ -152,7 +152,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 if (isNetworkFailure(err)) {
                     console.warn('Could not verify session (server unreachable); keeping cached user.');
                 } else {
-                    clearSession();
+                    void clearSession();
                     setUser(null);
                     setSettings(null);
                 }
@@ -214,7 +214,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         try {
             const result = await authApi.updateProfile(data);
             setUser(result.user);
-            localStorage.setItem('user', JSON.stringify(result.user));
+            void setStoredUser(result.user);
         } catch (err: unknown) {
             console.error('Update profile error:', err);
             if (isMockEnabled() && isNetworkFailure(err)) {
