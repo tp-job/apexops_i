@@ -237,10 +237,11 @@
       "steps": [
         "checks/p2-sdk-parity.mjs: old vs new v1.js on the same page in Chrome, same scenario, all ingest requests diffed",
         "FAILURE CASE: one string changed in the new file → FAIL at the exact line",
-        "FAILURE CASE: hand edit to the committed file → drift test fails"
+        "FAILURE CASE: hand edit to the committed file → drift test fails",
+        "checks/sdk-e2e.mjs: generated v1.js on /sdk/test against the real server + DB, plus the regression → alert loop"
       ],
       "passes": true,
-      "notes": "VERIFIED 2026-09-20. Parity: 2 requests (fetch with X-Apexops-Key: 9 events; sendBeacon on unload: 1 event), identical apart from timestamps; same page errors. esbuild absWorkingDir is pinned: output embeds module paths, and a build from the repo root differed from one inside the package. Found when the drift test failed from root. Target es2018 (object spread native); v1 was ES5 by hand, which no supported browser needs. The spec's exit named /sdk/test and /sdk/demo. Those pages drive the same script against the real server, and the parity check replaces them with a stricter byte-level comparison. The full regression → alert loop on /sdk/test was not re-run."
+      "notes": "VERIFIED 2026-09-20. Parity: 2 requests (fetch with X-Apexops-Key: 9 events; sendBeacon on unload: 1 event), identical apart from timestamps; same page errors. esbuild absWorkingDir is pinned: output embeds module paths, and a build from the repo root differed from one inside the package. Found when the drift test failed from root. Target es2018 (object spread native); v1 was ES5 by hand, which no supported browser needs. END-TO-END 2026-09-20 (checks/sdk-e2e.mjs, driving the server's own /sdk/test page on the rig, project sprint2-demo): 14/14. The served v1.js is the generated one. The SDK's flush was accepted (202, 3 events). console.error, the uncaught TypeError and the unhandled rejection each landed on their own issue in Postgres (#332-#334). The page's loop ran all 7 steps: ingest → issue → resolve → recur (regressions: 1) → alert fired (unread 1 → 2) → reopened (reopenCount 1). FAILURE CASE: serving a v1.js that cannot read data-project gives 10/14, with no flush and all three counts unchanged. /sdk/demo was not run separately; it loads the same script the same way."
     },
     {
       "id": "P2-06",
