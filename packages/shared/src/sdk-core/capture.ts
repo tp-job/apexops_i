@@ -224,9 +224,10 @@ export function startCapture(
 
     // ── Batching ─────────────────────────────────────────────
     function buildBatch(): string | null {
-        let batch = queue.splice(0, MAX_BATCH_EVENTS);
-        if (!batch.length) return null;
+        const taken = queue.splice(0, MAX_BATCH_EVENTS);
+        if (!taken.length) return null;
 
+        let batch = taken;
         let body = JSON.stringify({ key: config.key, events: batch });
         // Halve until it fits rather than dropping the batch: an oversized
         // payload is a 413, and a 413 loses the crash.
@@ -234,6 +235,10 @@ export function startCapture(
             batch = batch.slice(0, Math.ceil(batch.length / 2));
             body = JSON.stringify({ key: config.key, events: batch });
         }
+        // What did not fit goes back to the front of the queue for the next
+        // flush. Until 2026-09-20 it was discarded — halving 40 large events
+        // sent 10 and silently lost 30, contrary to the comment above.
+        if (batch.length < taken.length) queue.unshift(...taken.slice(batch.length));
         return body;
     }
 

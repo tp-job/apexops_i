@@ -107,13 +107,15 @@
       blockedUntil = 0;
     }
     function buildBatch() {
-      let batch = queue.splice(0, MAX_BATCH_EVENTS);
-      if (!batch.length) return null;
+      const taken = queue.splice(0, MAX_BATCH_EVENTS);
+      if (!taken.length) return null;
+      let batch = taken;
       let body = JSON.stringify({ key: config.key, events: batch });
       while (body.length > MAX_BATCH_BYTES && batch.length > 1) {
         batch = batch.slice(0, Math.ceil(batch.length / 2));
         body = JSON.stringify({ key: config.key, events: batch });
       }
+      if (batch.length < taken.length) queue.unshift(...taken.slice(batch.length));
       return body;
     }
     const flush = safely((isUnload) => {

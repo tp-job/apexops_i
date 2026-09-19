@@ -275,4 +275,21 @@ describe('transport', () => {
 
         expect(t.sent[0].body.length).toBeLessThanOrEqual(MAX_BATCH_BYTES);
     });
+
+    it('keeps what did not fit in a halved batch for the next flush', () => {
+        // v1.js as shipped up to 2026-09-20 spliced up to 100 events out of the
+        // queue, halved the batch until it fit, and discarded the rest: of these
+        // 40 events, 10 were sent and 30 were silently lost.
+        const h = fakeHost();
+        const t = fakeTransport();
+        const cap = startCapture(config(), t.transport, h.host);
+        const big = 'x'.repeat(4000);
+        for (let i = 0; i < 40; i++) h.console.error(`${i} ${big}`);
+
+        for (let i = 0; i < 5; i++) cap.flush(false);
+
+        const numbers = t.events().map((e) => Number(e.message.split(' ')[0]));
+        expect(numbers).toEqual(Array.from({ length: 40 }, (_, i) => i));
+        t.sent.forEach((s) => expect(s.body.length).toBeLessThanOrEqual(MAX_BATCH_BYTES));
+    });
 });
