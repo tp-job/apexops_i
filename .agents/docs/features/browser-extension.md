@@ -3,6 +3,10 @@
 **สถานะ: แผนเท่านั้น ยังไม่มีการแก้โค้ด** — เขียน 2026-09-18 ตรวจกับ `main` ที่ `212c88b`
 ทุกข้อที่อ้างไฟล์ด้านล่างเปิดดูจริงแล้ว ข้อที่ยังไม่ได้ยืนยันเขียนกำกับว่า "ยังไม่ยืนยัน"
 
+> **แก้ขอบเขต 2026-09-19 (ตรวจกับ `08e3a85`):** UI หลักของ extension เปลี่ยนจาก popup เป็น **Floating Toolbar / Menu
+> บนหน้าเว็บที่กำลัง test** และเชื่อมกับ web app ด้วยการ **วาง URL ของ project** (`<web app>/p/<slug>/...`)
+> ส่วนที่เปลี่ยนอยู่ใน **ข้อ 8** — ข้อ 1–7 ยังใช้ได้ ยกเว้น P4 ถูกแทนด้วย P4/P5 ใหม่ และเลข phase หลังจากนั้นเลื่อน
+
 **เป้าหมาย:** มีทั้ง web app (`app/client` ตัวเดิม) และ browser extension (Chrome/Edge ก่อน, Firefox ตามมา)
 โดยใช้โค้ดชุดเดียวกันสำหรับ auth, API client, types และตัวดักจับ console ไม่ copy แยกสองชุด
 
@@ -224,4 +228,202 @@ F13 (refresh ข้าม context) และ F11 (ไม่มี storage ไฟ
 ## 7. คำถามที่ยังเปิดอยู่
 1. X7 screenshot เก็บที่ไหน — ใน Postgres (สอดคล้องกับ source map) หรือ object storage (ถ้าจะ deploy จริงในไม่ช้า)
 2. Extension จะใช้แค่ในทีม (โหลดแบบ unpacked / Edge ไม่ผ่าน store) หรือขึ้น Chrome Web Store สาธารณะ — กำหนดความเข้มของ P6
-3. Server URL ค่าเริ่มต้นของ extension คืออะไร (ตอนนี้มีแค่ `localhost:3000` ซึ่งชนกับโปรเจกต์อื่นบนเครื่องนี้)
+3. ~~Server URL ค่าเริ่มต้นของ extension คืออะไร~~ — ตอบแล้วใน X11: ไม่มีค่าเริ่มต้น ได้มาจาก URL ของ project ที่วาง
+
+---
+
+## 8. แก้ขอบเขต 2026-09-19 — Floating Toolbar + เชื่อมด้วย URL ของ project
+
+### 8.1 เป้าหมาย (goal)
+
+ผู้ใช้เปิดเว็บที่กำลัง test (เช่น `http://localhost:5174`) → กดปุ่มลอยของ ApexOps → **วาง URL ของ project จาก web app**
+(เช่น `http://localhost:5173/p/checkout-web/issues`) → login ครั้งเดียว → จากนั้นทุกครั้งที่เปิดเว็บนั้น
+toolbar รู้เองว่าเป็น project ไหน ดักจับ error ส่งเข้า project นั้น และสร้าง ticket / ดู issue / สลับ project ได้**จากหน้าเว็บที่ test เลย**
+โดยไม่ต้องสลับไป tab ของ ApexOps
+
+**พิสูจน์ว่าเสร็จด้วย** (สังเกตได้ทั้งหมด ไม่ใช่ "implement แล้ว"):
+1. เว็บที่ยังไม่ผูก → ไม่มี toolbar, ไม่มี content script (DevTools → Sources → Content scripts ว่าง)
+2. วาง URL `/p/<slug>/...` ของ project ที่ตัวเองเป็น member → ผูกสำเร็จ **โดยไม่ต้องกรอก ingest key หรือ API URL เอง**
+3. วาง URL ของ project ที่ไม่ใช่ member → ข้อความ "ไม่มีสิทธิ์ใน project นี้" (จาก 404 ของ `GET /api/projects/:slug`) ไม่ผูก
+4. reload เว็บที่ผูกแล้ว → toolbar ขึ้นพร้อมชื่อ project, `console.error("x")` → issue ขึ้นใน `/p/<slug>/issues` ภายใน ~5 วินาที
+5. สร้าง ticket จาก toolbar → ขึ้นใน `/p/<slug>/board` พร้อม URL หน้า (ไม่มี query/hash) และ title ของ tab
+6. สลับ project จาก toolbar → event ถัดไปเข้า project ใหม่ ไม่เข้าตัวเก่า
+7. script ของหน้าเว็บ **อ่านข้อมูลใน panel ไม่ได้**: `document.querySelectorAll('*')` และ `attachShadow` ที่ถูก patch ไว้ก่อน ไม่เห็นชื่อ issue / token / ingest key
+8. toolbar ลากย้ายได้, ซ่อนได้ต่อเว็บ, ตำแหน่งจำต่อ origin, เปิด/ปิดด้วย `Alt+Shift+A`, ไม่บัง UI ของเว็บ (มุมล่างขวาเป็นค่าเริ่มต้น)
+
+### 8.2 สิ่งที่พบเพิ่ม (ตรวจกับ `08e3a85`)
+
+| # | สิ่งที่พบ | ที่ไหน | ผลต่อแผน |
+|---|---|---|---|
+| F17 | `GET /api/projects/:slug` คืน **`ingestKey` + `allowedOrigins` + role** ให้ทุก member (ไม่ใช่ member = 404) | `api/projects.ts:36-44, 191` | ผูกด้วย URL แล้ว extension ได้ ingest key เอง **ผู้ใช้ไม่ต้องคัดลอก key** — X4 เดิม (กรอก key ใน options) ถูกแทน |
+| F18 | Route ของ project คือ `/p/:slug/{overview,issues,issues/:id,board,settings,members}` | `routes/AppRoutes.tsx:84-107` | parse slug จาก path ได้ด้วย regex เดียว `^/p/([a-z0-9-]+)(/|$)` |
+| F19 | URL ของ web app **ไม่บอก API URL** (client :5173, API :3000 มาจาก `VITE_API_URL` ตอน build) และ `app/client/public/` มีแค่ `vite.svg` | `api/config.ts:6`, `app/client/public/` | ต้องมีไฟล์ discovery ที่ web app เสิร์ฟ → X11 |
+| F20 | CORS หลักตรึงไว้ที่ origin ของ frontend, `allowedHeaders` มีแค่ `Content-Type, Authorization` | `server.ts:45-50` | **content script เรียก API ไม่ได้** (โดน CORS ของหน้าเว็บ) ทุก call ต้องผ่าน service worker / หน้า extension ซึ่งได้รับยกเว้น CORS เมื่อมี host permission ของ API — ห้ามขยาย CORS ของ server เพื่อ extension |
+| F21 | Issue list กรองได้แค่ `level/status/q/since` — **ไม่มีกรองตาม URL หน้า** และ `Issue` ไม่มี field url | `schemas/issue.schema.ts:13-24`, `schema.prisma` model `Issue` | "issue ของหน้านี้" ต้องมี endpoint ใหม่ → ไม่อยู่ใน v1 (ดู 8.6) toolbar v1 แสดง issue ล่าสุดของ project |
+| F22 | Refresh token มี reuse detection + grace 10s และแถวที่ rotate แล้วเป็น tombstone | `lib/sessions.ts`, memory auth-hardening | session ของ extension ต้องเป็น **session แยก** (login ของตัวเอง) ห้ามยืม refresh token จาก web app — ไม่งั้นการ refresh ข้ามกันจะถูกนับเป็นการขโมย |
+
+### 8.3 การตัดสินใจใหม่
+
+| # | คำถาม | แนะนำ | เหตุผล |
+|---|---|---|---|
+| **X10** | Toolbar render อย่างไร | **ปุ่มลอย (launcher) ใน Shadow DOM ที่ไม่มีข้อมูลใดๆ** + **panel เป็น `<iframe src="chrome-extension://…/toolbar.html">`** ข้อมูลทั้งหมด (issue, ชื่อ project, token) อยู่ใน iframe เท่านั้น | script ของหน้าเว็บอ่าน open shadow root ได้ และ patch `attachShadow` ก่อนเราเพื่อได้ closed root ได้ — shadow DOM **ไม่ใช่ขอบเขตความปลอดภัย** iframe ต่าง origin เป็น ขอบเขตจริง (R16) |
+| **X11** | ได้ API URL จาก URL ของ web app อย่างไร | web app เสิร์ฟ **`/apexops.json`** = `{ "apiUrl": "...", "app": "apexops", "v": 1 }` สร้างตอน build จาก `VITE_API_URL`; ถ้า 404 → ให้กรอก API URL เอง (สำหรับ deploy เก่า) | ผู้ใช้วางแค่ลิงก์ที่มีอยู่แล้วบน address bar ไม่ต้องรู้ว่า API อยู่ port ไหน |
+| **X12** | "ผูก" คืออะไร | **1 origin ของเว็บที่ test → 1 project** เก็บใน `chrome.storage.local` `bindings[origin] = { apiUrl, appUrl, slug, projectId, name }` การผูก = ขอ host permission ของ origin นั้น + `registerContentScripts` (capture + toolbar) | origin เดียวกันคือเว็บเดียวกันใน test; ผูกหลาย project ต่อ origin = ต้องถามทุกครั้งว่า event ไปไหน |
+| **X13** | ingest key มาจากไหน | ดึงจาก `GET /api/projects/:slug` ตอนผูก เก็บใน binding; ingest ตอบ **401/403 → ดึงใหม่ครั้งเดียว** (รองรับ rotate-key) แล้วค่อยแจ้ง error ใน toolbar | F17; ลบช่อง "ingest key" ออกจาก options page ของ P3 |
+| **X14** | Web app ต้องเพิ่มอะไร | (1) `/apexops.json` (2) การ์ด **"Connect browser extension"** ใน `/p/:slug/settings`: ปุ่มคัดลอก URL ของ project + ขั้นตอน 3 ข้อ + extension ID สำหรับใส่ allowlist (R6) — **ไม่ทำ** `externally_connectable` ใน v1 | `externally_connectable` ต้องระบุ origin ของ web app ตอน build แต่ ApexOps เป็น self-host origin ไม่รู้ล่วงหน้า; วาง URL ใช้ได้กับทุก deploy |
+| **X15** | Popup เหลือทำอะไร | popup = **สถานะ + login/logout + รายการเว็บที่ผูกไว้ (ยกเลิกผูกได้)** งานประจำวันทั้งหมดอยู่ที่ toolbar | ผู้ใช้อยู่บนเว็บที่ test อยู่แล้ว ไม่ต้องเปิด popup; แต่ต้องมีที่ยกเลิกผูก/ดู session ที่ไม่ขึ้นกับเว็บใดเว็บหนึ่ง |
+| **X16** | ผูกเว็บครั้งแรกเริ่มจากไหน | กดไอคอน extension (ได้ `activeTab`) → popup ปุ่ม **"Connect this site"** → ขอ permission ของ origin → inject toolbar แบบ one-shot → panel ขึ้นหน้าช่องวาง URL | ก่อนผูกยังไม่มี host permission จึงยังไม่มี toolbar ให้กด — จุดเริ่มต้องเป็น action ของ browser |
+
+### 8.4 สถาปัตยกรรมที่เปลี่ยน (เพิ่มจากข้อ 3)
+
+```
+app/extension/entrypoints/
+  background.ts        เดิม + เจ้าของ bindings, เรียก API แทน panel ทุก call (F20)
+  capture.main.ts      เดิม
+  bridge.content.ts    เดิม
+  toolbar.content.ts   ใหม่ ISOLATED: สร้าง launcher (shadow DOM, ไม่มีข้อมูล) + ใส่/ถอด iframe panel, ลาก, จำตำแหน่ง
+  toolbar/             ใหม่ หน้า extension (React) ใน iframe: connect-by-URL, project, issue ล่าสุด, Report bug, สลับ project
+  popup/               เล็กลง ตาม X15
+app/client/
+  public/apexops.json  ใหม่ (หรือ plugin ของ Vite เขียนตอน build) — X11
+  pages/ProjectSettings.tsx  + การ์ด Connect browser extension — X14
+```
+
+**เส้นทางคำสั่งจาก panel:** `toolbar.html` (extension origin) ─ `chrome.runtime.sendMessage` ─▶ SW ─ fetch API
+panel **ไม่คุยกับหน้าเว็บ** นอกจากข้อความ UI ล้วน (`resize`, `close`) ผ่าน `postMessage` ที่ตรวจ `event.origin`
+และ **ไม่ส่ง** ข้อมูลใดๆ กลับเข้าหน้าเว็บ — กฎของ bridge ในข้อ 3 ยังใช้: ไม่มีเส้นทางจากหน้าเว็บไปถึง JWT
+
+**manifest ที่เพิ่ม:** `web_accessible_resources: [{ resources: ["toolbar.html"], matches: <origin ที่ผูก>, use_dynamic_url: true }]`
+(`use_dynamic_url` ลดการที่เว็บตรวจเจอ extension), `commands` สำหรับ `Alt+Shift+A`
+
+### 8.5 Phases ที่ปรับ (P0–P3 เดิมคงไว้)
+
+**P0 เพิ่ม** (+0.5 วัน): **spike CSP ของ iframe** — ฉีด iframe `chrome-extension://` ลงในหน้าที่ตั้ง `frame-src 'self'` และ
+`default-src 'self'` แล้วดูว่า Chrome/Edge โหลดหรือไม่ **ยังไม่ยืนยัน** — ถ้าโหลดไม่ได้ X10 ต้องเปลี่ยนเป็น side panel (`chrome.sidePanel`)
+สำหรับเว็บที่ CSP เข้ม ซึ่งเปลี่ยนงาน P5 ทั้งหมด จึงต้องรู้ก่อนเริ่ม
+
+**P3 แก้:** options page เหลือแค่การตั้งค่าทั่วไป ไม่มีช่อง server URL / ingest key / รายชื่อ origin (ย้ายไปอยู่ใน binding)
+P3 ทดสอบด้วย binding ที่เขียนลง storage ด้วยมือได้
+
+**P4 ใหม่ — Connect ด้วย URL + login + binding (2 วัน)** · branch `ext/p4-connect`
+1. web app: `/apexops.json` (X11) + การ์ดใน ProjectSettings (X14)
+2. SW: login (session แยก F22), refresh เป็นของ SW คนเดียว (X2), header `X-Apexops-Client`
+3. parse URL → fetch `/apexops.json` → ขอ host permission ของ API → login ถ้ายังไม่มี session ของ server นั้น → `GET /api/projects/:slug` → เขียน binding → register content scripts
+4. popup ตาม X15/X16
+5. ingest 401/403 → ดึง key ใหม่ครั้งเดียว (X13)
+
+**ปิด phase เมื่อ:** ข้อ 1, 2, 3, 6 ของ 8.1 ผ่าน · rotate key จากเว็บแล้ว event ถัดไปยังเข้า · ยกเลิกผูกจาก popup → reload แล้วไม่มี content script ·
+revoke session ของ extension จากหน้า Settings → call ถัดไปเด้งไปหน้า login ใน panel
+
+**P5 ใหม่ — Floating Toolbar (2–2.5 วัน)** · branch `ext/p5-toolbar`
+1. launcher + iframe panel ตาม X10, ลาก/dock มุม, จำตำแหน่งต่อ origin, ซ่อนต่อเว็บ, `Alt+Shift+A`
+2. panel: ชื่อ project + ลิงก์เปิดใน web app, จำนวน event ที่ส่งจาก tab นี้, issue ล่าสุด 10 อัน (`GET /api/projects/:slug/issues?status=unresolved&since=24`) ลิงก์ไป `/p/:slug/issues/:id`
+3. **Report bug** จาก panel → `POST /api/tickets` (`projectId`, URL ตัด query/hash, title ของ tab, ข้อความ)
+4. **สลับ project**: วาง URL ใหม่ หรือเลือกจาก `GET /api/projects`
+5. badge ของไอคอน = issue ใหม่ (alarms ตาม X6) ต่อ project ของ tab ที่ active
+6. z-index สูงสุด, `all: initial` บน host, ไม่รับ keyboard focus จนกว่าจะเปิด panel, เคารพ `prefers-reduced-motion`, ใช้ token สีของ Luxe design system ทั้ง light/dark
+
+**ปิด phase เมื่อ:** ข้อ 4, 5, 7, 8 ของ 8.1 ผ่าน · เว็บที่มี `position: fixed` ที่มุมขวาล่าง ลาก toolbar ออกได้ · หน้าเว็บที่ throw ตลอดเวลาไม่ทำให้ panel ค้าง ·
+ui-checker ผ่าน contrast AA ทั้ง light/dark
+
+**P6** = P5 screenshot เดิม (ปุ่มอยู่ใน panel แทน popup) · **P7** = P6 packaging เดิม
+
+| Phase | วัน |
+|---|---|
+| P0 + spike CSP iframe | 1 |
+| P1 auth/storage ใน client | 1–1.5 |
+| P2 shared package | 1–1.5 |
+| P3 ดักจับ error | 2 |
+| P4 connect ด้วย URL + binding | 2 |
+| P5 floating toolbar | 2–2.5 |
+| P6 screenshot (มีเงื่อนไข) | 1–1.5 |
+| P7 packaging | 1 |
+| **รวม** | **11–13 วัน** (ไม่รวม P6 = 10–11.5) |
+
+เพิ่มจากแผนเดิม ~2.5–3 วัน: spike (0.5), การ์ด + discovery ใน web app (0.5), toolbar แทน popup (1.5–2)
+ถ้าต้องตัด: P6 ก่อน, จากนั้นการลาก/dock (ให้อยู่มุมขวาล่างอย่างเดียว) — **ห้ามตัด X10 iframe** เพื่อความเร็ว
+
+### 8.6 ความเสี่ยงเพิ่ม
+
+| # | ความเสี่ยง | โอกาส | ความเสียหาย | ป้องกัน |
+|---|---|---|---|---|
+| **R16** | ใส่ข้อมูลใน shadow DOM แทน iframe → script ของเว็บ (หรือ third-party script บนเว็บนั้น) อ่านชื่อ issue / stack / ingest key ของ project อื่นได้ | สูง ถ้าเลือกทางง่าย | สูง | X10; เงื่อนไขปิดข้อ 7 ของ 8.1 เป็น test ที่ลองโจมตีจริง |
+| **R17** | CSP ของเว็บบล็อก iframe ของ extension → toolbar ว่างเปล่า | ยังไม่รู้ | สูง | spike ใน P0; fallback = `chrome.sidePanel` |
+| **R18** | Clickjacking: เว็บวาง element โปร่งใสทับ panel หลอกให้กด Report/Unbind | ต่ำ | ต่ำ | action ที่ย้อนไม่ได้ (unbind, logout) ทำใน popup เท่านั้น ไม่อยู่ใน panel |
+| **R19** | ผู้ใช้วาง URL ของ web app ปลอม → `/apexops.json` ชี้ `apiUrl` ไปเครื่องคนอื่น → password ถูกส่งไปที่นั้น | ต่ำ | สูงมาก | หน้า login ของ panel แสดง **host ของ API ตัวใหญ่** ก่อนกรอก; ยืนยันครั้งแรกต่อ API host; `apiUrl` ต้องเป็น https ยกเว้น `localhost`/`127.0.0.1` |
+| **R20** | toolbar บัง UI ของเว็บที่ test จนผลการ test เพี้ยน (เช่น e2e ที่กดมุมขวาล่าง) | กลาง | ต่ำ | ลากได้, ซ่อนต่อเว็บ, และไม่ inject ใน tab ที่เปิดโดย automation (`navigator.webdriver`) |
+
+### 8.7 ไม่ทำใน v1.1
+- "issue ของหน้านี้" (กรองตาม URL, F21) — ต้องมี endpoint ใหม่ที่ join `Event` ตาม url; ทำหลัง P5 ถ้าต้องการ
+- `externally_connectable` ปุ่ม connect คลิกเดียวจาก web app (X14)
+- ผูกหลาย project ต่อ origin / ผูกตาม path
+- แก้ไข issue/ticket ใน panel (เปิด web app แทน เหมือนเดิม)
+
+### 8.8 คำถามที่ต้องให้ผู้ใช้ตอบก่อน P0 จะปิด
+1. **"เพิ่ม URL เพื่อเลือก Project"** ตีความเป็น **วาง URL ของ project ใน ApexOps → ผูกกับเว็บที่ test** (X11+X12) ใช่หรือไม่
+   ถ้าหมายถึงอย่างอื่น (เช่น กรอก URL ของเว็บที่ test ในหน้า Project Settings ของ web app แล้ว extension ดึงไปเอง) X12 และ P4 เปลี่ยน
+2. **ในเมนูลอยต้องมีอะไรบ้าง** — ข้อความข้อ 3 ของคำขอถูกตัดไป; ร่างตาม P5 ข้อ 2–5 คือ project, issue ล่าสุด, Report bug, สลับ project, badge
+3. ใช้ในทีม (unpacked) หรือขึ้น Store สาธารณะ (คำถามเดิมข้อ 2) — กำหนดความเข้มของ P7 และ R19
+
+---
+
+## 9. ดีไซน์ Toolbar ที่ล็อกแล้ว (2026-09-19)
+
+![Floating toolbar](assets/browser-extension-toolbar.png)
+
+ผู้ใช้ส่งดีไซน์มา 2026-09-19 และบอกว่า "It's all set" เป็นแถบแนวตั้งสีขาวทรงแคปซูล มีเครื่องมือ 12 ชิ้น ชิ้นที่ active เป็นสีม่วง
+ใต้แถบมีปุ่มกลม 3 ปุ่มแยกออกมา **ดีไซน์นี้ตอบคำถาม 8.8 ข้อ 2 แล้ว และทำให้ขอบเขตของ toolbar เปลี่ยน:**
+เมนูใน 8.5 P5 ที่ร่างไว้ (issue ล่าสุด, Report bug, สลับ project) **ไม่มีในดีไซน์** สิ่งที่อยู่ในดีไซน์คือเครื่องมือตรวจ UI บนหน้าเว็บ
+
+### 9.1 ความหมายของแต่ละไอคอน (ผมอ่านเอง — **รอผู้ใช้ยืนยัน**)
+
+| # | ไอคอน | เครื่องมือ | ทำอะไรบนหน้าเว็บ |
+|---|---|---|---|
+| 1 | ไม้บรรทัด (active) | Guides | เส้นไกด์ + วัดระยะห่างระหว่าง element เป็น px |
+| 2 | ⓘ | Inspect | hover แล้วเห็นขนาด, font, สี, spacing (computed style) |
+| 3 | คน | Accessibility | contrast ratio, role, aria-*, alt ของ element |
+| 4 | ลูกศร 4 ทิศ | Move | ย้ายลำดับ element ใน DOM ด้วยลูกศร |
+| 5 | สี่เหลี่ยมเส้นประซ้อน | Margin | ดู/ปรับ margin ด้วยคีย์บอร์ด |
+| 6 | สี่เหลี่ยมมีกรอบใน | Padding | ดู/ปรับ padding |
+| 7 | แท่งชิดซ้าย | Flex align | ปรับ justify/align ของ flex container |
+| 8 | สี่เพชร | Position | ลาก element ด้วย `position` + offset |
+| 9 | จานสี | Hue shift | ปรับ hue/saturation/lightness ของสี |
+| 10 | วงกลมครึ่งมืด | Shadow / contrast | ปรับ box-shadow (หรือสลับ light/dark — ต้องยืนยัน) |
+| 11 | tT | Font styles | ขนาด, weight, line-height, letter-spacing |
+| 12 | ดินสอ | Text edit | แก้ข้อความบนหน้าได้ตรงๆ |
+| 13 | แว่นขยาย | Search | หา element ด้วย selector |
+| A | ปุ่มกลม "A" | Text color | สีตัวอักษรของ element ที่เลือก |
+| B | ปุ่มกลมถังสี | Background color | สีพื้นหลัง |
+| C | ปุ่มกลมดินสอ | Border color | สีเส้นขอบ |
+
+ชุดเครื่องมือและลำดับนี้ **เหมือน VisBug** (GoogleChromeLabs/ProjectVisBug, Apache-2.0) เกือบทุกชิ้น ซึ่งทำให้เกิด X17
+
+### 9.2 ผลต่อสถาปัตยกรรม
+
+- **เครื่องมือต้องทำงานใน DOM ของหน้าเว็บจริง** (วัด, ย้าย, แก้สไตล์) จึงอยู่ใน content script ไม่ใช่ใน iframe
+- **X10 ยังใช้ได้ แต่ขอบเขตชัดขึ้น:** ตัว rail และ overlay อยู่ใน Shadow DOM ได้ เพราะ**ไม่มีข้อมูลของ ApexOps**
+  (มีแค่สิ่งที่หน้าเว็บมีอยู่แล้ว) ส่วนข้อมูลของ ApexOps (login, project, ingest key, issue) ยังต้องอยู่ใน **iframe panel เท่านั้น**
+- การแก้ไขด้วยเครื่องมือ **ไม่ถาวร** reload แล้วหาย ไม่ต้องมี backend
+- Tool ที่ active จับ event ของ mouse/keyboard บนหน้า → ต้องมีปุ่ม `Esc` ปิดเครื่องมือเสมอ และห้ามดัก event ตอนไม่มี tool ไหน active (R20)
+
+### 9.3 การตัดสินใจใหม่
+
+| # | คำถาม | แนะนำ | เหตุผล |
+|---|---|---|---|
+| **X17** | สร้างเครื่องมือ 16 ชิ้นเองหรือใช้ VisBug | **ใช้โค้ด VisBug (Apache-2.0) เป็นฐาน** เก็บ LICENSE + NOTICE, ห่อด้วยตัว rail และ theme ของเรา | สร้างเองประเมิน **12–14 วัน** ใช้ฐาน VisBug ประเมิน **3–4 วัน** · **ยังไม่ยืนยัน:** VisBug ยัง maintain อยู่หรือไม่, ทำงานกับ MV3 + WXT ได้ตรงๆ หรือไม่ → ตรวจใน spike P0 |
+| **X18** | Toolbar ต่อกับ ApexOps ตรงไหน | เพิ่ม **ปุ่มโลโก้ ApexOps ด้านบนสุดของ rail** เปิด iframe panel (connect ด้วย URL, project, Report bug) และ **Report bug แนบ element ที่เลือกอยู่**: selector, ขนาด, computed style หลัก และรายการสไตล์ที่แก้ด้วยเครื่องมือ | ดีไซน์ไม่มีจุดเชื่อม ApexOps; การรายงาน UI bug พร้อมรายละเอียด element คือเหตุผลที่เครื่องมือตรวจ UI ควรอยู่ใน extension ของ ApexOps |
+
+### 9.4 Phases ที่ปรับ
+
+P5 แยกเป็นสองส่วน (แต่ละส่วนเป็น branch ของตัวเอง):
+
+- **P5a — Rail + ApexOps panel (2 วัน)** · `ext/p5a-rail` — rail ตามดีไซน์, ลาก/จำตำแหน่ง/ซ่อน, `Alt+Shift+A`, `Esc`, ปุ่ม ApexOps → iframe panel (connect, project, issue ล่าสุด, Report bug)
+- **P5b — เครื่องมือตรวจ UI** · `ext/p5b-tools` — **3–4 วัน** ถ้าใช้ฐาน VisBug (X17) หรือ **12–14 วัน** ถ้าสร้างเอง
+  ลำดับถ้าสร้างเอง: Inspect → Guides → Accessibility → สี A/B/C → Font → Margin/Padding → ที่เหลือ
+- **Report bug + element (X18)** อยู่ปลาย P5b (+0.5 วัน)
+
+**ปิด P5b เมื่อ:** แต่ละเครื่องมือใช้ได้บนหน้าทดสอบที่มี flex, grid, `position: fixed`, iframe และ Shadow DOM ของเว็บเอง ·
+`Esc` ปิดทุกเครื่องมือ · ตอนไม่มีเครื่องมือ active คลิกบนหน้าเว็บทำงานปกติ · reload แล้วสไตล์ที่แก้หายหมด ·
+ticket ที่ Report จาก element มี selector ที่ `document.querySelector` หา element เดิมเจอ
+
+**ประมาณการรวมใหม่:** 14.5–17.5 วันถ้าใช้ฐาน VisBug · 23.5–27.5 วันถ้าสร้างเอง (รวม P6 screenshot)
