@@ -1,0 +1,162 @@
+{
+  "build": "auth security hardening — phases 2-4, branch auth/security-hardening",
+  "spec": "build-spec.md",
+  "features": [
+    {
+      "id": "P2-01",
+      "title": "Register no longer reveals whether an email exists",
+      "priority": "critical",
+      "depends_on": [],
+      "description": "POST /register answers identically whether the email is new or already taken.",
+      "steps": [
+        "Register a brand-new email: succeeds normally, unaffected by this change",
+        "Register an email that already has an account: response status and body shape match some other non-oracle rejection, not a distinct 'already registered' message",
+        "FAILURE CASE: grep the response body for the literal string 'already registered' after the fix — must not appear"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-06 (dated by the branch/session, ignore the calendar). AMENDED before coding: registerSchema's own .refine already requires a name, so the handler's if(!first) branch is dead code the validator pre-empts — duplicate-email is the ONLY real post-validation rejection, and register mints a token synchronously on success, so full response-parity between new/taken email is not achievable without deferring account creation behind email verification (out of scope, needs a client change). Shipped the achievable reduction instead: the message no longer contains 'registered' or names the reason; both the duplicate-email branch and the now-dead name-check branch return the identical string. RESIDUAL RISK, stated not hidden: status 400 vs 201 still distinguishes the two cases by itself; the per-IP register limiter (5/15min) is the remaining defence. Observed live: POST /register with admin@apexops.com's email -> 400 generic message; a fresh email -> 201 as before. Probe account deleted after."
+    },
+    {
+      "id": "P2-02",
+      "title": "Login gives one answer for wrong-password, deactivated, and unknown-email",
+      "priority": "critical",
+      "depends_on": [],
+      "description": "The pre-auth response to POST /login must not distinguish a deactivated account from a wrong password or a nonexistent user.",
+      "steps": [
+        "Unknown email -> 401 generic (already correct, unchanged)",
+        "Known email, wrong password -> 401 generic (already correct, unchanged)",
+        "Known email, correct password, isActive=false -> SAME 401 generic, not 403 'deactivated'",
+        "Known email, WRONG password, isActive=false -> SAME 401 generic (both branches collapse to one)",
+        "FAILURE CASE: reintroduce the pre-password-check 403 branch and show a test names the regression, then revert"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-06, live against the running server, not just unit-tested. Deactivated dev.user (id 7), then: correct password -> 401 'Invalid email or password'; wrong password -> same 401 same message; unknown email -> same 401 same message. All three identical. Extracted the boolean decision to lib/loginAdmit.ts (7 tests) for the ok/not-ok logic, but that type CANNOT represent the actual historical bug (a status/message divergence, not a wrong admit decision) — a mutation on it passed when it should have failed, caught before trusting it. The real failure case was reproduced at the route: temporarily reintroduced the pre-password 403 branch, confirmed BOTH correct-password and wrong-password on the deactivated account answered 403 'Account is deactivated' (divergent from 401), then reverted and confirmed the fixed code answers 401 identically for both again. dev.user reactivated afterward and logs in normally."
+    },
+    {
+      "id": "P2-03",
+      "title": "The eight remaining 500s stop returning err.message",
+      "priority": "high",
+      "depends_on": [],
+      "description": "GET /profile, PUT /profile, PUT /settings, PUT /password, POST /refresh, GET /sessions, DELETE /sessions/:id, POST /sessions/revoke-all each answer a fixed sentence on 500, matching the pattern already applied to /login, /register and /logout.",
+      "steps": [
+        "For each of the 8 endpoints, force a throw (e.g. a bad DB call) and confirm the response body carries no file path, no query text, no Prisma error shape",
+        "console.error still logs the real error server-side for each",
+        "The fixed sentence is specific enough to be useful ('Failed to update settings', not a shared generic string) so an operator reading a bug report can tell which endpoint failed"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-06. All 8 endpoints (recount from build-spec, not the original review's undercounted 5) confirmed by grep: zero remaining `err.message` returns to the caller in api/auth.ts outside two explanatory comments. console.error preserved on every path (was already present for all 8). Each fallback string was already endpoint-specific in the source (e.g. 'Failed to update settings'), so the fix is exactly 'drop err.message ||', no new string authored. Spot-checked live: a garbage refresh token on POST /refresh answers 401 'Invalid or expired refresh token', not a Prisma/JWT internal string."
+    },
+    {
+      "id": "P2-04",
+      "title": "Gate: server clean, no client change",
+      "priority": "high",
+      "depends_on": [
+        "P2-01",
+        "P2-02",
+        "P2-03"
+      ],
+      "description": "tsc, vitest, build all clean in the server workspace; client untouched by this phase.",
+      "steps": [
+        "cd app/server && npx tsc --noEmit",
+        "npm run test",
+        "npm run build",
+        "git diff --stat shows no app/client/* changes"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-06. Server: tsc --noEmit clean, vitest 138/138 (up from 131 at branch-open: +7 loginAdmit tests), npm run build clean. git diff --stat -- app/client/ is empty — confirmed no client files touched by this phase."
+    },
+    {
+      "id": "P3-01",
+      "title": "RefreshToken gains family + rotatedAt; issueSession carries family forward",
+      "priority": "critical",
+      "depends_on": [],
+      "description": "Additive schema change: family (UUID, stamped at login, carried through every rotation like absoluteExpiresAt already is) and rotatedAt (null = current row, set = tombstoned by a rotation).",
+      "steps": [
+        "prisma migrate diff / db push preview shows a purely additive change: two new nullable-safe columns, no DROP",
+        "A brand-new login stamps a fresh family UUID",
+        "issueSession accepts an optional carry-forward family, exactly mirroring how it already accepts carryAbsoluteExpiry",
+        "server typecheck green"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-06. prisma migrate diff --script confirmed additive-only (2 nullable columns + 1 index, zero DROP) before db push. issueSession's 4th param carryFamily mirrors carryAbsoluteExpiry exactly; a fresh login stamps randomUUID(), a rotation passes the prior row's family through. tsc --noEmit clean."
+    },
+    {
+      "id": "P3-02",
+      "title": "Rotation tombstones instead of deleting; reuse revokes the family and emails the account",
+      "priority": "critical",
+      "depends_on": [
+        "P3-01"
+      ],
+      "description": "POST /refresh: a live token rotates as before but sets rotatedAt on the old row instead of deleting it; a token whose row is already rotatedAt-set is a reuse — deletes every row in that family and sends a security email.",
+      "steps": [
+        "Normal rotation: caller-visible behaviour unchanged, old row survives in the DB with rotatedAt set and the same family as the new row",
+        "FAILURE CASE: rotate A->B, then present A again -> generic 401, and the family's rows (including B) are gone from the table",
+        "Presenting a token that never existed answers the identical 401 body/status as the reuse case",
+        "Ordinary idle/absolute expiry unaffected",
+        "An email is dispatched to the account's address on detected reuse, observable via the mail driver's dev output; dispatch never throws into the request"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-06, live against the running server. Logged in, rotated A->B via POST /refresh, then replayed A: both the never-existed-token control and the reuse replay answered the identical `401 {\"error\":\"Invalid or expired refresh token\"}`; the still-legitimate token B (rotated to, never itself replayed) was also revoked as part of the family delete, confirmed by presenting it afterward and getting the same 401. Server log showed `[security] refresh token reuse detected — revoked 2 session(s) in family <uuid> for user 7`. Console mail driver showed the sessionReuseEmail dispatched to dev.user@apexops.local, subject 'ApexOps: you were signed out of every device'. DB inspection confirmed the reused family's rows were gone while an untouched, still-active family from an earlier legitimate rotation chain was intact. Also caught and fixed mid-build (not pre-scoped): GET /sessions was missing `rotatedAt: null` in its where clause, which would have let tombstoned rows reappear as phantom active sessions — added the filter and verified live that the session count is unchanged immediately after a rotation (6 before, 6 after, not 7)."
+    },
+    {
+      "id": "P3-03",
+      "title": "Per-account login throttle, keyed by email, same response shape as the per-IP limiter",
+      "priority": "high",
+      "depends_on": [],
+      "description": "In-memory Map<string,Bucket> keyed by lowercased email, mirroring api/ingest.ts's bucket+sweeper pattern. 30 failures / 60 minutes by default, both env-overridable. Increments only on failure; a success clears it.",
+      "steps": [
+        "30 failed attempts for one email inside the window trips it; response status+body byte-identical to authLoginLimiter's own 429",
+        "A successful login after prior failures resets that email's counter to zero",
+        "Attempts against DIFFERENT emails from the same IP are counted independently of this throttle (the per-IP limiter is unaffected and unchanged)",
+        "FAILURE CASE, stated as accepted not discovered: the 31st attempt with the CORRECT password inside the window is still refused until the window rolls over"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-06, live. Found mid-verification: at default thresholds (per-account MAX_FAILURES=30, per-IP authLoginLimiter max=10/15min), the pre-existing per-IP limiter fires first and masks the per-account throttle entirely, since 10 attempts trips it well before 30 does — an earlier run against defaults produced 429s from attempt 9 onward, including against an UNRELATED email, which would have been misreported as the new throttle if not checked against rateLimit.ts's actual config. Re-ran isolated: restarted the server with RATE_LIMIT_AUTH_MAX_LOGIN=1000 (so the per-IP limiter stays out of the way) and LOGIN_THROTTLE_MAX_FAILURES=5 (so the per-account throttle trips fast) for this verification only, then reverted to defaults afterward. With the per-IP limiter isolated out: 4 wrong-password attempts for one throwaway email all answered plain 401; the 5th also 401; the 6th answered 429 identical in body/status to authLoginLimiter's own message; a second, different throwaway email was unaffected (plain 401); the real account (dev.user) with its correct password succeeded normally throughout, confirming per-account isolation. Not separately re-verified live: the exact 30/60min production default and the counter-reset-on-success path — both are covered by loginThrottle.test.ts's 7 unit tests (window rollover and clear-on-success included) and were not re-run against a live threshold of 30 given how long that would take against the real window."
+    },
+    {
+      "id": "P3-04",
+      "title": "Gate: server clean",
+      "priority": "high",
+      "depends_on": [
+        "P3-02",
+        "P3-03"
+      ],
+      "description": "tsc, vitest, build clean in the server workspace.",
+      "steps": [
+        "cd app/server && npx tsc --noEmit",
+        "npm run test",
+        "npm run build"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-06. tsc --noEmit clean, npx vitest run 155/155 across 17 files (up from 138 at phase-2 close: +10 refreshOutcome + 7 loginThrottle), npm run build clean."
+    },
+    {
+      "id": "P3-05",
+      "title": "Pre-merge review fixes: multi-tab race, rotation claim, tombstoned sid, lineage revoke",
+      "priority": "critical",
+      "depends_on": [
+        "P3-02"
+      ],
+      "description": "Four defects the phase-3 gate missed, found by reviewing the branch diff before merge. See build-spec.md 'Amendment 2026-09-19'.",
+      "steps": [
+        "Two concurrent POST /refresh with the same token: exactly one 200, the other the generic 401, and the winner's session survives (no family revoke, no email)",
+        "The access token minted before a rotation is refused (401) once that rotation happens",
+        "A replay past REFRESH_REUSE_GRACE_MS still revokes the whole family, including the live refresh AND access token",
+        "Logout, then replay a tombstone from that session: 401 and NO reuse alert (the lineage was deleted with the session)",
+        "FAILURE CASE: remove the grace check / the rotatedAt admit check and show the new tests go red, then restore"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-19. Unit: tsc clean, vitest 162/162 (+5 refreshOutcome grace, +2 sessionAdmit rotated), build clean. Mutation: with each fix removed, 4 tests failed; restored, all green. Live, on an isolated server (PORT=3013 WS_PORT=8099 RATE_LIMIT_AUTH_MAX_LOGIN=1000, node dist/server.js; the developer's :3000 was not touched), scripted against dev.user: concurrent refresh returned [200,401]; the loser's body was the generic message; the winner's access token got 200 on /profile; the pre-rotation access token got 401; the session count stayed 1 -> 1 (no fork); after an 11 s wait the replay got 401, and both the live refresh token and the live access token then got 401. The server log shows exactly ONE `[security] refresh token reuse detected` line and one console-driver email, both from the real replay. The concurrent race and the post-logout tombstone replay produced none. Not separately forced: the updateMany claim losing a true same-millisecond race. It is covered by construction (the where clause) but was not observed apart from the grace path. Known edge, not fixed: if issueSession throws after the claim, that token is tombstoned with no successor, the user gets a 500 and must sign in again."
+    },
+    {
+      "id": "P4-STUB",
+      "title": "Token transport + password policy (A7, A8)",
+      "priority": "low",
+      "depends_on": [],
+      "description": "Decision-gated: localStorage vs httpOnly cookie for tokens; composition-based vs NIST 800-63B password policy.",
+      "steps": [],
+      "passes": null,
+      "notes": "Blocked on user decision. See build-spec.md phase 4. NOT PART OF THIS BRANCH'S MERGE (2026-09-19): per the plan it gets its own branch (auth/phase-4-token-transport) once decided. passes stays null on purpose. This entry is a pointer, not unfinished work on this branch."
+    }
+  ]
+}

@@ -9,8 +9,24 @@ const session = (over: Partial<SessionRow> = {}): SessionRow => ({
     userId: 7,
     expiresAt: LATER,
     absoluteExpiresAt: new Date('2026-09-13T12:00:00.000Z'),
+    rotatedAt: null,
     user: { role: 'user', isActive: true },
     ...over,
+});
+
+describe('decideSessionAdmit — rotated sessions (phase 3, A4)', () => {
+    // FAILURE CASE: rotation used to delete the row, which ended the access
+    // token bound to it. Tombstoning keeps the row, so without this check a
+    // superseded access token outlived its rotation, and outlived logout too.
+    it('refuses an access token whose session row was rotated away', () => {
+        expect(admit({ session: session({ rotatedAt: EARLIER }) })).toEqual({ ok: false, reason: 'revoked' });
+    });
+
+    it('refuses a rotated row even when it is still inside both expiry windows', () => {
+        expect(
+            admit({ session: session({ rotatedAt: NOW, expiresAt: LATER, absoluteExpiresAt: LATER }) }),
+        ).toEqual({ ok: false, reason: 'revoked' });
+    });
 });
 
 const admit = (over: Partial<Parameters<typeof decideSessionAdmit>[0]> = {}) =>

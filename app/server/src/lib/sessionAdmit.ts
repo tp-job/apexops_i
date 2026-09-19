@@ -17,6 +17,9 @@ export interface SessionRow {
     expiresAt: Date;
     /** Hard end of the session (spec D2). Null on rows that predate the column. */
     absoluteExpiresAt: Date | null;
+    /** Set once a refresh rotated this row away (phase 3, A4). The row is kept
+     *  as a tombstone for reuse detection, not as a session. */
+    rotatedAt: Date | null;
     user: { role: string | null; isActive: boolean | null };
 }
 
@@ -40,6 +43,13 @@ export function decideSessionAdmit(input: {
     // The row is gone: logout, revoke-one, revoke-all, or an admin deactivating
     // or demoting the account. This is the case the whole check exists for.
     if (!input.session) return { ok: false, reason: 'revoked' };
+
+    // A tombstone is not a session. Before phase 3, rotation deleted this row,
+    // and that is what ended the access token minted alongside it. Rotation now
+    // keeps the row for reuse detection, so the check moves here. Without it,
+    // every superseded access token stayed valid until its own JWT expiry, and
+    // logout, which deletes only the live row, would leave them all working.
+    if (input.session.rotatedAt !== null) return { ok: false, reason: 'revoked' };
 
     // Only reachable by forging a `sid` into an otherwise valid token — which the
     // signature already prevents. Checked because the cost is a comparison and

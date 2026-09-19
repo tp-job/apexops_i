@@ -63,6 +63,8 @@ export interface IssuedSession {
     sessionId: number;
     expiresAt: Date;
     absoluteExpiresAt: Date;
+    /** The rotation lineage this row belongs to (phase 3, A4). */
+    family: string;
 }
 
 /**
@@ -103,11 +105,21 @@ export async function issueSession(
     req: Request,
     user: SessionUser,
     carryAbsoluteExpiry?: Date | null,
+    /**
+     * The lineage a rotation carries forward — same shape as
+     * `carryAbsoluteExpiry` above, and for the same reason (phase 3, A4): a
+     * fresh UUID per rotation would sever the chain a reuse check needs to
+     * revoke. `undefined` (a brand-new login) mints one; `null` is not a valid
+     * input and is treated as absent rather than as "no family", so a caller
+     * cannot accidentally strip a family by passing through a nullable field.
+     */
+    carryFamily?: string,
 ): Promise<IssuedSession> {
     const minutes = await resolveSessionTimeoutMinutes(user.id);
     const now = Date.now();
 
     const absoluteExpiresAt = carryAbsoluteExpiry ?? new Date(now + ABSOLUTE_MAX_DAYS * MS_PER_DAY);
+    const family = carryFamily ?? randomUUID();
 
     // The refresh JWT expires exactly when the session does. Signing it for a flat
     // 7d while the row is capped elsewhere would leave two disagreeing clocks, and
@@ -141,6 +153,7 @@ export async function issueSession(
             token: refreshToken,
             expiresAt,
             absoluteExpiresAt,
+            family,
             ...sessionContext(req),
         },
         select: { id: true },
@@ -152,7 +165,7 @@ export async function issueSession(
         { expiresIn: minutes * 60 } as jwt.SignOptions,
     );
 
-    return { accessToken, refreshToken, sessionId: row.id, expiresAt, absoluteExpiresAt };
+    return { accessToken, refreshToken, sessionId: row.id, expiresAt, absoluteExpiresAt, family };
 }
 
 /**
@@ -165,4 +178,48 @@ export async function issueSession(
 export async function revokeAllSessions(userId: number): Promise<number> {
     const { count } = await prisma.refreshToken.deleteMany({ where: { userId } });
     return count;
+}
+
+/**
+ * End specific sessions for one user, together with their rotation tombstones
+ * (phase 3, A4).
+ *
+ * Deleting only the live row leaves the family's tombstones behind. `authenticate`
+ * already refuses them, but a later replay of one would still be reported as
+ * reuse. That sends a "your credential was copied" email about a session the user
+ * ended on purpose. Deleting by family means an ended session is fully gone.
+ *
+ * Only LIVE rows are matched. A tombstone id is not a session a caller can name:
+ * `GET /sessions` never lists one. Matching them would let a request for a stale
+ * id end its family's live row, possibly the caller's own current session, and
+ * still answer 404. Returns the number of live sessions ended.
+ */
+export async function revokeSessions(userId: number, match: { ids?: number[]; tokens?: string[] }): Promise<number> {
+    const ids = match.ids ?? [];
+    const tokens = match.tokens ?? [];
+    if (!ids.length && !tokens.length) return 0;
+
+    const rows = await prisma.refreshToken.findMany({
+        where: {
+            userId,
+            rotatedAt: null,
+            OR: [
+                ...(ids.length ? [{ id: { in: ids } }] : []),
+                ...(tokens.length ? [{ token: { in: tokens } }] : []),
+            ],
+        },
+        select: { id: true, family: true },
+    });
+    if (!rows.length) return 0;
+
+    const families = rows.map((r) => r.family).filter((f): f is string => !!f);
+    await prisma.refreshToken.deleteMany({
+        where: {
+            // userId on both branches: a family id is only ever looked up from
+            // this user's own rows, but the scope makes that impossible to break.
+            userId,
+            OR: [{ id: { in: rows.map((r) => r.id) } }, ...(families.length ? [{ family: { in: families } }] : [])],
+        },
+    });
+    return rows.length;
 }

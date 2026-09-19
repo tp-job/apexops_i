@@ -1,5 +1,10 @@
 # Authentication review, and the restructuring plan — 2026-08-25
 
+> **Update 2026-09-19: phases 2 and 3 are done** on `auth/security-hardening` (A3, A4, A5 and A6),
+> and the branch is ready to merge. A3 is only partly closed: see that branch's
+> `.agents/harness/auth-security-hardening/build-spec.md`. Phase 4 (A7, A8) is still
+> decision-gated and gets its own branch.
+>
 > **Update 2026-09-06 — phases 1 and 5 are done.** A1, A2 and A9 are closed and verified end to end;
 > the account cleanup ran. What is still open: A3–A8, i.e. phases 2, 3 and 4. Details at the end of
 > this file. The findings below are left exactly as written so the record shows what was true when
@@ -351,5 +356,8 @@ winning silently.
 
 ### Still open
 
-Phases 2, 3 and 4 — A3 (enumeration), A4 (reuse detection), A5 (leaked `err.message`), A6 (per-IP-only
-rate limiting), A7 (`localStorage`), A8 (password policy). Phase 4 remains decision-gated.
+~~Phases 2, 3 and 4~~ **Phase 4 only**, as of 2026-09-19: A7 (`localStorage`) and A8 (password
+policy). It is still decision-gated. Phases 2 and 3 (A3, A4, A5, A6) shipped together on
+`auth/security-hardening`, not on the two separate branches in the table above. That was an
+explicit instruction, so reverting one of those phases now reverts both. A3 is reduced, not closed:
+`/register` still answers 400 for a taken email and 201 for a new one.
