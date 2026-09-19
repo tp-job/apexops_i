@@ -1,4 +1,4 @@
-import type { StorageAdapter } from '@/lib/authSession';
+import type { StorageAdapter } from '@apexops/shared/auth';
 
 /**
  * The web app's session store: `localStorage`, wrapped in the async shape

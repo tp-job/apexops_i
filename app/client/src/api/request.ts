@@ -1,4 +1,4 @@
-import { fetchWithAuth } from './client';
+import { fetchWithAuth } from '@apexops/shared/api';
 
 /**
  * The one JSON request helper.

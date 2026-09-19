@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react';
-import type { User, UserSettings } from '@/types/auth';
+import type { User, UserSettings } from '@apexops/shared/types/auth';
 
 /**
  * Split from `AuthContext.tsx` so that file can export only the `AuthProvider`

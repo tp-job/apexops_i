@@ -7,12 +7,12 @@
  * Sprint 3 (2026-08-03) added the 401 handling. Before it, a token that expired
  * mid-session left the app rendering a signed-in shell in which every request had
  * quietly become an error — worse than being logged out, because nothing told the
- * user to sign in again. See `lib/authSession.ts` for why the refresh lives in a
+ * user to sign in again. See `auth/authSession.ts` for why the refresh lives in a
  * plain module and not in `AuthContext`.
  */
 
 import { getApiBaseUrl, getAuthHeaders } from './config';
-import { getAccessToken, isExpired, refreshOnce } from '@/lib/authSession';
+import { getAccessToken, isExpired, refreshOnce } from '../auth/authSession';
 
 export type FetchWithAuthOptions = RequestInit & {
     /** If true, appends Content-Type: application/json and allows body to be passed as object. */

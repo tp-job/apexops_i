@@ -6,8 +6,8 @@
  * without changing any behavior.
  */
 
-import { getAuthToken } from '@/api/config';
-import { fetchWithAuth } from '@/api/client';
+import { getAuthToken } from '@apexops/shared/api';
+import { fetchWithAuth } from '@apexops/shared/api';
 import type { Note } from '@/types/notes';
 import { isMockEnabled, isNetworkFailure, readOnlyOfflineMessage } from '@/utils/offlineMock';
 import { mockNotes } from '@/utils/mockData';

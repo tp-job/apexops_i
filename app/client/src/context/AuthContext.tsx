@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { ReactNode } from 'react';
 import { authApi } from '@/services/auth';
-import type { User, UserSettings } from '@/types/auth';
-import { getApiBaseUrl } from '@/api/config';
+import type { User, UserSettings } from '@apexops/shared/types/auth';
+import { getApiBaseUrl } from '@apexops/shared/api';
 import {
     clearTokens,
     getAccessToken,
@@ -12,11 +12,11 @@ import {
     persistTokens,
     refreshOnce,
     setStoredUser,
-} from '@/lib/authSession';
+} from '@apexops/shared/auth';
 import { isMockEnabled, isNetworkFailure, readOnlyOfflineMessage } from '@/utils/offlineMock';
 import { AuthContext, type AuthContextType } from './auth-context';
 
-// Storage is `lib/authSession`'s job — it is the module the non-React callers
+// Storage is `@apexops/shared/auth`'s job — it is the module the non-React callers
 // reach for, and two copies of "what keys make up a session" is how one of them
 // ends up clearing two of three.
 const clearSession = clearTokens;
@@ -48,7 +48,7 @@ function toUserMessage(err: unknown): Error {
  * used to seed `user` from `getMockLoginResponse()` and keep its mount effect
  * empty (`// BYPASS LOGIN`), which made `isAuthenticated` permanently true — any
  * route guard on top of it would have been decorative. It now hydrates from
- * the session store (`lib/authSession`) and validates against `GET /api/auth/profile`.
+ * the session store (`@apexops/shared/auth`) and validates against `GET /api/auth/profile`.
  *
  * The offline-mock fallback was also removed from `login`/`register`. Everywhere
  * else in the app, falling back to fixtures on a network failure degrades a panel;
@@ -84,7 +84,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     /**
      * The session ended while the app was running.
      *
-     * `lib/authSession` has already cleared storage by the time this fires; what
+     * `@apexops/shared/auth` has already cleared storage by the time this fires; what
      * is left is React's copy. Without this the tokens would be gone while the
      * shell kept rendering a nav rail, a project switcher and a user menu for a
      * session that no longer exists — which is the exact symptom this sprint is

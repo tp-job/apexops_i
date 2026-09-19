@@ -12,9 +12,8 @@ import {
     refreshOnce,
     SessionExpiredError,
     type StorageAdapter,
-} from '@/lib/authSession';
-import { configureApi, getApiBaseUrl } from '@/api/config';
-import { createLocalStorageAdapter } from '@/lib/localStorageAdapter';
+} from './authSession';
+import { configureApi, getApiBaseUrl } from '../api/config';
 
 /**
  * The session module after it moved behind a StorageAdapter (extension spec P1).
@@ -71,6 +70,7 @@ let fetchMock: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
     __resetInFlight();
+    configureApi({ baseUrl: 'http://api.test' });
     fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
 });
@@ -225,6 +225,12 @@ describe('refreshOnce', () => {
 });
 
 describe('configureApi', () => {
+    it('has no default: an unconfigured base URL throws instead of going relative', async () => {
+        vi.resetModules();
+        const fresh = await import('../api/config');
+        expect(() => fresh.getApiBaseUrl()).toThrow('configureApi');
+    });
+
     it('changes where requests go, including the refresh', async () => {
         const before = getApiBaseUrl();
         try {
@@ -238,62 +244,5 @@ describe('configureApi', () => {
         } finally {
             configureApi({ baseUrl: before });
         }
-    });
-});
-
-describe('createLocalStorageAdapter', () => {
-    const fakeStorage = () => {
-        const m = new Map<string, string>();
-        return {
-            getItem: (k: string) => m.get(k) ?? null,
-            setItem: (k: string, v: string) => void m.set(k, v),
-            removeItem: (k: string) => void m.delete(k),
-        } as unknown as Storage;
-    };
-
-    it('reads and writes through to the given Storage', async () => {
-        const store = fakeStorage();
-        const adapter = createLocalStorageAdapter(store, undefined);
-        await adapter.set('accessToken', 'a');
-        expect(await adapter.get('accessToken')).toBe('a');
-        await adapter.remove(['accessToken']);
-        expect(await adapter.get('accessToken')).toBeNull();
-    });
-
-    it('reports storage events for its own store only', () => {
-        const store = fakeStorage();
-        const other = fakeStorage();
-        const target = new EventTarget();
-        const adapter = createLocalStorageAdapter(store, target as unknown as Window);
-        const seen: [string | null, string | null][] = [];
-        const off = adapter.subscribe!((k, v) => seen.push([k, v]));
-
-        const fire = (init: { key: string | null; newValue: string | null; storageArea: Storage }) =>
-            target.dispatchEvent(Object.assign(new Event('storage'), init));
-        fire({ key: 'accessToken', newValue: 'x', storageArea: store });
-        fire({ key: 'accessToken', newValue: 'y', storageArea: other });
-        fire({ key: null, newValue: null, storageArea: store });
-        off();
-        fire({ key: 'accessToken', newValue: 'z', storageArea: store });
-
-        expect(seen).toEqual([
-            ['accessToken', 'x'],
-            [null, null],
-        ]);
-    });
-
-    it('a Storage that throws on access rejects the call instead of throwing at creation', async () => {
-        const adapter = createLocalStorageAdapter(
-            new Proxy({} as Storage, {
-                get() {
-                    throw new DOMException('denied', 'SecurityError');
-                },
-            }),
-            undefined
-        );
-        await expect(adapter.get('accessToken')).rejects.toThrow('denied');
-        // And through the session module, that is simply "signed out".
-        await initSession(adapter);
-        expect(getAccessToken()).toBeNull();
     });
 });

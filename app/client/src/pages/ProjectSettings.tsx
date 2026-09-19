@@ -17,7 +17,7 @@ import {
 import ProjectTabs from '@/components/layout/ProjectTabs';
 import SourceMapsPanel from '@/components/common/SourceMapsPanel';
 import { useProject } from '@/hooks/useProject';
-import { getApiBaseUrl } from '@/api/config';
+import { getApiBaseUrl } from '@apexops/shared/api';
 import { getErrorMessage } from '@/utils/error';
 import { formatDate } from '@/utils/format';
 import { CAPTURE_LEVELS, type CaptureLevel } from '@/types/projects';

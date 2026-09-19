@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { io, type Socket } from 'socket.io-client';
-import { getAuthToken } from '@/api/config';
+import { getAuthToken } from '@apexops/shared/api';
 import {
     appendLogs,
     clearLogs as clearBuffer,
