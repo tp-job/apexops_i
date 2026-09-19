@@ -9,7 +9,9 @@
       "priority": "critical",
       "depends_on": [],
       "description": "User said 'make follow plan': every recommendation stands. Spec section 10 records the result and the X10/X17 amendments.",
-      "steps": ["Spec section 10 lists X1-X18 as locked, with the X10 three-zone table and the X17 vendor amendment"],
+      "steps": [
+        "Spec section 10 lists X1-X18 as locked, with the X10 three-zone table and the X17 vendor amendment"
+      ],
       "passes": true,
       "notes": "VERIFIED 2026-09-19. 8.8 Q3 (Web Store or internal) is still open and does not block P1-P5."
     },
@@ -19,7 +21,9 @@
       "priority": "critical",
       "depends_on": [],
       "description": "planning/auth-review-and-restructure-2026-08-25.md says non-web clients keep Bearer whatever phase 4 picks.",
-      "steps": ["grep 'Constraint added 2026-09-19' in the auth plan under A7"],
+      "steps": [
+        "grep 'Constraint added 2026-09-19' in the auth plan under A7"
+      ],
       "passes": true,
       "notes": "VERIFIED 2026-09-19."
     },
@@ -29,7 +33,9 @@
       "priority": "high",
       "depends_on": [],
       "description": "context.source = 'extension' needs no schema change.",
-      "steps": ["schemas/ingest.schema.ts:34 declares context as z.record(z.string(), z.unknown())"],
+      "steps": [
+        "schemas/ingest.schema.ts:34 declares context as z.record(z.string(), z.unknown())"
+      ],
       "passes": true,
       "notes": "VERIFIED 2026-09-19 by reading the schema."
     },
@@ -66,34 +72,40 @@
       "id": "P1-01",
       "title": "One door for session storage",
       "priority": "critical",
-      "depends_on": ["P0-01"],
+      "depends_on": [
+        "P0-01"
+      ],
       "description": "Every read or write of accessToken / refreshToken / user goes through lib/authSession.ts. build-spec.md lists the 12 sites.",
       "steps": [
         "grep -rn \"localStorage\" app/client/src returns token/user keys ONLY inside the web StorageAdapter",
         "FAILURE CASE: the grep run on main before the change DOES list config.ts, AuthContext.tsx, services/auth.ts and devSessions.ts"
       ],
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "VERIFIED 2026-09-19. The grep for token/user keys finds nothing in app/client/src. Remaining localStorage calls hold device preferences only (AppLayout assistant panel, ThemeContext, the devSessions list). Control: the same pattern matches api/config.ts on ext/dev. All 12 sites now go through authSession."
     },
     {
       "id": "P1-02",
       "title": "authSession runs on an async StorageAdapter",
       "priority": "critical",
-      "depends_on": ["P1-01"],
+      "depends_on": [
+        "P1-01"
+      ],
       "description": "StorageAdapter { get, set, remove } returns promises. The web passes a localStorage adapter, and an extension can pass chrome.storage.local.",
       "steps": [
         "Unit test: an in-memory adapter round-trips persist/read/clear",
         "Unit test: an adapter that throws on get/set does not crash the caller, and reads come back as null",
         "npm run build (client) passes — erasableSyntaxOnly"
       ],
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "VERIFIED 2026-09-19 by authSession.test.ts (16 tests). DESIGN DEVIATION from spec P1 step 2, taken on purpose: the adapter is async, but authSession keeps an in-memory cache, so the getters stay SYNC. initSession() fills the cache before React mounts (main.tsx, .then because the es2020 build target has no top-level await). adapter.subscribe feeds other contexts' writes into the cache. This avoided pushing await into axios, socket handshakes and first render (R4). Writes update memory synchronously and persistTokens can be awaited; refreshOnce awaits it (R3). The throwing adapter reads as signed out, and the lazy localStorage lookup keeps a blocked store from crashing at startup. npm run build passes."
     },
     {
       "id": "P1-03",
       "title": "Refresh coordination unchanged by the async move",
       "priority": "critical",
-      "depends_on": ["P1-02"],
+      "depends_on": [
+        "P1-02"
+      ],
       "description": "refreshOnce() still coalesces, still picks up a token another tab already rotated (accessAtStart), and endSession still fires only on 401/403.",
       "steps": [
         "Test: two concurrent callers produce exactly ONE POST /auth/refresh",
@@ -101,21 +113,23 @@
         "Test: refresh answers 500 or the network drops → session kept and tokens intact",
         "Test: storage already holds a newer access token than the one at start → no refresh call made"
       ],
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "VERIFIED 2026-09-19. Tests cover: one refresh for two callers; 401 ends the session; 500 and network failures keep it; adopting another tab's token; waiting for the initial storage read before deciding there is no refresh token. Mutation check: removing each guard (coalescing, await ready, adopt, cache-before-notify) turns exactly its own test red."
     },
     {
       "id": "P1-04",
       "title": "No flash to /login on reload",
       "priority": "high",
-      "depends_on": ["P1-02"],
+      "depends_on": [
+        "P1-02"
+      ],
       "description": "AuthContext's initial state used a sync localStorage read. With async storage, the first render must stay 'loading' until storage resolves.",
       "steps": [
         "Logged in, reload /dashboard: URL never becomes /login (observe with a MutationObserver or a navigation log, not by eye)",
         "Logged out, open /dashboard: redirected to /login"
       ],
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "VERIFIED 2026-09-19 in Chrome for Testing 131 on the isolated rig (checks/p1-browser.mjs). Reloading /dashboard records routes ['/dashboard'] only, and signed out lands on /login. There is no loading-state redesign: the cache is filled before render, so the initial state is right from the first frame."
     },
     {
       "id": "P1-05",
@@ -123,15 +137,24 @@
       "priority": "high",
       "depends_on": [],
       "description": "configureApi({ baseUrl }) replaces the build-time-only read. The web passes VITE_API_URL at startup.",
-      "steps": ["Web app calls reach the same API as before (network log)", "Unit test: configureApi changes the URL a request goes to"],
-      "passes": false,
-      "notes": ""
+      "steps": [
+        "Web app calls reach the same API as before (network log)",
+        "Unit test: configureApi changes the URL a request goes to"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-19. configureApi({baseUrl}) in api/config.ts strips trailing slashes. The test shows it moves the refresh URL. The web keeps the VITE_API_URL default, and the rig ran against :3013 through it."
     },
     {
       "id": "P1-06",
       "title": "P1 browser close-out",
       "priority": "critical",
-      "depends_on": ["P1-01", "P1-02", "P1-03", "P1-04", "P1-05"],
+      "depends_on": [
+        "P1-01",
+        "P1-02",
+        "P1-03",
+        "P1-04",
+        "P1-05"
+      ],
       "description": "Spec P1 exit, observed in a real browser.",
       "steps": [
         "login → reload → still logged in",
@@ -139,15 +162,92 @@
         "revoke the session from another browser → the next call gets 401 and lands on /login",
         "client CI suite + npm run build + typecheck green"
       ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-19 with checks/p1-browser.mjs on the rig (API :3013, Vite :5199, Chrome for Testing 131): 8/8, then 5/5 on a rerun. In 5 race rounds with both tabs expired, the refreshes were [B:200, A:401] every time, both tabs stayed on /projects, and the token was renewed. Revoke-all from another login sent the next call to /login. FAILURE CASE observed: with the adopt branch removed, BOTH tabs ended at /login (the loser's endSession clears the shared store), so the check detects the regression. Client lint, typecheck (tsc -b), vitest 141/141 and build are clean. RESIDUAL, not reproduced: the loser's 401 could arrive before the winner has persisted (during the claim/issueSession window). The old code had the same exposure, and it was not seen in 5/5 rounds. The extension avoids it by construction, because its service worker is the only refresher (X2)."
+    },
+    {
+      "id": "P2",
+      "title": "packages/shared + sdk-core split",
+      "priority": "critical",
+      "depends_on": [
+        "P1-06"
+      ],
+      "description": "Spec section 4, P2.",
+      "steps": [],
+      "passes": false,
+      "notes": "Expand into features when P2 starts."
+    },
+    {
+      "id": "P3",
+      "title": "Extension capture (WXT scaffold, bridge, SW ingest)",
+      "priority": "critical",
+      "depends_on": [
+        "P2"
+      ],
+      "description": "Spec P3 as amended in 8.5.",
+      "steps": [],
       "passes": false,
       "notes": ""
     },
-    { "id": "P2", "title": "packages/shared + sdk-core split", "priority": "critical", "depends_on": ["P1-06"], "description": "Spec section 4, P2.", "steps": [], "passes": false, "notes": "Expand into features when P2 starts." },
-    { "id": "P3", "title": "Extension capture (WXT scaffold, bridge, SW ingest)", "priority": "critical", "depends_on": ["P2"], "description": "Spec P3 as amended in 8.5.", "steps": [], "passes": false, "notes": "" },
-    { "id": "P4", "title": "Connect by project URL + binding + web-app card", "priority": "critical", "depends_on": ["P3"], "description": "Spec 8.5 P4.", "steps": [], "passes": false, "notes": "" },
-    { "id": "P5a", "title": "Rail shell + ApexOps button + iframe panel", "priority": "critical", "depends_on": ["P4"], "description": "Spec 9.4 / 10 three-zone model.", "steps": [], "passes": false, "notes": "" },
-    { "id": "P5b", "title": "Vendored VisBug tools + Report bug with element", "priority": "high", "depends_on": ["P5a"], "description": "Spec 9.4, X17 amended (vendor).", "steps": [], "passes": false, "notes": "" },
-    { "id": "P6", "title": "Screenshot", "priority": "medium", "depends_on": ["P5a"], "description": "Waits on X7 storage.", "steps": [], "passes": false, "notes": "" },
-    { "id": "P7", "title": "Packaging + Firefox", "priority": "medium", "depends_on": ["P5b"], "description": "Waits on 8.8 Q3.", "steps": [], "passes": false, "notes": "" }
+    {
+      "id": "P4",
+      "title": "Connect by project URL + binding + web-app card",
+      "priority": "critical",
+      "depends_on": [
+        "P3"
+      ],
+      "description": "Spec 8.5 P4.",
+      "steps": [],
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "P5a",
+      "title": "Rail shell + ApexOps button + iframe panel",
+      "priority": "critical",
+      "depends_on": [
+        "P4"
+      ],
+      "description": "Spec 9.4 / 10 three-zone model.",
+      "steps": [],
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "P5b",
+      "title": "Vendored VisBug tools + Report bug with element",
+      "priority": "high",
+      "depends_on": [
+        "P5a"
+      ],
+      "description": "Spec 9.4, X17 amended (vendor).",
+      "steps": [],
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "P6",
+      "title": "Screenshot",
+      "priority": "medium",
+      "depends_on": [
+        "P5a"
+      ],
+      "description": "Waits on X7 storage.",
+      "steps": [],
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "P7",
+      "title": "Packaging + Firefox",
+      "priority": "medium",
+      "depends_on": [
+        "P5b"
+      ],
+      "description": "Waits on 8.8 Q3.",
+      "steps": [],
+      "passes": false,
+      "notes": ""
+    }
   ]
 }
