@@ -1,9 +1,10 @@
 import express, { Request, Response } from 'express';
+import { randomUUID } from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import prisma from '../lib/prisma';
 import { REFRESH_SECRET_KEY, JWT_ALGORITHM } from '../lib/jwtSecrets';
-import { issueSession, resolveSessionTimeoutMinutes } from '../lib/sessions';
+import { issueSession, resolveSessionTimeoutMinutes, revokeSessions } from '../lib/sessions';
 // The admit decision is pure and tested separately — same split as `lib/sessionAdmit.ts`.
 import { decideLoginAdmit } from '../lib/loginAdmit';
 import { decideRefreshOutcome } from '../lib/refreshOutcome';
@@ -222,12 +223,17 @@ router.post('/refresh', validate(refreshTokenSchema), async (req: Request, res: 
             // token was already used once", or an attacker learns their replay
             // was caught and can adapt. `stored` is guaranteed non-null here:
             // `decideRefreshOutcome` only answers `reuse` when a row was found.
-            await revokeFamilyAndAlert(stored!.family ?? String(stored!.id));
+            // Every tombstone carries a family: the rotation below stamps one
+            // onto a pre-phase-3 row before tombstoning it.
+            if (stored!.family) await revokeFamilyAndAlert(stored!.family);
             res.status(401).json({ error: 'Invalid or expired refresh token' });
             return;
         }
 
-        if (outcome.kind === 'idle-expired') {
+        // Another tab rotated this same token a moment ago. The 401 is what the
+        // client's race handling expects; it adopts the winner's token from
+        // shared storage. Nothing is revoked. See `REUSE_GRACE_MS`.
+        if (outcome.kind === 'concurrent-rotation' || outcome.kind === 'idle-expired') {
             res.status(401).json({ error: 'Invalid or expired refresh token' });
             return;
         }
@@ -256,10 +262,28 @@ router.post('/refresh', validate(refreshTokenSchema), async (req: Request, res: 
         // TOMBSTONED, not deleted (phase 3, A4). A hard delete here is exactly
         // what made a reused token indistinguishable from one that never
         // existed. `family` carries forward into the new row below just like
-        // `absoluteExpiresAt` already does; a null `family` means this row
-        // predates phase 3, and `issueSession` mints a fresh one to start the
-        // lineage from here.
-        await prisma.refreshToken.update({ where: { id: stored!.id }, data: { rotatedAt: now } });
+        // `absoluteExpiresAt` already does. A row predating phase 3 has no
+        // family, so one is minted and stamped onto the tombstone too.
+        // Otherwise a later replay of that token would have no lineage to
+        // revoke, and the session it was rotated into would survive.
+        const family = stored!.family ?? randomUUID();
+
+        // A conditional claim, not a plain update. Two requests holding the same
+        // token can both read `rotatedAt: null` above. With an unconditional
+        // update both would rotate and fork the family into two live sessions,
+        // which is the exact outcome reuse detection exists to prevent. Only
+        // the request whose update matches the still-live row may continue.
+        const claimed = await prisma.refreshToken.updateMany({
+            where: { id: stored!.id, rotatedAt: null },
+            data: { rotatedAt: now, family },
+        });
+        if (claimed.count === 0) {
+            // Lost the race to a request that arrived at the same instant. That
+            // is the same situation `concurrent-rotation` handles, and it gets
+            // the same answer.
+            res.status(401).json({ error: 'Invalid or expired refresh token' });
+            return;
+        }
 
         // The absolute expiry is CARRIED FORWARD, not recomputed. Recomputing it is
         // what made sessions immortal before: every rotation handed out a fresh
@@ -268,7 +292,7 @@ router.post('/refresh', validate(refreshTokenSchema), async (req: Request, res: 
             req,
             user,
             stored!.absoluteExpiresAt,
-            stored!.family ?? undefined,
+            family,
         );
 
         res.json({
@@ -304,17 +328,12 @@ router.post('/logout', authenticate, async (req: Request, res: Response): Promis
         const sid = req.user?.sid;
         const { refreshToken } = req.body ?? {};
 
-        const { count } = await prisma.refreshToken.deleteMany({
-            where: {
-                OR: [
-                    ...(typeof sid === 'number' ? [{ id: sid, userId: req.user!.id }] : []),
-                    // Scoped to the caller: a token in a body is attacker-controlled,
-                    // and deleting by value alone would revoke another user's session.
-                    ...(typeof refreshToken === 'string' && refreshToken
-                        ? [{ token: refreshToken, userId: req.user!.id }]
-                        : []),
-                ],
-            },
+        // Scoped to the caller inside `revokeSessions`: a token in a body is
+        // attacker-controlled, and deleting by value alone would revoke another
+        // user's session. The family's rotation tombstones go with it.
+        const count = await revokeSessions(req.user!.id, {
+            ids: typeof sid === 'number' ? [sid] : [],
+            tokens: typeof refreshToken === 'string' && refreshToken ? [refreshToken] : [],
         });
 
         res.json({ message: 'Logout successful', revoked: count });
@@ -537,11 +556,9 @@ router.delete('/sessions/:id', authenticate, async (req: Request, res: Response)
     }
 
     try {
-        // userId in the filter, not just the id: revoking someone else's session
-        // must be impossible, and must not even reveal that the id exists.
-        const { count } = await prisma.refreshToken.deleteMany({
-            where: { id, userId: req.user!.id },
-        });
+        // Scoped to the caller's own rows: revoking someone else's session must be
+        // impossible, and must not even reveal that the id exists.
+        const count = await revokeSessions(req.user!.id, { ids: [id] });
         if (!count) { res.status(404).json({ error: 'Session not found' }); return; }
         res.json({ revoked: true });
     } catch (err: any) {

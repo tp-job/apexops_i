@@ -179,3 +179,47 @@ export async function revokeAllSessions(userId: number): Promise<number> {
     const { count } = await prisma.refreshToken.deleteMany({ where: { userId } });
     return count;
 }
+
+/**
+ * End specific sessions for one user, together with their rotation tombstones
+ * (phase 3, A4).
+ *
+ * Deleting only the live row leaves the family's tombstones behind. `authenticate`
+ * already refuses them, but a later replay of one would still be reported as
+ * reuse. That sends a "your credential was copied" email about a session the user
+ * ended on purpose. Deleting by family means an ended session is fully gone.
+ *
+ * Only LIVE rows are matched. A tombstone id is not a session a caller can name:
+ * `GET /sessions` never lists one. Matching them would let a request for a stale
+ * id end its family's live row, possibly the caller's own current session, and
+ * still answer 404. Returns the number of live sessions ended.
+ */
+export async function revokeSessions(userId: number, match: { ids?: number[]; tokens?: string[] }): Promise<number> {
+    const ids = match.ids ?? [];
+    const tokens = match.tokens ?? [];
+    if (!ids.length && !tokens.length) return 0;
+
+    const rows = await prisma.refreshToken.findMany({
+        where: {
+            userId,
+            rotatedAt: null,
+            OR: [
+                ...(ids.length ? [{ id: { in: ids } }] : []),
+                ...(tokens.length ? [{ token: { in: tokens } }] : []),
+            ],
+        },
+        select: { id: true, family: true },
+    });
+    if (!rows.length) return 0;
+
+    const families = rows.map((r) => r.family).filter((f): f is string => !!f);
+    await prisma.refreshToken.deleteMany({
+        where: {
+            // userId on both branches: a family id is only ever looked up from
+            // this user's own rows, but the scope makes that impossible to break.
+            userId,
+            OR: [{ id: { in: rows.map((r) => r.id) } }, ...(families.length ? [{ family: { in: families } }] : [])],
+        },
+    });
+    return rows.length;
+}

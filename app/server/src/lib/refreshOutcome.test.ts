@@ -39,6 +39,36 @@ describe('decideRefreshOutcome — reuse takes priority over everything else', (
     });
 });
 
+describe('decideRefreshOutcome — two tabs racing is not a replay', () => {
+    const graced = (rotatedAt: Date) =>
+        decideRefreshOutcome({ row: row({ rotatedAt }), now: NOW, graceMs: 10_000 });
+
+    // FAILURE CASE this block exists for: without the window, the losing tab of
+    // an ordinary multi-tab refresh race revoked the whole family and emailed
+    // the user that their credential had been copied.
+    it('a tombstone presented 200ms after its rotation is a concurrent rotation, not reuse', () => {
+        expect(graced(new Date(NOW.getTime() - 200))).toEqual({ kind: 'concurrent-rotation' });
+    });
+
+    it('a tombstone presented at the exact rotation instant is a concurrent rotation', () => {
+        expect(graced(NOW)).toEqual({ kind: 'concurrent-rotation' });
+    });
+
+    it('the window boundary itself counts as reuse — the window is exclusive', () => {
+        expect(graced(new Date(NOW.getTime() - 10_000))).toEqual({ kind: 'reuse' });
+    });
+
+    it('a tombstone presented well after the window is reuse', () => {
+        expect(graced(new Date(NOW.getTime() - 60_000))).toEqual({ kind: 'reuse' });
+    });
+
+    it('a graceMs of 0 disables the window entirely', () => {
+        expect(
+            decideRefreshOutcome({ row: row({ rotatedAt: NOW }), now: NOW, graceMs: 0 }),
+        ).toEqual({ kind: 'reuse' });
+    });
+});
+
 describe('decideRefreshOutcome — ordinary expiry, unaffected by phase 3', () => {
     it('reports not-found for no row at all', () => {
         expect(outcome(null)).toEqual({ kind: 'not-found' });

@@ -72,6 +72,7 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
                           userId: true,
                           expiresAt: true,
                           absoluteExpiresAt: true,
+                          rotatedAt: true,
                           user: { select: { role: true, isActive: true } },
                       },
                   })

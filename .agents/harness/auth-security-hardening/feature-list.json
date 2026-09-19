@@ -131,6 +131,24 @@
       "notes": "VERIFIED 2026-09-06. tsc --noEmit clean, npx vitest run 155/155 across 17 files (up from 138 at phase-2 close: +10 refreshOutcome + 7 loginThrottle), npm run build clean."
     },
     {
+      "id": "P3-05",
+      "title": "Pre-merge review fixes: multi-tab race, rotation claim, tombstoned sid, lineage revoke",
+      "priority": "critical",
+      "depends_on": [
+        "P3-02"
+      ],
+      "description": "Four defects the phase-3 gate missed, found by reviewing the branch diff before merge. See build-spec.md 'Amendment 2026-09-19'.",
+      "steps": [
+        "Two concurrent POST /refresh with the same token: exactly one 200, the other the generic 401, and the winner's session survives (no family revoke, no email)",
+        "The access token minted before a rotation is refused (401) once that rotation happens",
+        "A replay past REFRESH_REUSE_GRACE_MS still revokes the whole family, including the live refresh AND access token",
+        "Logout, then replay a tombstone from that session: 401 and NO reuse alert (the lineage was deleted with the session)",
+        "FAILURE CASE: remove the grace check / the rotatedAt admit check and show the new tests go red, then restore"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-19. Unit: tsc clean, vitest 162/162 (+5 refreshOutcome grace, +2 sessionAdmit rotated), build clean. Mutation: with each fix removed, 4 tests failed; restored, all green. Live, on an isolated server (PORT=3013 WS_PORT=8099 RATE_LIMIT_AUTH_MAX_LOGIN=1000, node dist/server.js; the developer's :3000 was not touched), scripted against dev.user: concurrent refresh returned [200,401]; the loser's body was the generic message; the winner's access token got 200 on /profile; the pre-rotation access token got 401; the session count stayed 1 -> 1 (no fork); after an 11 s wait the replay got 401, and both the live refresh token and the live access token then got 401. The server log shows exactly ONE `[security] refresh token reuse detected` line and one console-driver email, both from the real replay. The concurrent race and the post-logout tombstone replay produced none. Not separately forced: the updateMany claim losing a true same-millisecond race. It is covered by construction (the where clause) but was not observed apart from the grace path. Known edge, not fixed: if issueSession throws after the claim, that token is tombstoned with no successor, the user gets a 500 and must sign in again."
+    },
+    {
       "id": "P4-STUB",
       "title": "Token transport + password policy (A7, A8)",
       "priority": "low",
@@ -138,7 +156,7 @@
       "description": "Decision-gated: localStorage vs httpOnly cookie for tokens; composition-based vs NIST 800-63B password policy.",
       "steps": [],
       "passes": null,
-      "notes": "Blocked on user decision. See build-spec.md phase 4."
+      "notes": "Blocked on user decision. See build-spec.md phase 4. NOT PART OF THIS BRANCH'S MERGE (2026-09-19): per the plan it gets its own branch (auth/phase-4-token-transport) once decided. passes stays null on purpose. This entry is a pointer, not unfinished work on this branch."
     }
   ]
 }

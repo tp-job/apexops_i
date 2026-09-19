@@ -151,6 +151,32 @@ Reintroduce the old two-independent-operations rotation (delete-then-create, no 
 and show a test names the fact that a reused token no longer revokes anything beyond itself, then
 revert.
 
+### Amendment 2026-09-19: four defects in phase 3, found in the pre-merge review
+
+The phase-3 gate was green, but tombstoning broke two properties that deleting the row used to
+provide for free. The pure-function tests could not see either one.
+
+1. **The ordinary multi-tab race was treated as theft.** `app/client/src/lib/authSession.ts` shares
+   one refresh token across tabs and handles the race explicitly: the losing tab takes a 401 and
+   adopts the winner's token. With no grace, the losing tab's request was classified as reuse. That
+   revoked the whole family, signed out every tab and emailed the user that their credential had
+   been copied. **Fix:** a new `concurrent-rotation` outcome. A tombstone presented within
+   `REFRESH_REUSE_GRACE_MS` (default 10 s) of its rotation gets the generic 401 and nothing is
+   revoked. **Accepted cost:** if an attacker rotates first and the victim's device happens to
+   present the same token inside those 10 s, the attacker is not caught.
+2. **Rotation was check-then-act.** Two requests could both read `rotatedAt: null` and both rotate,
+   forking one family into two live sessions. **Fix:** the tombstone write is a conditional
+   `updateMany … where rotatedAt: null`, and only the request whose update matched continues.
+3. **Superseded access tokens stayed valid.** `authenticate` admits an access token by looking up
+   its `sid` row. Deleting the row used to end that token; a tombstone kept it alive until the JWT
+   itself expired. Because logout deletes only the live row, those tokens also survived logout.
+   **Fix:** `decideSessionAdmit` refuses a row with `rotatedAt` set (`revoked`).
+4. **Logout and revoke-one left tombstones behind,** despite the schema comment saying otherwise. A
+   later replay then sent a false reuse alert about a session the user had ended. A pre-phase-3 row
+   was also tombstoned without a family, so replaying it revoked nothing. **Fix:**
+   `lib/sessions.ts` `revokeSessions()` deletes the live row together with its family's tombstones.
+   Rotation now stamps a family onto a legacy row before tombstoning it.
+
 ---
 
 ## Phase 4 — A7 (token transport) + A8 (password policy)
