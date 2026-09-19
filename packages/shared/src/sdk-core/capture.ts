@@ -77,6 +77,8 @@ export const MAX_BATCH_EVENTS = 100;
 export const DEDUPE_WINDOW_MS = 5000;
 export const FLUSH_INTERVAL_MS = 5000;
 export const QUEUE_CAP = 200;
+/** The server's schema ceiling for `count`; above it the whole batch is a 400. */
+export const MAX_EVENT_COUNT = 10_000;
 const MAX_BACKOFF_MS = 5 * 60 * 1000;
 
 const PATCHABLE: CaptureLevel[] = ['error', 'warn', 'info', 'log', 'debug'];
@@ -169,7 +171,10 @@ export function startCapture(
         // total, so "how often it happened" stays accurate while "how many
         // samples we stored" stays bounded.
         if (hit && now - hit.at < DEDUPE_WINDOW_MS) {
-            hit.event.count += 1;
+            // Capped: the server rejects the whole batch above this, and a 400
+            // is not a failure to the circuit breaker, so the batch — crash
+            // included — used to vanish without a trace.
+            if (hit.event.count < MAX_EVENT_COUNT) hit.event.count += 1;
             return;
         }
 
