@@ -69,3 +69,8 @@ jobs:
 
       - name: Build (server)
         run: npm run build --workspace app/server
+
+      # Production manifest: no host_permissions, no static content_scripts. The
+      # e2e build (localhost pre-granted) is for the harness only and never ships.
+      - name: Build (extension)
+        run: npm run build --workspace app/extension

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
     MAX_BATCH_BYTES,
+    MAX_EVENT_COUNT,
     startCapture,
     type CaptureConfig,
     type CaptureEvent,
@@ -109,6 +110,35 @@ describe('console capture', () => {
 
         expect(t.events()).toHaveLength(1);
         expect(t.events()[0].count).toBe(50);
+    });
+
+    it('caps the dedupe count at what the server accepts', () => {
+        // The server's schema rejects count > 10,000 with a 400, and a 400 is
+        // not a failure to the circuit breaker, so the batch — crash included —
+        // was dropped without a trace.
+        const h = fakeHost();
+        const t = fakeTransport();
+        const cap = startCapture(config(), t.transport, h.host);
+        for (let i = 0; i < MAX_EVENT_COUNT + 50; i++) h.console.error('render loop');
+        cap.flush(false);
+        expect(t.events()[0].count).toBe(MAX_EVENT_COUNT);
+    });
+
+    it('shouldCapture can switch capture off per event without unpatching', () => {
+        const h = fakeHost();
+        const t = fakeTransport();
+        let sdkPresent = false;
+        const cap = startCapture(config({ shouldCapture: () => !sdkPresent }), t.transport, h.host);
+
+        h.console.error('before the SDK');
+        sdkPresent = true;
+        h.console.error('after the SDK');
+        h.fire('unhandledrejection', { reason: new Error('also after') });
+        cap.flush(false);
+
+        expect(t.events().map((e) => e.message)).toEqual(['before the SDK']);
+        // The page's own output is never affected.
+        expect(h.printed.map((p) => p[1])).toEqual(['before the SDK', 'after the SDK']);
     });
 
     it('samples warnings but never errors', () => {

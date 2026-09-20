@@ -38,3 +38,11 @@ Theme, assistant-panel and dev-session-list keys are device preferences and stay
 **Checks.** `checks/p1-browser.mjs` covers the web session (rig). `checks/p2-sdk-parity.mjs <baseRef>` compares the old and new v1.js.
 Neither check needs the DB, except p1 (it logs in). Run p1 sparingly: each run logs in twice, and the per-account
 login throttle answered 429 after a day of runs. Restarting the rig API clears it.
+
+**P3 (2026-09-20).** `app/extension` is a WXT workspace. `npm run build:e2e --workspace app/extension` builds the harness
+variant (localhost pre-granted); `npm run build` is the shipped manifest and is a CI step.
+`checks/p3-extension.mjs` needs the rig API on :3013 and runs in Chrome for Testing, or in Edge with `P3_BROWSER=edge`.
+It stops the worker through chrome:// / edge://serviceworker-internals after DETACHING the DevTools session (attached, a
+stopped extension worker never wakes). `checks/sdk-e2e.mjs` drives the server's own /sdk/test page.
+Restarting the rig API after server.ts changes: ts-node-dev restarts, but twice in this build it was still serving the
+previous code, so restart via preview_stop/preview_start and re-probe before trusting a curl.

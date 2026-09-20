@@ -274,16 +274,147 @@
       "notes": "VERIFIED 2026-09-20: 8/8 (5 race rounds). Before the P2-03 fix it was 1/8, which is how the blank page was found. The rig API had to be restarted once: the per-account login throttle returned 429 after many check runs in one day."
     },
     {
-      "id": "P3",
-      "title": "Extension capture (WXT scaffold, bridge, SW ingest)",
+      "id": "P3-01",
+      "title": "app/extension workspace: WXT, minimal permissions, no static site access",
       "priority": "critical",
       "depends_on": [
-        "P2"
+        "P2-01"
       ],
-      "description": "Spec P3 as amended in 8.5.",
-      "steps": [],
-      "passes": false,
-      "notes": ""
+      "description": "WXT/MV3 workspace. Content scripts are registered at runtime for bound origins only.",
+      "steps": [
+        "Production manifest has permissions storage/scripting/alarms/activeTab, optional_host_permissions, and NO host_permissions and NO content_scripts",
+        "The e2e build (localhost pre-granted) is a separate --mode and is never the shipped build",
+        "npm run build --workspace app/extension is a CI step"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-20. Manifest read after `wxt build`. The content-script entrypoints declare no `matches`, on purpose: WXT copies a runtime script's matches into host_permissions, which would ask for every site at install. WXT 0.21.4 brought one vite (7.3.6) and no second React. `npm audit` totals are identical before and after adding WXT (59, all pre-existing). NOT tested: the real permission prompt. The e2e build pre-grants localhost so a script can bind a site; the prompt itself belongs to P4."
+    },
+    {
+      "id": "P3-02",
+      "title": "A bound site's console.error becomes an issue; an unbound site is untouched",
+      "priority": "critical",
+      "depends_on": [
+        "P3-01"
+      ],
+      "description": "Capture on bound origins only.",
+      "steps": [
+        "Bound: console.error becomes an issue in Postgres within ~5s",
+        "Control: the unbound site has a native console.error and no ApexOps world; the bound site has a patched one and the world"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-20 with checks/p3-extension.mjs on Chrome for Testing 131 AND Edge 153, both 14/14: issue after ~5.3s. Registered scripts are exactly capture(MAIN) + bridge(ISOLATED) with matches = the bound origin only. This check found and drove three server/SDK fixes, see P3-06."
+    },
+    {
+      "id": "P3-03",
+      "title": "Privacy: stored URL has no query string or fragment",
+      "priority": "critical",
+      "depends_on": [
+        "P3-02"
+      ],
+      "description": "X5. Stripped in the page-side capture and again in the worker.",
+      "steps": [
+        "Open /plain?token=secret123&u=me#frag, fire an error, read the stored event",
+        "sanitize.test.ts pins stripUrl"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-20: stored url = http://127.0.0.1:8797/plain. The message and stack are NOT scrubbed, so a token inside an error MESSAGE still reaches the project. That is a known limit of X5 as specified (only the URL is stripped); not addressed."
+    },
+    {
+      "id": "P3-04",
+      "title": "Page CSP does not stop delivery",
+      "priority": "critical",
+      "depends_on": [
+        "P3-02"
+      ],
+      "description": "The page never makes the request: the MAIN world hands the batch to the ISOLATED bridge by DOM event, the bridge to the worker, the worker calls the API.",
+      "steps": [
+        "Page served with connect-src 'self' delivers, with no CSP violation logged in the page"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-20 on Chrome and Edge. The DOM event (not postMessage) is deliberate: dispatch on pagehide is synchronous across worlds, while a posted message is a task that may never run during teardown. The unload/pagehide path was exercised only by the SDK parity check, not by the extension check."
+    },
+    {
+      "id": "P3-05",
+      "title": "X9: a page running its own SDK is not double-counted",
+      "priority": "critical",
+      "depends_on": [
+        "P3-02"
+      ],
+      "description": "The SDK sets window.__apexopsSdk; the extension's shouldCapture() checks it per event.",
+      "steps": [
+        "Page with the SDK in its HTML: event count 1",
+        "SDK loaded late: before-event once via the extension, after-event once via the SDK",
+        "FAILURE CASE: with the guard removed, counts are 2 and 2"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-20. The mutation run gave 12/14: \"counted once\" got count=2 and \"SDK loaded late\" got after=2. Restored and rebuilt afterwards."
+    },
+    {
+      "id": "P3-06",
+      "title": "Bugs found by the P3 check, all pre-existing, fixed in their own commits",
+      "priority": "high",
+      "depends_on": [
+        "P3-02"
+      ],
+      "description": "Nothing had ever loaded /sdk/v1.js or posted to /api/ingest from another origin against this server.",
+      "steps": [
+        "a603932: /sdk/v1.js was answered by express.static with helmet's Cross-Origin-Resource-Policy: same-origin, so every other site's <script> was blocked (ERR_BLOCKED_BY_RESPONSE.NotSameOrigin). The explicit route moved above static.",
+        "949cef9: /api/ingest was mounted below the global CORS and the 100kB JSON parser, so its own CORS and 1MB cap never ran: every cross-origin preflight was refused and a 200kB batch was a 413. Mounted first.",
+        "1b1955b: the dedupe count was uncapped; the server rejects count > 10000 with a 400, which the circuit breaker does not count as a failure"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-20, each observed before and after with curl or a real browser: preflight ACAO localhost:5199 became the caller's origin with X-Apexops-Key allowed; a 200kB body went from 413 to reaching key validation (401 for a fake key); 2MB is still 413; app routes still pin CORS to the frontend origin. The two server fixes have NO automated test: they were proven live only. A test needs an HTTP-level harness the server suite does not have."
+    },
+    {
+      "id": "P3-07",
+      "title": "The worker's trust boundary: nothing from the page picks the project, key or context",
+      "priority": "critical",
+      "depends_on": [
+        "P3-02"
+      ],
+      "description": "lib/sanitize.ts + background.ts. The origin comes from sender.origin, never from the message.",
+      "steps": [
+        "16 unit tests: fields typed and capped to the server schema, context and release REPLACED not merged, a body key ignored, malformed events dropped without throwing, batch capped at 100, oversized body refused",
+        "Mutation: trusting the page's context turns the sanitiser test red"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-20. Also mutation-tested: dropping the queue lock and dropping single-flight flush each turn their own test red. In the browser, a throw inside capture (toJSON and toString both throw) does not reach the page. NOT tested in a browser: a hostile page dispatching forged capture events. The unit tests cover what the worker does with a forged body; the DOM-event forging itself was not driven."
+    },
+    {
+      "id": "P3-08",
+      "title": "Worker stopped with events queued: none lost, none doubled",
+      "priority": "critical",
+      "depends_on": [
+        "P3-02"
+      ],
+      "description": "A persisted queue in chrome.storage.session; a 30s alarm retries.",
+      "steps": [
+        "Server (proxy) down: the batch is in the queue",
+        "Worker stopped from chrome:// or edge://serviceworker-internals",
+        "Server back, nothing pokes the worker: the event arrives once, from a FRESH worker (in-memory marker gone), and the queue is empty"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-20, Chrome and Edge, 14/14 each. Two harness findings worth keeping. (1) With Puppeteer's DevTools session still attached, a stopped extension worker is NEVER woken again (0 requests in 45s), so the check detaches first. (2) ServiceWorker.stopAllWorkers and Target.closeTarget do not stop an extension worker. Edge renders the stop control as <cr-button data-command=\"stop\">, not <button>: the first Edge run reported the worker \"not stopped\", and its \"arrives once\" pass was therefore meaningless; the marker check exists to catch exactly that. LIMITS by design: delivery is at-least-once (a worker stopped between the 202 and the queue write resends), and storage.session means a full BROWSER restart drops queued events."
+    },
+    {
+      "id": "P3-09",
+      "title": "P1-P3 close-out: full CI sequence green",
+      "priority": "critical",
+      "depends_on": [
+        "P3-01",
+        "P3-07",
+        "P3-08"
+      ],
+      "description": "The CI steps, run locally.",
+      "steps": [
+        "typecheck all 4 workspaces",
+        "lint",
+        "test: shared 32, client 189, server 162, extension 16",
+        "build client, server, extension",
+        "one React version"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-20 (exit 0 on every step). UNEXPLAINED: one test run failed moduleLoad.test.ts for DevRoleSwitcher and useBugTrackerData right after lint/typecheck; the error text was not captured, and 9 reruns (cold cache x4, full-workspace x3, concurrent builds x1, single) all passed. The signature differs from the module-scope-baseURL regression (that one fails services/api.ts + useBugTrackerData). The file's test timeout was widened to 30s as a hedge, NOT a diagnosis. If it recurs, read the message before touching anything."
     },
     {
       "id": "P4",

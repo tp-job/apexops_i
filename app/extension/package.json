@@ -1,0 +1,23 @@
+{
+  "name": "extension",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "ApexOps browser extension (Chrome/Edge, MV3) — floating toolbar on the site under test. Spec: .agents/docs/features/browser-extension.md",
+  "scripts": {
+    "dev": "wxt",
+    "build": "wxt build",
+    "build:e2e": "wxt build --mode e2e",
+    "zip": "wxt zip",
+    "typecheck": "wxt prepare && tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@apexops/shared": "*"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.3",
+    "vitest": "^3.2.7",
+    "wxt": "^0.21.4"
+  }
+}

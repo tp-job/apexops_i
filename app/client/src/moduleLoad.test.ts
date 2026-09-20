@@ -21,7 +21,16 @@ describe('module load', () => {
         expect(Object.keys(modules)).toContain('./services/api.ts');
     });
 
-    it.each(Object.keys(modules))('%s loads without touching the API config or session', async (path) => {
-        await expect(modules[path]()).resolves.toBeDefined();
-    });
+    // 30s, not the suite's 5s. A load takes ~0.4s here, but on 2026-09-20 one run
+    // failed DevRoleSwitcher and useBugTrackerData right after lint/typecheck and
+    // the error text was not captured; nine reruns (cold cache, concurrent builds)
+    // could not reproduce it. The wider cap is a hedge against a slow first
+    // transform, NOT a diagnosis — if this fails again, read the message first.
+    it.each(Object.keys(modules))(
+        '%s loads without touching the API config or session',
+        { timeout: 30_000 },
+        async (path) => {
+            await expect(modules[path]()).resolves.toBeDefined();
+        }
+    );
 });

@@ -15,6 +15,7 @@
   var DEDUPE_WINDOW_MS = 5e3;
   var FLUSH_INTERVAL_MS = 5e3;
   var QUEUE_CAP = 200;
+  var MAX_EVENT_COUNT = 1e4;
   var MAX_BACKOFF_MS = 5 * 60 * 1e3;
   var PATCHABLE = ["error", "warn", "info", "log", "debug"];
   function truncate(s, max) {
@@ -65,11 +66,12 @@
     const recent = /* @__PURE__ */ Object.create(null);
     const signature = (ev) => `${ev.level} ${ev.message} ${ev.stack || ""}`;
     function enqueue(ev) {
+      if (config.shouldCapture && !config.shouldCapture()) return;
       const now = Date.now();
       const sig = signature(ev);
       const hit = recent[sig];
       if (hit && now - hit.at < DEDUPE_WINDOW_MS) {
-        hit.event.count += 1;
+        if (hit.event.count < MAX_EVENT_COUNT) hit.event.count += 1;
         return;
       }
       if (ev.level !== "error" && config.sample < 1 && Math.random() > config.sample) return;
@@ -211,6 +213,11 @@
     const d = script.dataset || {};
     const key = d.project || "";
     if (!key) return;
+    if ("__apexopsSdk" in window) return;
+    try {
+      Object.defineProperty(window, "__apexopsSdk", { value: Object.freeze({ version: 1 }), enumerable: false });
+    } catch (e) {
+    }
     const origin = (() => {
       if (d.endpoint) return d.endpoint.replace(/\/$/, "");
       try {

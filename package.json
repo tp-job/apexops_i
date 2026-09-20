@@ -5,7 +5,8 @@
   "workspaces": [
     "packages/shared",
     "app/client",
-    "app/server"
+    "app/server",
+    "app/extension"
   ],
   "scripts": {
     "install:all": "npm install --workspaces --include-workspace-root",
