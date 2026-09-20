@@ -124,8 +124,11 @@ const proxy = http.createServer((req, res) => {
 });
 await new Promise((r) => proxy.listen(8795, '127.0.0.1', r));
 
+// P3_BROWSER=edge runs the same check in the installed Edge.
+const EDGE = process.env.P3_BROWSER === 'edge';
 const browser = await puppeteer.launch({
     headless: false,
+    executablePath: EDGE ? 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe' : undefined,
     args: [`--disable-extensions-except=${EXT}`, `--load-extension=${EXT}`, '--window-position=-2400,0'],
 });
 
@@ -151,6 +154,7 @@ const open = async (url) => {
 };
 
 try {
+    console.log(`browser: ${await browser.version()}`);
     // ── Bind :8797 by writing the binding the P4 connect flow will write ──
     let sw = await worker();
     await sw.evaluate(
@@ -277,12 +281,15 @@ try {
     // alarm's flush at ~31s detached. Real users have no debugger on it.
     await sw.client.detach();
     const internals = await browser.newPage();
-    await internals.goto('chrome://serviceworker-internals/', { waitUntil: 'load' });
+    await internals.goto(`${EDGE ? 'edge' : 'chrome'}://serviceworker-internals/`, { waitUntil: 'load' });
     await sleep(1500);
     const stoppedScopes = await internals.evaluate(() => {
         const out = [];
         for (const el of document.querySelectorAll('.serviceworker-registration')) {
-            const stop = [...el.querySelectorAll('button')].find((b) => /stop/i.test(b.textContent));
+            // Chrome renders <button>; Edge renders <cr-button data-command="stop">.
+            const stop = [...el.querySelectorAll('button, cr-button')].find(
+                (b) => /stop/i.test(b.textContent) || b.dataset.command === 'stop'
+            );
             if (el.textContent.includes('chrome-extension://') && stop) {
                 stop.click();
                 out.push(el.textContent.match(/chrome-extension:\/\/[a-z]+/)?.[0]);

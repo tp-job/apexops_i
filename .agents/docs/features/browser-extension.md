@@ -484,3 +484,39 @@ build ด้วย WXT/Vite แทน rollup ของ VisBug · ตัดส่
 **ย้ายไป P3:** marker `window.__apexopsSdk` (X9) — ไม่ได้ใส่ใน P2 เพราะเงื่อนไขปิด P2 คือ v1 ต้องทำงานเหมือนเดิมทุกอย่าง
 
 **ถัดไป: P3** — branch `ext/p3-capture` แตกจาก `ext/dev`
+
+---
+
+## 12. ผล P3 — 2026-09-20 (ledger P3-01…P3-09)
+
+**P3 เสร็จ** — `app/extension` (WXT/MV3) ดักจับ error ของเว็บที่ผูกไว้แล้วส่งเข้า project ผ่าน service worker
+ตรวจด้วย `checks/p3-extension.mjs` **14/14 บนทั้ง Chrome 131 และ Edge 153** (`P3_BROWSER=edge` สำหรับ Edge)
+
+**ที่ทำได้แล้ว:** เว็บที่ผูก → `console.error` เป็น issue ใน ~5 วินาที · เว็บที่ไม่ผูกไม่ถูกแตะ · URL ไม่มี query/hash ·
+CSP `connect-src 'self'` ไม่กระทบ · เว็บที่มี SDK ของตัวเองไม่นับซ้ำ (X9) · throw ในตัวดักจับไม่ทำให้หน้าเว็บพัง ·
+worker ถูกหยุดขณะมี event ค้าง → มาถึงครั้งเดียวจาก worker ตัวใหม่ · production manifest ไม่มี `host_permissions`/`content_scripts`
+
+**bug เดิมที่ P3 ขุดเจอและแก้แล้ว (commit แยก):** `/sdk/v1.js` ถูก static บัง จึงโดน CORP `same-origin` — เว็บอื่น**โหลดไม่ได้เลย** ·
+`/api/ingest` ถูก mount ใต้ CORS/JSON parser ทั่วแอป — preflight ข้ามเว็บโดนปฏิเสธและเพดาน body 1 MB ไม่เคยทำงาน ·
+dedupe count ไม่มีเพดาน 10,000 ทำให้ทั้ง batch โดน 400 เงียบๆ · สองข้อแรกพิสูจน์ด้วยการยิงจริงก่อน/หลัง แต่**ยังไม่มี test อัตโนมัติ**
+(server suite ไม่มี harness ระดับ HTTP)
+
+**ข้อจำกัดที่ต้องรู้ (ไม่ได้ซ่อน):**
+1. **ผูก origin ได้แค่เขียน `chrome.storage.local` ตรงๆ** — ผู้ใช้ทั่วไปยังผูกไม่ได้จนกว่าจะเสร็จ P4
+2. **ยังไม่ได้ทดสอบหน้าต่างขอ permission จริง** — e2e build pre-grant localhost ไว้ให้สคริปต์ผูกได้
+3. **message และ stack ไม่ถูก scrub** — X5 ตัดเฉพาะ URL; token ที่อยู่ในข้อความ error ยังไปถึง project
+4. คิวเก็บใน `storage.session` → **ปิดเบราว์เซอร์ทั้งตัวแล้ว event ที่ค้างหาย** · ส่งแบบ at-least-once (worker หยุดระหว่าง 202 กับการลบคิว = ส่งซ้ำได้)
+5. **ยังไม่ได้ยิง event ปลอมจากหน้าเว็บเข้า bridge ในเบราว์เซอร์** — unit test ครอบคลุมสิ่งที่ worker ทำกับ body ปลอม แต่ไม่ได้ทดสอบการ dispatch จริง
+6. **Firefox ยังไม่ทดสอบ** (P7)
+
+**ข้อที่ยังอธิบายไม่ได้:** `moduleLoad.test.ts` เคยล้มหนึ่งครั้ง (DevRoleSwitcher + useBugTrackerData) แล้วรันซ้ำ 9 ครั้งผ่านหมด ไม่ได้เก็บข้อความ error
+ขยาย timeout เป็น 30 วินาทีเป็นแค่การกันไว้ **ไม่ใช่การวินิจฉัย** — ถ้าเกิดซ้ำให้อ่านข้อความก่อนทำอะไร
+
+**ข้อค้นพบของเครื่องมือทดสอบ:** Puppeteer ที่ต่อ DevTools กับ worker ค้างไว้ทำให้ worker ที่ถูกหยุดไม่ตื่นอีกเลย (ต้อง detach ก่อน) ·
+Edge ใช้ `<cr-button data-command="stop">` ไม่ใช่ `<button>` — รอบแรกบน Edge รายงานว่า "ไม่ได้หยุด worker" แต่ข้อ "มาถึงครั้งเดียว" ผ่านไปเฉยๆ
+จึงมีข้อตรวจ marker ในหน่วยความจำคอยจับกรณีนี้
+
+**หมายเหตุประวัติ git:** งาน P3 ทั้งหมด (19 ไฟล์) ถูก commit รวมเป็นก้อนเดียวชื่อ "Add app/extension to workspaces in package.json" (`8097b23`)
+โดยผู้ใช้ — ชื่อไม่ตรงกับเนื้อหา ยังไม่ได้ push จึงแก้ชื่อได้ง่ายถ้าต้องการ
+
+**ถัดไป: P4** — branch `ext/p4-connect` แตกจาก `ext/dev`
