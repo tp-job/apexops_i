@@ -17,6 +17,7 @@ const findUnique = vi.fn();
 vi.mock('./prisma', () => ({ default: { userSettings: { findUnique: () => findUnique() } } }));
 
 const load = async () => (await import('./sessions')).resolveSessionTimeoutMinutes;
+const loadLabel = async () => (await import('./sessions')).labelUserAgent;
 
 describe('resolveSessionTimeoutMinutes', () => {
     beforeEach(() => findUnique.mockReset());
@@ -55,5 +56,31 @@ describe('resolveSessionTimeoutMinutes', () => {
     it('falls back rather than propagating a non-finite value', async () => {
         findUnique.mockResolvedValue({ sessionTimeout: Number.NaN });
         expect(await (await load())(1)).toBe(480);
+    });
+});
+
+describe('labelUserAgent — first-party client label (extension spec F12)', () => {
+    const UA = 'Mozilla/5.0 (Windows NT 10.0) Chrome/131.0';
+
+    it('tags a session that says it is the extension', async () => {
+        expect((await loadLabel())(UA, 'extension/0.1.0')).toBe(`ApexOps-extension/0.1.0 ${UA}`);
+    });
+
+    it('leaves an ordinary browser session exactly as it was', async () => {
+        expect((await loadLabel())(UA, undefined)).toBe(UA);
+        expect((await loadLabel())(undefined, undefined)).toBeNull();
+    });
+
+    it('ignores a label of the wrong shape rather than storing caller-chosen text', async () => {
+        const label = await loadLabel();
+        for (const bad of ['extension/', 'admin', 'extension/1.0 <script>', 'extension/' + 'x'.repeat(40), 'Extension/1.0']) {
+            expect(label(UA, bad)).toBe(UA);
+        }
+    });
+
+    it('keeps the stored value inside the 512-char column', async () => {
+        const long = 'U'.repeat(2000);
+        expect((await loadLabel())(long, 'extension/0.1.0')!.length).toBeLessThanOrEqual(512);
+        expect((await loadLabel())(long, undefined)!.length).toBe(512);
     });
 });
