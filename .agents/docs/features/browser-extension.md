@@ -520,3 +520,37 @@ Edge ใช้ `<cr-button data-command="stop">` ไม่ใช่ `<button>` �
 โดยผู้ใช้ — ชื่อไม่ตรงกับเนื้อหา ยังไม่ได้ push จึงแก้ชื่อได้ง่ายถ้าต้องการ
 
 **ถัดไป: P4** — branch `ext/p4-connect` แตกจาก `ext/dev`
+
+---
+
+## 13. ผล P4 — 2026-09-21 (ledger P4-01…P4-14)
+
+**P4 เสร็จ** — วาง URL ของ project แล้วผูกกับเว็บที่ทดสอบได้ผ่าน popup ตัวจริง ตรวจด้วย `checks/p4-extension.mjs`
+**33/33 บน Chrome 131 และ Edge 153** และ `checks/p4-web-card.mjs` 5/5 บน web app จริง
+
+**ทำงานอย่างไร:** วาง `http://localhost:5173/p/<slug>/...` → extension อ่าน `/apexops.json` ของ web app เพื่อรู้ว่า API อยู่ที่ไหน →
+แสดง**ชื่อโฮสต์ที่รหัสผ่านจะถูกส่งไป**ตัวใหญ่ → login เป็น session ของ extension เอง → `GET /api/projects/:slug` (ได้ ingest key มาเอง ไม่ต้องกรอก) →
+ผูก origin ของเว็บที่ทดสอบ → ลงทะเบียนสคริปต์ดักจับเฉพาะ origin นั้น
+
+**ที่เพิ่มใน web app / server:** `/apexops.json` (Vite plugin, X11) · การ์ด "Browser extension" ใน Project Settings (X14) ·
+header `X-Apexops-Client` ทำให้ session ของ extension แสดงเป็น "ApexOps extension · Chrome on Windows" ในหน้า Settings (F12)
+
+**ความปลอดภัยที่ตรวจแล้ว:** worker หา API เองจาก URL ที่วาง ไม่รับจาก popup · ปฏิเสธ API ที่ไม่ใช่ https (ยกเว้น loopback), URL ที่มี user:pass, ไฟล์ discovery ที่ไม่ใช่ ApexOps ·
+รับข้อความ UI จากหน้า extension เท่านั้น (ดู URL ของผู้ส่ง เพราะ content script ก็มี `sender.tab`) · popup ไม่เคยได้ ingest key ·
+ชื่อ project ที่เป็น HTML แสดงเป็นข้อความ ไม่ถูกรัน · refresh ครั้งเดียวแม้ 2 popup ถามพร้อมกัน 6 ครั้ง
+
+**bug ที่ check เจอและแก้แล้ว:** (1) ป้าย extension หายหลัง refresh ครั้งแรก เพราะ server เขียนแถวใหม่ตาม header ของคำขอ refresh — แก้ที่ shared (`setClientLabel`)
+(2) `<input type=url>` ให้เบราว์เซอร์กั้น submit เงียบๆ — ใช้ข้อความของเราเอง (3) ข้อความในการ์ดเคยบอกให้ "add ที่ด้านบน" ทั้งที่ไม่มีช่องนั้น
+
+**ข้อจำกัด (ไม่ได้ซ่อน):**
+1. **หน้าต่างขอ permission ตัวจริงยังไม่ได้ทดสอบ** — e2e build pre-grant localhost; รวมถึงกรณีเบราว์เซอร์ปิด popup ตอนขึ้น prompt และการ resume จาก draft
+2. **ยังไม่ได้ทดสอบผ่านการคลิกไอคอนจริง** (activeTab) — เปิด popup เป็นแท็บแทน
+3. **web app ยังไม่มีช่องแก้ allowedOrigins** — ต้องใช้ `PATCH /api/projects/:slug` (การ์ดบอกไว้) และ extension ID ของ unpacked เปลี่ยนตามพาธโฟลเดอร์จนกว่า P7 จะตรึง key
+4. ออกจากระบบ (sign out) **ไม่ตัด binding** — ดักจับต่อเพราะใช้ ingest key ที่เป็น public (popup บอกไว้) · ถ้า key ถูกหมุนตอนไม่ได้ login จะดึงใหม่ไม่ได้ และ popup แจ้งให้ login
+5. `apexops.json` ไม่มีเพดานขนาด/เวลา · ยังไม่ทดสอบด้วยคีย์บอร์ดล้วน/screen reader
+6. check สร้าง project 2 ตัวต่อรอบแล้ว archive (ไม่ค้างในรายการ) และแต่ละรอบเหลือ session ของ extension ที่ตัวเองสร้างไว้ในฐานข้อมูลทดสอบ
+7. login จำกัด 10 ครั้ง/15 นาที/IP ในหน่วยความจำ — แต่ละรอบใช้ ~5; รีสตาร์ท rig API ก่อนรัน
+
+**ยังไม่ทำ (ตามแผน):** Report bug / ticket (อยู่ P5) · `externally_connectable` (X14 ไม่ทำใน v1)
+
+**ถัดไป: P5a** — rail + ปุ่ม ApexOps + iframe panel ตามดีไซน์ · branch `ext/p5a-rail`
