@@ -64,6 +64,8 @@ interface Draft {
 
 let status: Status | null = null;
 let site: string | null = null;
+/** The tab `site` came from, so connecting can start capturing it without a reload. */
+let siteTabId: number | null = null;
 let discovered: DiscoverResult | null = null;
 let projectUrlText = '';
 let message: { kind: 'error' | 'ok'; text: string } | null = null;
@@ -71,21 +73,22 @@ let busy = false;
 
 const DRAFT_KEY = 'popupDraft';
 
-async function currentSite(): Promise<string | null> {
+async function currentSite(): Promise<void> {
     // The most recently used web tab of this window. From the real popup that is
     // the tab the icon was clicked on (`activeTab` makes its URL readable).
     const tabs = await browser.tabs.query({ currentWindow: true });
     const web = tabs
         .filter((t) => t.url && /^https?:\/\//.test(t.url))
         .sort((a, b) => (b.lastAccessed ?? 0) - (a.lastAccessed ?? 0))[0];
-    return web?.url ? new URL(web.url).origin : null;
+    site = web?.url ? new URL(web.url).origin : null;
+    siteTabId = web?.id ?? null;
 }
 
 async function refresh(): Promise<void> {
     const reply = await send<Status>({ type: 'status' });
     if (reply.ok) status = reply.data;
     else message = { kind: 'error', text: reply.error.message };
-    site = await currentSite();
+    await currentSite();
 }
 
 // The browser can close the popup when it shows a permission prompt. A draft in
@@ -129,14 +132,21 @@ function continueWithUrl(text: string): Promise<void> {
         return Promise.resolve();
     }
     return withBusy(async () => {
-        // First await in the click handler: `permissions.request` needs the user
-        // gesture that started it.
-        const granted = await browser.permissions.request({ origins: [`${appOrigin}/*`] });
-        if (!granted) throw new Error(`Access to ${host(appOrigin)} was declined, so its API cannot be found.`);
+        // Try without asking for anything first: an ApexOps web app serves
+        // /apexops.json cross-origin, so the common case needs no prompt at all.
+        let reply = await send<DiscoverResult>({ type: 'discover', projectUrl: text });
 
-        if (site) await saveDraft({ site, projectUrl: text });
-        const reply = await send<DiscoverResult>({ type: 'discover', projectUrl: text });
+        if (!reply.ok && reply.error.code === 'unreachable') {
+            // It may be there but unreadable from here. Asking for access to that
+            // site is the one thing that can change the answer.
+            if (site) await saveDraft({ site, projectUrl: text });
+            const granted = await browser.permissions.request({ origins: [`${appOrigin}/*`] });
+            if (!granted) throw new Error(`Access to ${host(appOrigin)} was declined, so its API cannot be found.`);
+            reply = await send<DiscoverResult>({ type: 'discover', projectUrl: text });
+        }
+
         if (!reply.ok) throw new Error(reply.error.message);
+        if (site) await saveDraft({ site, projectUrl: text });
         discovered = reply.data;
     });
 }
@@ -155,10 +165,11 @@ function connect(email: string, password: string): Promise<void> {
         const granted = await browser.permissions.request({ origins: [`${d.apiOrigin}/*`, `${siteOrigin}/*`] });
         if (!granted) throw new Error('Access was declined. The extension needs it to send errors from this site to your server.');
 
-        const reply = await send<{ name: string }>({
+        const reply = await send<{ name: string; capturing: boolean }>({
             type: 'connect',
             projectUrl: projectUrlText,
             siteOrigin,
+            ...(siteTabId !== null && { tabId: siteTabId }),
             credentials: d.signedInHere ? undefined : { email, password },
         });
         if (!reply.ok) throw new Error(reply.error.message);
@@ -167,7 +178,12 @@ function connect(email: string, password: string): Promise<void> {
         projectUrlText = '';
         await saveDraft(null);
         await refresh();
-        message = { kind: 'ok', text: `Connected to ${reply.data.name}. Reload the site to start capturing.` };
+        message = {
+            kind: 'ok',
+            text: reply.data.capturing
+                ? `Connected to ${reply.data.name}. This site is being captured now.`
+                : `Connected to ${reply.data.name}. Reload the site to start capturing.`,
+        };
     });
 }
 

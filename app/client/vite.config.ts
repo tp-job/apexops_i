@@ -15,7 +15,9 @@ import path from 'path'
  * without a build; in a build it is emitted next to index.html.
  *
  * Public by design: it carries only the API base URL, which every page of the
- * app already sends to every visitor's browser.
+ * app already sends to every visitor's browser. The dev server serves it with
+ * `Access-Control-Allow-Origin: *`; a production host that does not is fine
+ * too, because the extension then asks for access to the site and retries.
  */
 function apexopsDiscovery(apiUrl: string): Plugin {
   const body = JSON.stringify({ app: 'apexops', v: 1, apiUrl }, null, 2) + '\n'
@@ -25,6 +27,11 @@ function apexopsDiscovery(apiUrl: string): Plugin {
       server.middlewares.use('/apexops.json', (_req, res) => {
         res.setHeader('Content-Type', 'application/json')
         res.setHeader('Cache-Control', 'no-store')
+        // Readable cross-origin, so the extension can find the API before it has
+        // been granted access to this site — one fewer permission prompt in the
+        // connect flow. The file holds only the API base URL, which every page
+        // of this app already hands to every visitor.
+        res.setHeader('Access-Control-Allow-Origin', '*')
         res.end(body)
       })
     },
