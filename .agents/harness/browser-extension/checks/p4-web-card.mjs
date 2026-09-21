@@ -44,7 +44,11 @@ const browser = await puppeteer.launch({ headless: true });
 try {
     const page = await browser.newPage();
     await page.setViewport({ width: 1100, height: 1400 });
-    await page.goto(`${APP}/login`, { waitUntil: 'load' });
+    // Wait for the app to finish booting before writing the session. Signed out,
+    // AuthContext clears the stored session shortly after mount; writing into a
+    // page that is still starting means that clear can land on top of the write.
+    // Reproduced 1 run in 3 with `load`, never in 3 with the page settled.
+    await page.goto(`${APP}/login`, { waitUntil: 'networkidle0' });
     await page.evaluate((s) => {
         localStorage.setItem('accessToken', s.accessToken);
         localStorage.setItem('refreshToken', s.refreshToken);

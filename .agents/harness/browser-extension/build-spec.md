@@ -51,3 +51,7 @@ previous code, so restart via preview_stop/preview_start and re-probe before tru
 (login throttle), and `npm run build:e2e --workspace app/extension`. `P4_BROWSER=edge` for Edge; `P4_SHOTS=<dir>` writes popup screenshots in both
 colour schemes. `checks/p4-web-card.mjs` covers the card and Settings sessions. Regexes written through a shell heredoc lost their
 backslashes twice in this phase: write files with a file tool, not shell substitution.
+
+**Unpacked build (2026-09-21).** `checks/unpacked-build.mjs` runs against `.output/chrome-mv3` (the shipped build) and needs only the Vite
+client :5199. The rig server now sets RATE_LIMIT_AUTH_MAX_LOGIN=200 in launch.json, because a debugging session burns the 10/15min default fast.
+Writing a session into localStorage on a page that is still booting gets cleared by AuthContext: wait for networkidle first.
