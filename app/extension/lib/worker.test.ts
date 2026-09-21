@@ -308,7 +308,7 @@ describe('handleRequest', () => {
             { type: 'connect', projectUrl: `${APP}/p/demo`, siteOrigin: 'http://127.0.0.1:8797', credentials: { email: 'me@test.dev', password: 'pw' } },
             CTX
         );
-        expect(reply).toEqual({ ok: true, data: { siteOrigin: 'http://127.0.0.1:8797', name: 'Demo', slug: 'demo' } });
+        expect(reply).toEqual({ ok: true, data: { siteOrigin: 'http://127.0.0.1:8797', name: 'Demo', slug: 'demo', capturing: false } });
         expect(calls.find((c) => c.url.endsWith('/api/auth/login'))?.url).toBe(`${API}/api/auth/login`);
         expect(JSON.stringify(reply)).not.toContain('pk_');
 

@@ -14,6 +14,11 @@ export default defineContentScript({
     registration: 'runtime',
     runAt: 'document_start',
     main() {
+        // One listener per frame, however many times this is injected.
+        const w = window as unknown as Record<string, unknown>;
+        if (w.__apexopsExtensionBridge) return;
+        w.__apexopsExtensionBridge = true;
+
         document.addEventListener(CAPTURE_EVENT, (e) => {
             const body = (e as CustomEvent).detail;
             if (typeof body !== 'string' || body.length > MAX_BODY_CHARS) return;

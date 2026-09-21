@@ -554,3 +554,25 @@ header `X-Apexops-Client` ทำให้ session ของ extension แสด�
 **ยังไม่ทำ (ตามแผน):** Report bug / ticket (อยู่ P5) · `externally_connectable` (X14 ไม่ทำใน v1)
 
 **ถัดไป: P5a** — rail + ปุ่ม ApexOps + iframe panel ตามดีไซน์ · branch `ext/p5a-rail`
+
+---
+
+## 14. ติดตั้งแบบ unpacked + UX ที่ปรับหลัง P4 — 2026-09-21 (ledger P4-15…P4-18)
+
+**คู่มือ: `.agents/docs/guides/browser-extension-unpacked.md`** (build → โหลดเข้า Chrome/Edge → ผูกเว็บ → ทดสอบ → ปัญหาที่เจอบ่อย)
+
+- `npm run build --workspace app/extension` → โฟลเดอร์ `.output/chrome-mv3` สำหรับ Load unpacked · `npm run zip` → 19.4 kB
+  **ห้ามโหลด `chrome-mv3-e2e`** — ตัวนั้น pre-grant localhost ไว้สำหรับสคริปต์ทดสอบเท่านั้น
+- **ไอคอน:** `npm run icons` วาดสัญลักษณ์เดียวกับ web app (พื้นมะนาว เส้น activity เข้ม) ขนาด 16–128 · พื้นเป็นสีมะนาวเพื่อให้เห็นบนแถบเครื่องมือสีเข้ม
+- **ลดหน้าต่างขอสิทธิ์เหลือครั้งเดียว:** `/apexops.json` ส่ง `Access-Control-Allow-Origin: *` แล้ว extension จึงหา API ได้โดยไม่ต้องขอสิทธิ์ก่อน
+  (ถ้า host จริงไม่ส่ง header นี้ popup จะขอสิทธิ์เว็บนั้นแล้วลองใหม่เอง) เหลือ prompt เดียวตอนกด connect ซึ่งครอบทั้ง API และเว็บที่ทดสอบ
+- **เชื่อมแล้วดักจับทันที ไม่ต้อง reload:** worker ฉีดสคริปต์เข้าแท็บที่เปิดอยู่ และมี marker กันฉีดซ้ำทั้งสอง world · popup บอกสถานะจริงว่ากำลังจับอยู่หรือให้ reload
+
+**ตรวจแล้ว:** `checks/unpacked-build.mjs` 6/6 บน Chrome และ Edge (manifest ที่แจกไม่ขอสิทธิ์เว็บใดเลย, ติดตั้งแล้ว origins ว่าง, วาง URL แล้วหา API ได้โดยไม่มี prompt)
+· `checks/p4-extension.mjs` 34/34 (รวมเคสใหม่ "ไม่ต้อง reload" ซึ่งล้มเมื่อปิดการฉีด) · `checks/p4-web-card.mjs` 5/5 รันซ้ำ 3 ครั้งเสถียร
+
+**สิ่งที่ automation ทำไม่ได้ ต้องลองด้วยมือ:** หน้าต่างขอสิทธิ์ของเบราว์เซอร์ และ**การคลิกไอคอนจริง** — `activeTab` เกิดจากคลิกไอคอนเท่านั้น
+popup ที่เปิดเป็นแท็บจึงไม่เห็น URL ของเว็บ และจะขึ้นว่า "Open the website you want to test…"
+
+**gotcha ของ harness:** เขียน token ลง `localStorage` ขณะหน้าเว็บยัง boot ไม่เสร็จ จะถูก `AuthContext` ล้างทับ (เจอ 1 ใน 3 รอบ) — ต้องรอหน้า settle ก่อน ·
+rig server ตั้ง `RATE_LIMIT_AUTH_MAX_LOGIN=200` ใน `launch.json` (ไฟล์นี้ไม่ได้ track) เพราะแต่ละรอบทดสอบใช้ login หลายครั้ง

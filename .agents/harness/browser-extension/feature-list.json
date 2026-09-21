@@ -638,6 +638,68 @@
       "notes": "VERIFIED 2026-09-21."
     },
     {
+      "id": "P4-15",
+      "title": "The build a person installs, loaded unpacked",
+      "priority": "critical",
+      "depends_on": [
+        "P4-14"
+      ],
+      "description": "app/extension/.output/chrome-mv3 (npm run build), plus a zip from npm run zip. Guide: .agents/docs/guides/browser-extension-unpacked.md.",
+      "steps": [
+        "checks/unpacked-build.mjs: the shipped manifest asks for no site access, registers no content scripts, and has icons and a popup",
+        "nothing is granted at install (chrome.permissions.getAll has no origins)",
+        "the popup opens against that build"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-21, 6/6 on Chrome 131 and Edge 153. The zip is 19.4 kB. NOT exercised by automation: the real permission prompt, and the toolbar-icon click itself — see P4-17."
+    },
+    {
+      "id": "P4-16",
+      "title": "Finding the API needs no permission prompt",
+      "priority": "high",
+      "depends_on": [
+        "P4-15"
+      ],
+      "description": "The web app serves /apexops.json with Access-Control-Allow-Origin: *, so the worker can read it before any site access exists. If a host does not send it, the popup asks for access to that site and retries.",
+      "steps": [
+        "against the shipped build with zero origins granted: a pasted project URL resolves to the API and the grant list is still empty afterwards",
+        "the response is readable cross-origin from the extension"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-21. This removes one of the two prompts in the connect flow; the remaining one covers the API and the site together. ACAO itself cannot be asserted from JS (it is not a readable response header), so what is checked is that the read succeeds."
+    },
+    {
+      "id": "P4-17",
+      "title": "Connecting starts capturing the open tab, with no reload",
+      "priority": "critical",
+      "depends_on": [
+        "P4-04"
+      ],
+      "description": "Registered content scripts only run on a navigation, so the tab a person just connected would stay silent until reloaded. The worker injects both scripts into that tab once; each sets a marker in its own world and returns early if it is already there.",
+      "steps": [
+        "after connect, an error fired WITHOUT reloading becomes an issue",
+        "after a reload the registered scripts take over and each error is still counted once (no double capture)",
+        "FAILURE CASE: with the injection disabled, only the no-reload case fails (33/34)"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-21 in the p4 check, 34/34. The popup says which of the two happened (\"being captured now\" vs \"reload the site\")."
+    },
+    {
+      "id": "P4-18",
+      "title": "Toolbar icons",
+      "priority": "medium",
+      "depends_on": [
+        "P4-15"
+      ],
+      "description": "scripts/make-icons.mjs draws the web app mark (lime #C5F43A ground, dark activity pulse) at 16/32/48/96/128 and writes public/icon/*.png. No image dependency: PNG chunks plus zlib, shapes by distance field at 4x.",
+      "steps": [
+        "the manifest carries all five sizes",
+        "the 128px file was read back as an image and looks like the sidebar mark"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-21. Lime is the background rather than the glyph so the icon stays visible in a dark toolbar. The PNGs are committed; re-run `npm run icons` to regenerate."
+    },
+    {
       "id": "P5a",
       "title": "Rail shell + ApexOps button + iframe panel",
       "priority": "critical",

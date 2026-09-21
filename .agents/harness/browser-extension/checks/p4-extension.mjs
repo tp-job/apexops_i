@@ -287,12 +287,23 @@ try {
     await contrastBoth(pop, 'bound view + signed-in account');
     await pop.close();
 
-    // ── H. it works: an error on the site reaches the project ──
+    // ── H. it works, without reloading the site first ──
+    // The tab was open before it was connected, so registered scripts have not
+    // run in it. Connecting injects them, or a person is left with a page that
+    // silently does nothing until they think to reload.
+    const tagNow = `${RUN}-no-reload`;
+    await site.evaluate((x) => window.fire(x), tagNow);
+    const now = await until(() => issue(tagNow), 20_000);
+    check('connecting starts capturing the open tab, with no reload', !!now, now ? `issue #${now.id}` : 'not found');
+
+    // ── H2. and after a reload, exactly once (the registered scripts take over) ──
     await site.reload({ waitUntil: 'load' });
     const tagA = `${RUN}-first`;
     await site.evaluate((x) => window.fire(x), tagA);
     const a = await until(() => issue(tagA), 20_000);
-    check('an error on the connected site becomes an issue in that project', !!a, a ? `issue #${a.id}` : 'not found');
+    await sleep(7000); // past a second flush, so a double injection would show
+    const aAgain = await issue(tagA);
+    check('after a reload it still captures, and counts each error once', !!a && aAgain?.count === 1, `count=${aAgain?.count ?? 'none'}`);
 
     // ── I. the extension\'s session is its own, and labelled ──
     const sessions = (await call('GET', '/api/auth/sessions', T)).body?.sessions ?? [];
