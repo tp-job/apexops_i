@@ -1,4 +1,4 @@
-import { getApiBaseUrl } from '../api/config';
+import { getApiBaseUrl, getClientHeaders } from '../api/config';
 import type { RefreshResponse } from '../types/auth';
 
 /**
@@ -120,7 +120,7 @@ export function initSession(next: StorageAdapter): Promise<void> {
         const values = await Promise.all(SESSION_KEYS.map((k) => safely(() => next.get(k), null)));
         SESSION_KEYS.forEach((k, i) => {
             // A write that landed while we were reading is newer than what we read.
-            if (!cache.has(k)) setCached(k, values[i]);
+            if (!cache.has(k)) setCached(k, values[i] ?? null);
         });
     })();
     return ready;
@@ -301,7 +301,7 @@ export function refreshOnce(): Promise<string> {
         // signal back" and "it logged you out on the train".
         const res = await fetch(`${getApiBaseUrl()}/api/auth/refresh`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...getClientHeaders() },
             body: JSON.stringify({ refreshToken: presented }),
         });
 

@@ -39,6 +39,16 @@ export const sessionsAPI = {
 export function describeUserAgent(ua: string | null): string {
     if (!ua) return 'Unknown device';
 
+    // The browser extension labels its own sessions (`X-Apexops-Client`, stored as
+    // an `ApexOps-extension/<version>` prefix) so they do not read as the tab they
+    // were opened next to. Strip it and describe the browser underneath.
+    const ext = /^ApexOps-extension\/\S+\s*/.exec(ua);
+    if (ext) {
+        const rest = ua.slice(ext[0].length);
+        const browser = rest ? describeUserAgent(rest) : '';
+        return browser && browser !== 'Unknown browser' ? `ApexOps extension · ${browser}` : 'ApexOps extension';
+    }
+
     let browser = 'Unknown browser';
     if (/Edg[e/]/i.test(ua)) browser = 'Edge';
     else if (/OPR\/|Opera/i.test(ua)) browser = 'Opera';

@@ -46,3 +46,8 @@ It stops the worker through chrome:// / edge://serviceworker-internals after DET
 stopped extension worker never wakes). `checks/sdk-e2e.mjs` drives the server's own /sdk/test page.
 Restarting the rig API after server.ts changes: ts-node-dev restarts, but twice in this build it was still serving the
 previous code, so restart via preview_stop/preview_start and re-probe before trusting a curl.
+
+**P4 (2026-09-21).** `checks/p4-extension.mjs` needs the rig API :3013 AND the Vite client :5199 (it serves /apexops.json), a fresh API restart
+(login throttle), and `npm run build:e2e --workspace app/extension`. `P4_BROWSER=edge` for Edge; `P4_SHOTS=<dir>` writes popup screenshots in both
+colour schemes. `checks/p4-web-card.mjs` covers the card and Settings sessions. Regexes written through a shell heredoc lost their
+backslashes twice in this phase: write files with a file tool, not shell substitution.

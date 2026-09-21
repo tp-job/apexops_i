@@ -85,11 +85,29 @@ export async function resolveSessionTimeoutMinutes(userId: number): Promise<numb
     return Math.min(MAX_TIMEOUT_MIN, Math.max(MIN_TIMEOUT_MIN, Math.round(raw)));
 }
 
+/**
+ * `X-Apexops-Client: extension/0.1.0` — how a first-party client that is not a
+ * browser tab says what it is (browser extension spec F12). Without it the
+ * extension's session reads as a plain "Chrome" row, indistinguishable from the
+ * tab it was opened next to. Shape-checked and length-capped, and used only to
+ * label the row: like the User-Agent beside it, the caller chooses it, so it is
+ * recognition and never an input to any access decision.
+ */
+const CLIENT_HEADER = /^extension\/[0-9A-Za-z.-]{1,24}$/;
+
+/** The label stored in `userAgent` for a first-party client, or the raw User-Agent. */
+export function labelUserAgent(userAgent: string | undefined, client: string | undefined): string | null {
+    const ua = userAgent?.slice(0, 480) ?? '';
+    if (client && CLIENT_HEADER.test(client)) return `ApexOps-${client} ${ua}`.trim();
+    return userAgent?.slice(0, 512) ?? null;
+}
+
 /** Session context for the active-sessions list. Recognition only — never authorization. */
 function sessionContext(req: Request): { userAgent: string | null; ipAddress: string | null } {
     const forwarded = (req.headers['x-forwarded-for'] as string | undefined)?.split(',')[0]?.trim();
+    const client = req.headers['x-apexops-client'];
     return {
-        userAgent: req.headers['user-agent']?.slice(0, 512) ?? null,
+        userAgent: labelUserAgent(req.headers['user-agent'], typeof client === 'string' ? client : undefined),
         ipAddress: forwarded || req.ip || null,
     };
 }

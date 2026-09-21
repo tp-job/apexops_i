@@ -417,16 +417,225 @@
       "notes": "VERIFIED 2026-09-20 (exit 0 on every step). UNEXPLAINED: one test run failed moduleLoad.test.ts for DevRoleSwitcher and useBugTrackerData right after lint/typecheck; the error text was not captured, and 9 reruns (cold cache x4, full-workspace x3, concurrent builds x1, single) all passed. The signature differs from the module-scope-baseURL regression (that one fails services/api.ts + useBugTrackerData). The file's test timeout was widened to 30s as a hedge, NOT a diagnosis. If it recurs, read the message before touching anything."
     },
     {
-      "id": "P4",
-      "title": "Connect by project URL + binding + web-app card",
+      "id": "P4-01",
+      "title": "The web app publishes where its API is: /apexops.json",
       "priority": "critical",
       "depends_on": [
-        "P3"
+        "P2-01"
       ],
-      "description": "Spec 8.5 P4.",
-      "steps": [],
-      "passes": false,
-      "notes": ""
+      "description": "Vite serves and emits { app, v, apiUrl } from VITE_API_URL (same fallback as main.tsx).",
+      "steps": [
+        "dev server answers /apexops.json with the rig API",
+        "a production build with VITE_API_URL=https://ops.example.test/ emits dist/apexops.json with the slash stripped"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-21 (dev via the p4 check, build by reading dist/). No automated test: it is a build plugin, proven by running it."
+    },
+    {
+      "id": "P4-02",
+      "title": "Project-URL parsing and API discovery refuse what is unsafe (R19)",
+      "priority": "critical",
+      "depends_on": [
+        "P4-01"
+      ],
+      "description": "lib/projectUrl.ts + lib/discovery.ts, driven with a fake fetch.",
+      "steps": [
+        "slug, scheme and credentials rules; apiUrl must be https or plain http on a loopback host only; discovery file read without cookies and without following redirects",
+        "in the real popup: malformed URL, non-project page, unreachable address, a site that is not ApexOps, and an API on http://evil.example.test each produce a message, and the last never shows a password field",
+        "Mutations: loopback check loosened, credential check off, redirects followed: each turns a test red"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-21: 10 unit tests plus the popup cases in checks/p4-extension.mjs, Chrome and Edge. NOT covered: an apexops.json that is huge or slow (no size or time cap on the read)."
+    },
+    {
+      "id": "P4-03",
+      "title": "The password goes to the discovered API and nowhere else",
+      "priority": "critical",
+      "depends_on": [
+        "P4-02"
+      ],
+      "description": "The worker re-derives the API from the pasted URL on connect; the popup cannot supply one.",
+      "steps": [
+        "unit: credentials reach exactly {discovered apiUrl}/api/auth/login; an insecure discovered API sends nothing; a second server while signed in to the first is refused before any request",
+        "popup names the host in large type before the fields",
+        "Mutation: letting a caller-supplied apiUrl through turns four tests red"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-21. The sign-in step was also read as a screenshot (host localhost:3013 in the largest type on the panel)."
+    },
+    {
+      "id": "P4-04",
+      "title": "Connect end to end: bound with the server's key, capture registered, events arrive",
+      "priority": "critical",
+      "depends_on": [
+        "P4-03",
+        "P3-02"
+      ],
+      "description": "popup -> worker -> discover -> login -> GET /api/projects/:slug -> binding -> registrations.",
+      "steps": [
+        "wrong password says so and binds nothing",
+        "a project the user is not a member of says so, binds nothing (the server answers 404, which is also the membership proof)",
+        "success: binding holds the server's key, apiUrl, projectId, slug, appOrigin; scripts registered for that origin only; an error on the site becomes an issue",
+        "the popup HTML never contains the ingest key"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-21, 33/33 on Chrome 131 AND Edge 153 (checks/p4-extension.mjs). LIMIT: the e2e build pre-grants localhost, so permissions.request resolved without a prompt. The real prompt, the browser closing the popup at it, and the saved-draft resume were NOT exercised; the \"Connect this site\" flow through a real toolbar click (activeTab) was not either: the popup was opened as a tab."
+    },
+    {
+      "id": "P4-05",
+      "title": "The extension has a session of its own, labelled, and it stays labelled",
+      "priority": "critical",
+      "depends_on": [
+        "P4-04"
+      ],
+      "description": "X-Apexops-Client: extension/<version> on login AND on refresh; the server stores an ApexOps-extension/<version> prefix; Settings shows \"ApexOps extension - <browser>\".",
+      "steps": [
+        "sessions list has the extension row apart from the checking session",
+        "after a refresh the rotated row is still labelled (found by the browser check: it was not)",
+        "Settings page in the real web app lists it",
+        "Mutation: removing the header from refresh turns the unit test red"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-21. The first design labelled login only; the P4 browser check could not find the session after its first refresh because the server writes a rotation's new row from the refresh request's headers. Fixed in shared (setClientLabel). The label is caller-chosen and used only to name the row."
+    },
+    {
+      "id": "P4-06",
+      "title": "One refresher, however many callers (X2)",
+      "priority": "critical",
+      "depends_on": [
+        "P4-04",
+        "P1-03"
+      ],
+      "description": "Only the service worker calls the API; the popup sends messages.",
+      "steps": [
+        "expired access token, two popup tabs sending three status requests each at once: exactly one POST /auth/refresh, all six replies signed in",
+        "unit: five concurrent callers, one refresh",
+        "a 5xx or an outage keeps the session and reports it unverified; a 401 after the replay ends it"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-21: refreshes=1, signedIn=6/6 in the browser (counted by wrapping the worker's fetch), and the unit tests. Mutation (no in-flight sharing) turns the unit test red."
+    },
+    {
+      "id": "P4-07",
+      "title": "Revoking the extension's session from the web signs the popup out",
+      "priority": "critical",
+      "depends_on": [
+        "P4-05"
+      ],
+      "description": "DELETE /api/auth/sessions/:id from another session.",
+      "steps": [
+        "popup shows \"Not signed in\" on its next call",
+        "capture on the connected site continues (it is keyed by the public ingest key, not the login)"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-21, Chrome and Edge. Signing out leaves bindings in place on purpose, and the popup says so."
+    },
+    {
+      "id": "P4-08",
+      "title": "A rotated ingest key is recovered without re-setup (X13)",
+      "priority": "critical",
+      "depends_on": [
+        "P4-04"
+      ],
+      "description": "A 401 from ingest makes the worker re-read the key, once a minute per site at most, and resend at once.",
+      "steps": [
+        "owner rotates the key on the web: the next event is delivered and the binding holds the new key",
+        "unit: changed / same / rate limit / signed out are distinct results"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-21. Needs the extension to be signed in: signed out, a rotated key is refused and the popup says to sign in again."
+    },
+    {
+      "id": "P4-09",
+      "title": "A project that lists origins refuses the extension, and the popup says why (R6)",
+      "priority": "critical",
+      "depends_on": [
+        "P4-04"
+      ],
+      "description": "The worker sends from chrome-extension://<id>, which an allowlist rejects with 403.",
+      "steps": [
+        "events refused, not delivered; the popup shows the message with this extension's origin",
+        "allowlist lifted: delivery resumes and the warning clears"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-21. GAP: the web app has NO control for allowedOrigins (only PATCH /api/projects/:slug). The card says so. The extension ID is derived from the unpacked folder path until P7 pins a manifest key, so an allowlist entry breaks if the folder moves."
+    },
+    {
+      "id": "P4-10",
+      "title": "Outside text is never run",
+      "priority": "high",
+      "depends_on": [
+        "P4-04"
+      ],
+      "description": "The popup sets textContent only.",
+      "steps": [
+        "a project named <img src=x onerror=...> is shown literally: no img element, window.__xss never set"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-21. The check creates two projects per run (a private one, and the markup one) and archives them with DELETE; they remain as archived rows in the dev database."
+    },
+    {
+      "id": "P4-11",
+      "title": "Disconnect really disconnects",
+      "priority": "critical",
+      "depends_on": [
+        "P4-04"
+      ],
+      "description": "Popup -> binding removed -> scripts unregistered -> host access handed back.",
+      "steps": [
+        "binding gone, registered scripts empty, the site's console.error is native again after a reload"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-21. Handing the browser permission back (permissions.remove) is a no-op in the e2e build, whose localhost grants are fixed, so it was not observed to take effect."
+    },
+    {
+      "id": "P4-12",
+      "title": "The web app's Browser extension card",
+      "priority": "high",
+      "depends_on": [
+        "P4-01"
+      ],
+      "description": "ExtensionConnectCard on /p/:slug/settings.",
+      "steps": [
+        "renders with the exact project URL and the three steps",
+        "the allowlist note appears only when origins are restricted",
+        "\"Copy project URL\" hands the URL to clipboard.writeText and says Copied",
+        "read as a screenshot in the real app"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-21 (checks/p4-web-card.mjs, 5/5). Headless Chrome has no clipboard focus, so what is tested is the value passed to writeText, not the OS clipboard. A first draft of the note pointed at a control that does not exist; corrected."
+    },
+    {
+      "id": "P4-13",
+      "title": "Popup is readable in both colour schemes and its fields are labelled",
+      "priority": "high",
+      "depends_on": [
+        "P4-04"
+      ],
+      "description": "Tokens on :root, redefined for dark.",
+      "steps": [
+        "every visible text element >= 4.5:1 in light and dark, in five states (unconnected, error, sign-in, bound + signed in, bound with an error)",
+        "every input has exactly one label",
+        "screenshots read"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-21: contrast computed in the browser (13-18 text elements per state). Disabled controls are exempt by WCAG. NOT tested: keyboard-only use, a screen reader, zoom or a high-contrast theme."
+    },
+    {
+      "id": "P4-14",
+      "title": "P4 close-out: full CI sequence",
+      "priority": "critical",
+      "depends_on": [
+        "P4-04",
+        "P4-13"
+      ],
+      "description": "CI steps run locally.",
+      "steps": [
+        "typecheck (4 workspaces), lint, tests: shared 34, client 192, server 166, extension 54",
+        "builds: client, server, extension; the shipped manifest still has no host_permissions and no content_scripts (it now has a popup)"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-21."
     },
     {
       "id": "P5a",

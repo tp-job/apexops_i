@@ -21,6 +21,23 @@ export function getApiBaseUrl(): string {
     return apiBaseUrl;
 }
 
+// How a first-party client that is not a browser tab labels the sessions it
+// mints (`X-Apexops-Client`, see `app/server/src/lib/sessions.ts`). The server
+// records the label on every refresh token row, and a rotation writes a NEW row
+// from the refresh request's own headers — so the label has to ride on refresh
+// as well as on login, or a session is labelled for exactly its first hour.
+// The web app sets none and sends none.
+let clientLabel: string | null = null;
+
+export function setClientLabel(label: string | null): void {
+    clientLabel = label;
+}
+
+/** Headers that identify this client on requests that create or rotate a session. */
+export function getClientHeaders(): Record<string, string> {
+    return clientLabel ? { 'X-Apexops-Client': clientLabel } : {};
+}
+
 /** The session module owns the token; this stays as the name the fetch callers already use. */
 export function getAuthToken(): string | null {
     return getAccessToken();
