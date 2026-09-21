@@ -13,7 +13,7 @@ import {
     SessionExpiredError,
     type StorageAdapter,
 } from './authSession';
-import { configureApi, getApiBaseUrl } from '../api/config';
+import { configureApi, getApiBaseUrl, setClientLabel } from '../api/config';
 
 /**
  * The session module after it moved behind a StorageAdapter (extension spec P1).
@@ -135,6 +135,28 @@ describe('storage adapter', () => {
 });
 
 describe('refreshOnce', () => {
+    it('labels the refresh with the client, so a rotated session keeps its label', async () => {
+        // The server writes the label from the refresh request's headers onto the
+        // NEW refresh-token row. Without it, a session is labelled for its first
+        // access token only, then reads as an ordinary browser.
+        await initSession(memoryAdapter({ accessToken: 'old', refreshToken: 'r1' }).adapter);
+        fetchMock.mockResolvedValue(json(200, { accessToken: 'new', refreshToken: 'r2' }));
+        setClientLabel('extension/9.9.9');
+        try {
+            await refreshOnce();
+        } finally {
+            setClientLabel(null);
+        }
+        expect(fetchMock.mock.calls[0][1].headers).toMatchObject({ 'X-Apexops-Client': 'extension/9.9.9' });
+    });
+
+    it('a client with no label (the web app) sends none', async () => {
+        await initSession(memoryAdapter({ accessToken: 'old', refreshToken: 'r1' }).adapter);
+        fetchMock.mockResolvedValue(json(200, { accessToken: 'new', refreshToken: 'r2' }));
+        await refreshOnce();
+        expect(Object.keys(fetchMock.mock.calls[0][1].headers)).toEqual(['Content-Type']);
+    });
+
     it('two concurrent callers produce exactly one refresh request', async () => {
         await initSession(memoryAdapter({ accessToken: 'old', refreshToken: 'r1' }).adapter);
         fetchMock.mockResolvedValue(json(200, { accessToken: 'new', refreshToken: 'r2' }));
