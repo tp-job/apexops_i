@@ -16,6 +16,8 @@ export type Request =
           type: 'connect';
           projectUrl: string;
           siteOrigin: string;
+          /** The tab to start capturing in straight away, so no reload is needed. */
+          tabId?: number;
           /** Present when the person is signing in as part of connecting. */
           credentials?: { email: string; password: string };
       }

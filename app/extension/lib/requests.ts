@@ -2,6 +2,7 @@ import { getAccessToken } from '@apexops/shared/auth';
 import { readBindings, removeBinding, type Bindings } from './bindings';
 import { ConnectProblem, connectSite, normalizeSiteOrigin } from './connect';
 import { discover, DiscoveryProblem, type Discovered } from './discovery';
+import { injectIntoTab } from './inject';
 import { readIngestProblems } from './ingestProblems';
 import type { BindingView, DiscoverResult, Reply, Request, Status } from './messages';
 import { ProjectUrlProblem } from './projectUrl';
@@ -88,7 +89,10 @@ export async function handleRequest(req: Request, ctx: RequestContext): Promise<
                     await login(d.apiUrl, req.credentials.email, req.credentials.password, ctx.version);
                 }
                 const binding = await connectSite(d, siteOrigin);
-                return { ok: true, data: { siteOrigin, name: binding.name, slug: binding.slug } };
+                // Capture the tab that is open right now; registered scripts
+                // only run on the next navigation.
+                const injected = typeof req.tabId === 'number' ? await injectIntoTab(req.tabId, siteOrigin) : 'skipped';
+                return { ok: true, data: { siteOrigin, name: binding.name, slug: binding.slug, capturing: injected === 'injected' } };
             }
 
             case 'disconnect':

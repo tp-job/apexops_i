@@ -19,6 +19,11 @@ export default defineContentScript({
     world: 'MAIN',
     runAt: 'document_start',
     main() {
+        // Already capturing here (registered script, or a previous inject).
+        const w = window as unknown as Record<string, unknown>;
+        if (w.__apexopsExtensionCapture) return;
+        w.__apexopsExtensionCapture = true;
+
         const hand = (body: string) => {
             document.dispatchEvent(new CustomEvent(CAPTURE_EVENT, { detail: body }));
         };
