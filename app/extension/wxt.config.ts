@@ -15,6 +15,11 @@ import { defineConfig } from 'wxt';
  * cannot click. It is never the build a person installs.
  */
 export default defineConfig({
+    // A build wipes its output folder first, and Windows refuses that while a
+    // browser has the unpacked extension loaded from it (EBUSY). Setting
+    // WXT_OUT_DIR builds somewhere else instead of making the person close
+    // their browser. Unset, this is WXT's own default.
+    ...(process.env.WXT_OUT_DIR && { outDir: process.env.WXT_OUT_DIR }),
     manifest: ({ mode }) => ({
         name: 'ApexOps',
         description: 'Capture errors and inspect UI on the site you are testing, straight into an ApexOps project.',
