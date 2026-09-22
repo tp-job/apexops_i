@@ -700,6 +700,56 @@
       "notes": "VERIFIED 2026-09-21. Lime is the background rather than the glyph so the icon stays visible in a dark toolbar. The PNGs are committed; re-run `npm run icons` to regenerate."
     },
     {
+      "id": "P4-19",
+      "title": "A password is never sent to a server that has not said it is ApexOps",
+      "priority": "critical",
+      "depends_on": [
+        "P4-03"
+      ],
+      "description": "GET /api/health now answers app: 'apexops', and the extension checks it before POSTing credentials.",
+      "steps": [
+        "unit: a 404 (another project on that port), a plain {status:ok}, and an app:\"other\" each refuse with not-apexops-api, send no login request, and store nothing",
+        "unit: an unreachable server is a network problem and still sends nothing",
+        "in the browser, against the real dev servers: a web app naming a non-ApexOps API is refused and that server received nothing at all",
+        "Mutations: skipping the check, or accepting any 200, each turn the refusal tests red"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-22. This exists because :3000 on this machine is sometimes held by another project (see memory): the address comes from a web app's /apexops.json, and without a marker an ApexOps password would be posted to a stranger's login route and reported as a wrong password. It is a mistake-catcher, NOT authentication — any server can serve the string; what it rules out is the wrong-port case."
+    },
+    {
+      "id": "P4-20",
+      "title": "Ready to use on this machine: the whole flow against the developer's own dev servers",
+      "priority": "critical",
+      "depends_on": [
+        "P4-19",
+        "P4-17"
+      ],
+      "description": "checks/ready-dev.mjs runs the popup, worker and API against client :5173 + API :3000 (not the rig), on a cleared extension profile.",
+      "steps": [
+        "the API on :3000 identifies itself and its database is connected; /apexops.json names that same API",
+        "the sign-in step names the real host; connect succeeds and reports capturing without a reload",
+        "console.error on the site becomes an issue in the project",
+        "the extension session is labelled; disconnect and sign out leave nothing behind"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-22: 8/8 in Chrome 131 against the live dev setup, project \"test\", issue #435 in 5.3s. Uses the e2e build because the permission dialog is native UI; everything else is the shipped path. Rerun with READY_APP/READY_API for other ports."
+    },
+    {
+      "id": "P4-21",
+      "title": "Building while the extension is loaded",
+      "priority": "medium",
+      "depends_on": [
+        "P4-15"
+      ],
+      "description": "Windows refuses to wipe the output folder a browser has open (EBUSY), which is the normal state once someone has loaded it unpacked.",
+      "steps": [
+        "WXT_OUT_DIR=<path> builds elsewhere instead",
+        "the guide says to reload the extension card after any build"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-22: reproduced against the folder the user had loaded (the shipped build was a day stale and locked), and the override built cleanly with the new health check inside. Not a code defect — a Windows file-lock fact that costs ten confusing minutes."
+    },
+    {
       "id": "P5a",
       "title": "Rail shell + ApexOps button + iframe panel",
       "priority": "critical",
