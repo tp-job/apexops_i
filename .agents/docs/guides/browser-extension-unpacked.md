@@ -60,11 +60,14 @@ console.error('hello from the site under test')
 
 รอไม่เกิน ~5 วินาที (SDK ส่งเป็นชุดทุก 5 วินาที) แล้วเปิด `/p/<slug>/issues` ใน web app จะเห็น issue ใหม่
 
+> **ถ้าเคยโหลดไว้แล้วและเพิ่ง build ใหม่** ให้กดปุ่ม reload (⟳) ที่การ์ด extension ในหน้า `chrome://extensions` ไม่งั้นยังเป็นตัวเก่า
+
 ## สิ่งที่ extension ทำและไม่ทำ
 
 - ดักจับ `console.error`, `console.warn`, uncaught error และ unhandled rejection **เฉพาะเว็บที่ผูกไว้**
 - URL ที่บันทึก **ตัด query string และ `#hash` ทิ้ง** แต่ **ข้อความ error ไม่ได้ถูกกรอง** — token ที่อยู่ในข้อความ error จะถูกส่งไปด้วย
 - ถ้าหน้าเว็บมี SDK ของ ApexOps อยู่แล้ว extension จะหยุดส่งเอง เพื่อไม่ให้นับซ้ำ
+- **ก่อนส่งรหัสผ่าน จะเช็ก `/api/health` ของ API ก่อน** ถ้าไม่ตอบว่าเป็น ApexOps จะไม่ส่งอะไรเลย (กันกรณีพอร์ตชนกับโปรเจกต์อื่น) เป็นการกันความผิดพลาด ไม่ใช่การยืนยันตัวตน เพราะเซิร์ฟเวอร์ใดก็ตอบข้อความนี้ได้
 - session ของ extension แยกจาก web app จะเห็นเป็น "ApexOps extension · Chrome on Windows" ในหน้า Settings
 - **sign out ไม่ได้ตัดการดักจับ** เพราะใช้ ingest key ซึ่งเป็น public โดยออกแบบ ถ้าจะหยุดให้กด **Disconnect this site**
 
@@ -77,6 +80,8 @@ console.error('hello from the site under test')
 | "…is not https" | extension ปฏิเสธ API ที่เป็น http ธรรมดาที่ไม่ใช่ localhost โดยตั้งใจ เพื่อไม่ให้รหัสผ่านวิ่งแบบไม่เข้ารหัส |
 | "There is no project … that you are a member of" | บัญชีที่ login ไม่ได้เป็นสมาชิก project นั้น |
 | ข้อความสีแดงเรื่อง "listed origins" | project เปิด origin allowlist อยู่ ต้องเพิ่ม origin ของ extension (popup แสดงไว้ให้คัดลอก) ตอนนี้ยังไม่มีช่องแก้ในเว็บ ต้องใช้ `PATCH /api/projects/<slug>` |
+| build ไม่ผ่าน: `EBUSY: resource busy or locked, rmdir ...chrome-mv3` | โฟลเดอร์นั้นถูกโหลดอยู่ในเบราว์เซอร์ Windows จึงลบทับไม่ได้ · เอา extension ออก (หรือปิดเบราว์เซอร์) แล้ว build ใหม่ · หรือ build ไปที่อื่นด้วย `WXT_OUT_DIR=<path> npx wxt build` ใน `app/extension` |
+| "…did not answer as an ApexOps API" | พอร์ตปลายทางไม่ใช่เซิร์ฟเวอร์ ApexOps (บนเครื่องนี้ :3000 เคยถูกโปรเจกต์อื่นยึด) extension จะไม่ส่งรหัสผ่านให้ · เช็กด้วย `curl http://localhost:3000/api/health` ต้องได้ `"app":"apexops"` |
 | error ไม่ขึ้นเป็น issue | ดูว่า project เปิดจับ level นั้นไหม (`captureLevels` ที่หน้า settings) · ถ้า API ล่ม extension จะเก็บไว้ในคิวและส่งใหม่เองภายใน ~30 วินาที |
 
 ## ข้อจำกัดที่ยังมีอยู่ในเวอร์ชันนี้
