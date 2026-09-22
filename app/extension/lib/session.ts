@@ -28,7 +28,14 @@ import { createChromeStorageAdapter } from './chromeStorageAdapter';
 
 export const API_URL_KEY = 'apiUrl';
 
-export type SessionProblemCode = 'bad-credentials' | 'throttled' | 'deactivated' | 'server' | 'network' | 'other-server';
+export type SessionProblemCode =
+    | 'bad-credentials'
+    | 'throttled'
+    | 'deactivated'
+    | 'server'
+    | 'network'
+    | 'other-server'
+    | 'not-apexops-api';
 
 export class SessionProblem extends Error {
     code: SessionProblemCode;
@@ -70,6 +77,33 @@ export function __resetSessionForTests(): void {
     ready = null;
 }
 
+/**
+ * Refuse to send a password anywhere that has not said it is an ApexOps API.
+ *
+ * The address comes from a web app's `/apexops.json`, and on a developer's
+ * machine it is a localhost port another project may be holding — `:3000` on
+ * this one. Without this, signing in would post an ApexOps password to a
+ * stranger's login route and report "wrong email or password".
+ *
+ * A mistake-catcher, not authentication: any server can serve the marker. It
+ * rules out the wrong-port case, which is the one that actually happens.
+ */
+export async function verifyApi(apiUrl: string): Promise<void> {
+    const wrong = new SessionProblem(
+        'not-apexops-api',
+        `${new URL(apiUrl).host} did not answer as an ApexOps API, so nothing was sent to it. Check the address, and that the ApexOps server is the one running on that port.`
+    );
+    let res: Response;
+    try {
+        res = await fetch(`${apiUrl}/api/health`, { credentials: 'omit', cache: 'no-store' });
+    } catch {
+        throw new SessionProblem('network', `Could not reach ${new URL(apiUrl).host}. Is the server running?`);
+    }
+    if (!res.ok) throw wrong;
+    const body = (await res.json().catch(() => null)) as { app?: unknown } | null;
+    if (body?.app !== 'apexops') throw wrong;
+}
+
 export async function login(apiUrl: string, email: string, password: string, version: string): Promise<void> {
     await ensureSession();
 
@@ -79,6 +113,8 @@ export async function login(apiUrl: string, email: string, password: string, ver
     if (current && current !== apiUrl && getAccessToken()) {
         throw new SessionProblem('other-server', `Already signed in to ${new URL(current).host}. Sign out first to use ${new URL(apiUrl).host}.`);
     }
+
+    await verifyApi(apiUrl);
 
     let res: Response;
     try {

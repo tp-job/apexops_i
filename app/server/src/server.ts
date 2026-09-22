@@ -421,8 +421,26 @@ app.get('/', (_req: Request, res: Response) => {
     });
 });
 
+/**
+ * Health, and "yes, this really is an ApexOps API".
+ *
+ * `app: 'apexops'` is there for the browser extension. It is handed an API
+ * address by a web app it was pointed at, and on a developer's machine that
+ * address is a localhost port which some *other* project may be holding — so
+ * without a marker, a sign-in could post an ApexOps password to a neighbouring
+ * server's login route. The extension refuses to send credentials until this
+ * answers (`app/extension/lib/session.ts`).
+ *
+ * It is a mistake-catcher, not an authentication: anyone can serve this string.
+ * What it rules out is the honest wrong-port case, which is the likely one.
+ */
 app.get('/api/health', (_req: Request, res: Response) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString(), database: dbConnected ? 'connected' : 'disconnected' });
+    res.json({
+        app: 'apexops',
+        status: 'ok',
+        timestamp: new Date().toISOString(),
+        database: dbConnected ? 'connected' : 'disconnected',
+    });
 });
 
 // ── API Routes ───────────────────────────────────────────────

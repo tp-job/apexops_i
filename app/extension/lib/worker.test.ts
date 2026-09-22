@@ -88,6 +88,8 @@ beforeEach(() => {
     __resetInFlight();
     // What the worker does once at start (`background.ts`).
     setClientLabel('extension/0.1.0');
+    // The API identifies itself; the suite below replaces this to test the refusal.
+    healthy();
 });
 
 afterEach(() => {
@@ -95,17 +97,47 @@ afterEach(() => {
     vi.unstubAllGlobals();
 });
 
+/** The API saying it is ApexOps, which `login` checks before sending anything. */
+const healthy = () => {
+    routes[`GET ${API}/api/health`] = () => ({ status: 200, body: { app: 'apexops', status: 'ok' } });
+};
+
 const LOGIN_OK = { accessToken: jwt(3600), refreshToken: 'r1', user: { email: 'me@test.dev', firstName: 'Me' } };
 const PROJECT = { id: 7, name: 'Demo', slug: 'demo', ingestKey: 'pk_' + 'a'.repeat(48) };
+
+describe('login refuses an API that has not said it is ApexOps', () => {
+    it.each([
+        ['answers 404 (a different project on that port)', { status: 404, body: { success: false, message: 'Route not found' } }],
+        ['answers ok but is some other app', { status: 200, body: { status: 'ok' } }],
+        ['answers ok for a different ApexOps-shaped app', { status: 200, body: { app: 'other', status: 'ok' } }],
+    ])('%s: nothing is sent and nothing is stored', async (_name, health) => {
+        routes[`GET ${API}/api/health`] = () => health;
+        routes[`POST ${API}/api/auth/login`] = () => ({ status: 200, body: LOGIN_OK });
+
+        await expect(login(API, 'me@test.dev', 'pw', '0.1.0')).rejects.toMatchObject({ code: 'not-apexops-api' });
+
+        expect(calls.some((c) => c.url.endsWith('/api/auth/login'))).toBe(false);
+        expect(JSON.stringify(calls)).not.toContain('pw');
+        expect(getAccessToken()).toBeNull();
+    });
+
+    it('a server that cannot be reached at all is a network problem, and still sends nothing', async () => {
+        delete routes[`GET ${API}/api/health`];
+        await expect(login(API, 'me@test.dev', 'pw', '0.1.0')).rejects.toMatchObject({ code: 'network' });
+        expect(calls.some((c) => c.url.endsWith('/api/auth/login'))).toBe(false);
+    });
+});
 
 describe('login', () => {
     it('sends the password to the given API only, labelled as the extension, and stores a session of its own', async () => {
         routes[`POST ${API}/api/auth/login`] = () => ({ status: 200, body: LOGIN_OK });
         await login(API, 'me@test.dev', 'pw', '0.1.0');
 
-        expect(calls).toHaveLength(1);
-        expect(calls[0]).toMatchObject({ method: 'POST', url: `${API}/api/auth/login`, credentials: 'omit', body: { email: 'me@test.dev', password: 'pw' } });
-        expect(calls[0]?.headers['x-apexops-client']).toBe('extension/0.1.0');
+        // The identity check, then the sign-in, and nothing else.
+        expect(calls.map((c) => `${c.method} ${c.url}`)).toEqual([`GET ${API}/api/health`, `POST ${API}/api/auth/login`]);
+        const post = calls[1];
+        expect(post).toMatchObject({ method: 'POST', credentials: 'omit', body: { email: 'me@test.dev', password: 'pw' } });
+        expect(post?.headers['x-apexops-client']).toBe('extension/0.1.0');
         expect(getAccessToken()).toBe(LOGIN_OK.accessToken);
         expect(world.areas.local.get('apiUrl')).toBe(API);
         expect(world.areas.local.get('refreshToken')).toBe('r1');
