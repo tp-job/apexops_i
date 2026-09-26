@@ -148,6 +148,13 @@ a typed tree with no `dangerouslySetInnerHTML` anywhere in the path, and the ric
 same. It is on this list because it is the finding that constrains the *architecture*, so it belongs
 in the restructuring decision rather than in a patch.
 
+> **Constraint added 2026-09-19 (browser extension, decision X3 in `features/browser-extension.md`).**
+> Whatever phase 4 picks for the web app, **the Bearer path (`Authorization` header + refresh token in the
+> body) must stay available to non-web clients.** The extension's service worker has no cookie jar for
+> the API origin that it can rely on across browsers. A cookie-only phase 4 would lock the extension out,
+> and nothing would fail until someone tried to log in. Moving the *web app* to an httpOnly cookie
+> is still fine. `StorageAdapter` (extension P1) is what keeps the two transports separable.
+
 ### A8 — Composition-rule password policy, no breach check · LOW-MEDIUM
 
 8 characters, one uppercase, one lowercase, one digit. NIST 800-63B (which A07 #6 points at)

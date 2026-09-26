@@ -1,0 +1,23 @@
+{
+  "name": "@apexops/shared",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Code the web app and the browser extension share: session, API client, auth types, and the console-capture core behind /sdk/v1.js. TypeScript source only; each consumer's bundler compiles it.",
+  "exports": {
+    "./auth": "./src/auth/authSession.ts",
+    "./api": "./src/api/index.ts",
+    "./types/auth": "./src/types/auth.ts",
+    "./sdk-core": "./src/sdk-core/capture.ts"
+  },
+  "scripts": {
+    "build:sdk": "node scripts/build-sdk.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.1",
+    "typescript": "~5.9.3",
+    "vitest": "^3.2.7"
+  }
+}

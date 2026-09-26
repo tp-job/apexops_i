@@ -1,0 +1,948 @@
+{
+  "build": "browser extension — floating toolbar + connect by project URL, integration branch ext/dev",
+  "spec": "build-spec.md",
+  "target": ".agents/docs/features/browser-extension.md",
+  "features": [
+    {
+      "id": "P0-01",
+      "title": "Decisions X1-X18 locked",
+      "priority": "critical",
+      "depends_on": [],
+      "description": "User said 'make follow plan': every recommendation stands. Spec section 10 records the result and the X10/X17 amendments.",
+      "steps": [
+        "Spec section 10 lists X1-X18 as locked, with the X10 three-zone table and the X17 vendor amendment"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-19. 8.8 Q3 (Web Store or internal) is still open and does not block P1-P5."
+    },
+    {
+      "id": "P0-02",
+      "title": "Auth phase 4 carries the Bearer-path constraint (X3)",
+      "priority": "critical",
+      "depends_on": [],
+      "description": "planning/auth-review-and-restructure-2026-08-25.md says non-web clients keep Bearer whatever phase 4 picks.",
+      "steps": [
+        "grep 'Constraint added 2026-09-19' in the auth plan under A7"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-19."
+    },
+    {
+      "id": "P0-03",
+      "title": "Ingest accepts context (F10)",
+      "priority": "high",
+      "depends_on": [],
+      "description": "context.source = 'extension' needs no schema change.",
+      "steps": [
+        "schemas/ingest.schema.ts:34 declares context as z.record(z.string(), z.unknown())"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-19 by reading the schema."
+    },
+    {
+      "id": "P0-04",
+      "title": "Extension iframe panel survives hostile CSP and is unreadable by the page (R16/R17)",
+      "priority": "critical",
+      "depends_on": [],
+      "description": "spikes/p0-csp: four CSPs, with a hostile page script that patches attachShadow.",
+      "steps": [
+        "Panel iframe loads under default-src 'none' / frame-src 'none'",
+        "Page gets null for iframe.contentDocument and the secret is absent from page HTML",
+        "FAILURE CASE: an open shadow root IS read by the page (instrument control)",
+        "Closed root made in the ISOLATED world is NOT read, not even through a patched attachShadow"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-19 on Chrome for Testing 131.0.6778.204 and Edge 153.0.4234.32: all four variants pass and the control fails as it should. Firefox is untested and belongs to P7."
+    },
+    {
+      "id": "P0-05",
+      "title": "VisBug can be hosted (X17)",
+      "priority": "high",
+      "depends_on": [],
+      "description": "Where VisBug runs, and whether it can be reused.",
+      "steps": [
+        "Repo status, licence and manifest version checked through the GitHub API",
+        "world:'MAIN' content script runs under every CSP variant, and customElements exists there",
+        "customElements is null in the ISOLATED world, so <vis-bug> cannot live there"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-19. The repo is ARCHIVED (last push 2026-08-03), Apache-2.0, MV3. Decision: vendor it, do not depend on it. Its script-tag injection was refused on Chrome on every page, including the one with no CSP, by an extension-side policy while use_dynamic_url was on; Edge ran it. We use world:'MAIN' instead."
+    },
+    {
+      "id": "P1-01",
+      "title": "One door for session storage",
+      "priority": "critical",
+      "depends_on": [
+        "P0-01"
+      ],
+      "description": "Every read or write of accessToken / refreshToken / user goes through lib/authSession.ts. build-spec.md lists the 12 sites.",
+      "steps": [
+        "grep -rn \"localStorage\" app/client/src returns token/user keys ONLY inside the web StorageAdapter",
+        "FAILURE CASE: the grep run on main before the change DOES list config.ts, AuthContext.tsx, services/auth.ts and devSessions.ts"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-19. The grep for token/user keys finds nothing in app/client/src. Remaining localStorage calls hold device preferences only (AppLayout assistant panel, ThemeContext, the devSessions list). Control: the same pattern matches api/config.ts on ext/dev. All 12 sites now go through authSession."
+    },
+    {
+      "id": "P1-02",
+      "title": "authSession runs on an async StorageAdapter",
+      "priority": "critical",
+      "depends_on": [
+        "P1-01"
+      ],
+      "description": "StorageAdapter { get, set, remove } returns promises. The web passes a localStorage adapter, and an extension can pass chrome.storage.local.",
+      "steps": [
+        "Unit test: an in-memory adapter round-trips persist/read/clear",
+        "Unit test: an adapter that throws on get/set does not crash the caller, and reads come back as null",
+        "npm run build (client) passes — erasableSyntaxOnly"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-19 by authSession.test.ts (16 tests). DESIGN DEVIATION from spec P1 step 2, taken on purpose: the adapter is async, but authSession keeps an in-memory cache, so the getters stay SYNC. initSession() fills the cache before React mounts (main.tsx; .then is a style choice — Vite 7's default target does support top-level await, and an earlier comment claiming otherwise was corrected in P2). adapter.subscribe feeds other contexts' writes into the cache. This avoided pushing await into axios, socket handshakes and first render (R4). Writes update memory synchronously and persistTokens can be awaited; refreshOnce awaits it (R3). The throwing adapter reads as signed out, and the lazy localStorage lookup keeps a blocked store from crashing at startup. npm run build passes."
+    },
+    {
+      "id": "P1-03",
+      "title": "Refresh coordination unchanged by the async move",
+      "priority": "critical",
+      "depends_on": [
+        "P1-02"
+      ],
+      "description": "refreshOnce() still coalesces, still picks up a token another tab already rotated (accessAtStart), and endSession still fires only on 401/403.",
+      "steps": [
+        "Test: two concurrent callers produce exactly ONE POST /auth/refresh",
+        "Test: refresh answers 401 → endSession fires and the tokens are cleared",
+        "Test: refresh answers 500 or the network drops → session kept and tokens intact",
+        "Test: storage already holds a newer access token than the one at start → no refresh call made"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-19. Tests cover: one refresh for two callers; 401 ends the session; 500 and network failures keep it; adopting another tab's token; waiting for the initial storage read before deciding there is no refresh token. Mutation check: removing each guard (coalescing, await ready, adopt, cache-before-notify) turns exactly its own test red."
+    },
+    {
+      "id": "P1-04",
+      "title": "No flash to /login on reload",
+      "priority": "high",
+      "depends_on": [
+        "P1-02"
+      ],
+      "description": "AuthContext's initial state used a sync localStorage read. With async storage, the first render must stay 'loading' until storage resolves.",
+      "steps": [
+        "Logged in, reload /dashboard: URL never becomes /login (observe with a MutationObserver or a navigation log, not by eye)",
+        "Logged out, open /dashboard: redirected to /login"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-19 in Chrome for Testing 131 on the isolated rig (checks/p1-browser.mjs). Reloading /dashboard records routes ['/dashboard'] only, and signed out lands on /login. There is no loading-state redesign: the cache is filled before render, so the initial state is right from the first frame."
+    },
+    {
+      "id": "P1-05",
+      "title": "API base URL is a runtime value",
+      "priority": "high",
+      "depends_on": [],
+      "description": "configureApi({ baseUrl }) replaces the build-time-only read. The web passes VITE_API_URL at startup.",
+      "steps": [
+        "Web app calls reach the same API as before (network log)",
+        "Unit test: configureApi changes the URL a request goes to"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-19. configureApi({baseUrl}) in api/config.ts strips trailing slashes. The test shows it moves the refresh URL. The web keeps the VITE_API_URL default, and the rig ran against :3013 through it."
+    },
+    {
+      "id": "P1-06",
+      "title": "P1 browser close-out",
+      "priority": "critical",
+      "depends_on": [
+        "P1-01",
+        "P1-02",
+        "P1-03",
+        "P1-04",
+        "P1-05"
+      ],
+      "description": "Spec P1 exit, observed in a real browser.",
+      "steps": [
+        "login → reload → still logged in",
+        "two tabs, access token expired in both, both fire a request → neither is logged out, and the server sees no reuse alarm",
+        "revoke the session from another browser → the next call gets 401 and lands on /login",
+        "client CI suite + npm run build + typecheck green"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-19 with checks/p1-browser.mjs on the rig (API :3013, Vite :5199, Chrome for Testing 131): 8/8, then 5/5 on a rerun. In 5 race rounds with both tabs expired, the refreshes were [B:200, A:401] every time, both tabs stayed on /projects, and the token was renewed. Revoke-all from another login sent the next call to /login. FAILURE CASE observed: with the adopt branch removed, BOTH tabs ended at /login (the loser's endSession clears the shared store), so the check detects the regression. Client lint, typecheck (tsc -b), vitest 141/141 and build are clean. RESIDUAL, not reproduced: the loser's 401 could arrive before the winner has persisted (during the claim/issueSession window). The old code had the same exposure, and it was not seen in 5/5 rounds. The extension avoids it by construction, because its service worker is the only refresher (X2)."
+    },
+    {
+      "id": "P2-01",
+      "title": "packages/shared workspace exists and CI runs it",
+      "priority": "critical",
+      "depends_on": [
+        "P1-06"
+      ],
+      "description": "@apexops/shared: TypeScript source, no build of its own; exports ./auth ./api ./types/auth ./sdk-core.",
+      "steps": [
+        "npm ls @apexops/shared resolves to the workspace link",
+        "npm run typecheck/test --workspaces includes it",
+        "package-lock.json carries packages/shared"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-20. Root workspaces = packages/shared, app/client, app/server. Lockfile +15 lines. CI needed no new steps (it already runs --workspaces); step names changed from \"both\" to \"all\". React is NOT a dependency: nothing in shared renders yet, so the spec's peerDependency rule has nothing to apply to. It applies the day shared gains a component."
+    },
+    {
+      "id": "P2-02",
+      "title": "Session, API client and auth types moved, one import door each",
+      "priority": "critical",
+      "depends_on": [
+        "P2-01"
+      ],
+      "description": "authSession, api/config + fetchWithAuth, types/auth moved with git mv; client imports @apexops/shared/*; no shims.",
+      "steps": [
+        "grep finds no @/lib/authSession, @/api/config, @/api/client, @/types/auth in app/client/src",
+        "client 189 tests (128 existing + 61 module-load) and shared 29 tests pass",
+        "client build + lint clean"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-20 (commit e905f90). getApiBaseUrl has NO default and throws when unconfigured; main.tsx configures it from VITE_API_URL. localStorageAdapter stays in the client, with its own test file."
+    },
+    {
+      "id": "P2-03",
+      "title": "No module reads API config or session at load time",
+      "priority": "critical",
+      "depends_on": [
+        "P2-02"
+      ],
+      "description": "Found by the browser check. services/api.ts had axios.create({ baseURL: getApiBaseUrl() }) at module scope, which runs before main.tsx configures the URL: blank page. tsc, the unit tests and vite build all passed it.",
+      "steps": [
+        "moduleLoad.test.ts imports all 60 non-UI modules with nothing configured",
+        "FAILURE CASE: put the module-scope read back, and the test fails on services/api.ts and its importer"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-20. Fixed by reading baseURL in the request interceptor. The AST scan (every module-scope call to the session/API getters) found exactly that one site. The P1 reload check was ALSO blind to a blank app (\"never visited /login\" is true of an app that never booted). It now requires GET /api/auth/profile to answer 200, shown failing with the bug put back (profile=none)."
+    },
+    {
+      "id": "P2-04",
+      "title": "sdk-core split: startCapture(config, transport, host)",
+      "priority": "critical",
+      "depends_on": [
+        "P2-01"
+      ],
+      "description": "capture.ts ported line for line from v1.js; v1-entry.ts keeps script-tag config + fetch/sendBeacon. Extension inputs: context, mapUrl (optional).",
+      "steps": [
+        "15 capture tests with a fake window: level patching, page prints first, dedupe count, sampling spares errors, context/mapUrl, internal throw stays inside, no recursion from transport logging, global hooks, unload path, circuit breaker, rejected send, batch halving"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-20 (commit 600aa72). The X9 marker (window.__apexopsSdk) was deliberately NOT added here: P2 promises identical v1 behaviour. It moves to P3."
+    },
+    {
+      "id": "P2-05",
+      "title": "/sdk/v1.js is generated and cannot drift, and it behaves exactly as before",
+      "priority": "critical",
+      "depends_on": [
+        "P2-04"
+      ],
+      "description": "esbuild (es2018, IIFE, unminified) writes app/server/public/sdk/v1.js, which is committed. v1-build.test.ts compares it with a fresh build.",
+      "steps": [
+        "checks/p2-sdk-parity.mjs: old vs new v1.js on the same page in Chrome, same scenario, all ingest requests diffed",
+        "FAILURE CASE: one string changed in the new file → FAIL at the exact line",
+        "FAILURE CASE: hand edit to the committed file → drift test fails",
+        "checks/sdk-e2e.mjs: generated v1.js on /sdk/test against the real server + DB, plus the regression → alert loop"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-20. Parity: 2 requests (fetch with X-Apexops-Key: 9 events; sendBeacon on unload: 1 event), identical apart from timestamps; same page errors. esbuild absWorkingDir is pinned: output embeds module paths, and a build from the repo root differed from one inside the package. Found when the drift test failed from root. Target es2018 (object spread native); v1 was ES5 by hand, which no supported browser needs. END-TO-END 2026-09-20 (checks/sdk-e2e.mjs, driving the server's own /sdk/test page on the rig, project sprint2-demo): 14/14. The served v1.js is the generated one. The SDK's flush was accepted (202, 3 events). console.error, the uncaught TypeError and the unhandled rejection each landed on their own issue in Postgres (#332-#334). The page's loop ran all 7 steps: ingest → issue → resolve → recur (regressions: 1) → alert fired (unread 1 → 2) → reopened (reopenCount 1). FAILURE CASE: serving a v1.js that cannot read data-project gives 10/14, with no flush and all three counts unchanged. /sdk/demo was not run separately; it loads the same script the same way."
+    },
+    {
+      "id": "P2-06",
+      "title": "Found bug fixed: oversized batch dropped its tail",
+      "priority": "high",
+      "depends_on": [
+        "P2-05"
+      ],
+      "description": "buildBatch halved to fit 64 KB and never re-queued the rest: 40 large events sent 10, lost 30. The comment said the opposite.",
+      "steps": [
+        "Test failed first (sent 0-9 of 40), passes after the fix",
+        "Parity against 600aa72 still identical for the ordinary scenario"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-20 (commit 4a0a93c), its own commit so the port stays a pure move. Remaining limitation, unchanged: an unload flush sends one batch, so a backlog larger than one batch at teardown still loses the rest."
+    },
+    {
+      "id": "P2-07",
+      "title": "P2 close-out: web app passes the P1 browser checklist again",
+      "priority": "critical",
+      "depends_on": [
+        "P2-02",
+        "P2-03"
+      ],
+      "description": "Spec P2 exit: the web app passes P1 again after the move.",
+      "steps": [
+        "checks/p1-browser.mjs on the isolated rig"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-20: 8/8 (5 race rounds). Before the P2-03 fix it was 1/8, which is how the blank page was found. The rig API had to be restarted once: the per-account login throttle returned 429 after many check runs in one day."
+    },
+    {
+      "id": "P3-01",
+      "title": "app/extension workspace: WXT, minimal permissions, no static site access",
+      "priority": "critical",
+      "depends_on": [
+        "P2-01"
+      ],
+      "description": "WXT/MV3 workspace. Content scripts are registered at runtime for bound origins only.",
+      "steps": [
+        "Production manifest has permissions storage/scripting/alarms/activeTab, optional_host_permissions, and NO host_permissions and NO content_scripts",
+        "The e2e build (localhost pre-granted) is a separate --mode and is never the shipped build",
+        "npm run build --workspace app/extension is a CI step"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-20. Manifest read after `wxt build`. The content-script entrypoints declare no `matches`, on purpose: WXT copies a runtime script's matches into host_permissions, which would ask for every site at install. WXT 0.21.4 brought one vite (7.3.6) and no second React. `npm audit` totals are identical before and after adding WXT (59, all pre-existing). NOT tested: the real permission prompt. The e2e build pre-grants localhost so a script can bind a site; the prompt itself belongs to P4."
+    },
+    {
+      "id": "P3-02",
+      "title": "A bound site's console.error becomes an issue; an unbound site is untouched",
+      "priority": "critical",
+      "depends_on": [
+        "P3-01"
+      ],
+      "description": "Capture on bound origins only.",
+      "steps": [
+        "Bound: console.error becomes an issue in Postgres within ~5s",
+        "Control: the unbound site has a native console.error and no ApexOps world; the bound site has a patched one and the world"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-20 with checks/p3-extension.mjs on Chrome for Testing 131 AND Edge 153, both 14/14: issue after ~5.3s. Registered scripts are exactly capture(MAIN) + bridge(ISOLATED) with matches = the bound origin only. This check found and drove three server/SDK fixes, see P3-06."
+    },
+    {
+      "id": "P3-03",
+      "title": "Privacy: stored URL has no query string or fragment",
+      "priority": "critical",
+      "depends_on": [
+        "P3-02"
+      ],
+      "description": "X5. Stripped in the page-side capture and again in the worker.",
+      "steps": [
+        "Open /plain?token=secret123&u=me#frag, fire an error, read the stored event",
+        "sanitize.test.ts pins stripUrl"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-20: stored url = http://127.0.0.1:8797/plain. The message and stack are NOT scrubbed, so a token inside an error MESSAGE still reaches the project. That is a known limit of X5 as specified (only the URL is stripped); not addressed."
+    },
+    {
+      "id": "P3-04",
+      "title": "Page CSP does not stop delivery",
+      "priority": "critical",
+      "depends_on": [
+        "P3-02"
+      ],
+      "description": "The page never makes the request: the MAIN world hands the batch to the ISOLATED bridge by DOM event, the bridge to the worker, the worker calls the API.",
+      "steps": [
+        "Page served with connect-src 'self' delivers, with no CSP violation logged in the page"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-20 on Chrome and Edge. The DOM event (not postMessage) is deliberate: dispatch on pagehide is synchronous across worlds, while a posted message is a task that may never run during teardown. The unload/pagehide path was exercised only by the SDK parity check, not by the extension check."
+    },
+    {
+      "id": "P3-05",
+      "title": "X9: a page running its own SDK is not double-counted",
+      "priority": "critical",
+      "depends_on": [
+        "P3-02"
+      ],
+      "description": "The SDK sets window.__apexopsSdk; the extension's shouldCapture() checks it per event.",
+      "steps": [
+        "Page with the SDK in its HTML: event count 1",
+        "SDK loaded late: before-event once via the extension, after-event once via the SDK",
+        "FAILURE CASE: with the guard removed, counts are 2 and 2"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-20. The mutation run gave 12/14: \"counted once\" got count=2 and \"SDK loaded late\" got after=2. Restored and rebuilt afterwards."
+    },
+    {
+      "id": "P3-06",
+      "title": "Bugs found by the P3 check, all pre-existing, fixed in their own commits",
+      "priority": "high",
+      "depends_on": [
+        "P3-02"
+      ],
+      "description": "Nothing had ever loaded /sdk/v1.js or posted to /api/ingest from another origin against this server.",
+      "steps": [
+        "a603932: /sdk/v1.js was answered by express.static with helmet's Cross-Origin-Resource-Policy: same-origin, so every other site's <script> was blocked (ERR_BLOCKED_BY_RESPONSE.NotSameOrigin). The explicit route moved above static.",
+        "949cef9: /api/ingest was mounted below the global CORS and the 100kB JSON parser, so its own CORS and 1MB cap never ran: every cross-origin preflight was refused and a 200kB batch was a 413. Mounted first.",
+        "1b1955b: the dedupe count was uncapped; the server rejects count > 10000 with a 400, which the circuit breaker does not count as a failure"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-20, each observed before and after with curl or a real browser: preflight ACAO localhost:5199 became the caller's origin with X-Apexops-Key allowed; a 200kB body went from 413 to reaching key validation (401 for a fake key); 2MB is still 413; app routes still pin CORS to the frontend origin. The two server fixes have NO automated test: they were proven live only. A test needs an HTTP-level harness the server suite does not have."
+    },
+    {
+      "id": "P3-07",
+      "title": "The worker's trust boundary: nothing from the page picks the project, key or context",
+      "priority": "critical",
+      "depends_on": [
+        "P3-02"
+      ],
+      "description": "lib/sanitize.ts + background.ts. The origin comes from sender.origin, never from the message.",
+      "steps": [
+        "16 unit tests: fields typed and capped to the server schema, context and release REPLACED not merged, a body key ignored, malformed events dropped without throwing, batch capped at 100, oversized body refused",
+        "Mutation: trusting the page's context turns the sanitiser test red"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-20. Also mutation-tested: dropping the queue lock and dropping single-flight flush each turn their own test red. In the browser, a throw inside capture (toJSON and toString both throw) does not reach the page. NOT tested in a browser: a hostile page dispatching forged capture events. The unit tests cover what the worker does with a forged body; the DOM-event forging itself was not driven."
+    },
+    {
+      "id": "P3-08",
+      "title": "Worker stopped with events queued: none lost, none doubled",
+      "priority": "critical",
+      "depends_on": [
+        "P3-02"
+      ],
+      "description": "A persisted queue in chrome.storage.session; a 30s alarm retries.",
+      "steps": [
+        "Server (proxy) down: the batch is in the queue",
+        "Worker stopped from chrome:// or edge://serviceworker-internals",
+        "Server back, nothing pokes the worker: the event arrives once, from a FRESH worker (in-memory marker gone), and the queue is empty"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-20, Chrome and Edge, 14/14 each. Two harness findings worth keeping. (1) With Puppeteer's DevTools session still attached, a stopped extension worker is NEVER woken again (0 requests in 45s), so the check detaches first. (2) ServiceWorker.stopAllWorkers and Target.closeTarget do not stop an extension worker. Edge renders the stop control as <cr-button data-command=\"stop\">, not <button>: the first Edge run reported the worker \"not stopped\", and its \"arrives once\" pass was therefore meaningless; the marker check exists to catch exactly that. LIMITS by design: delivery is at-least-once (a worker stopped between the 202 and the queue write resends), and storage.session means a full BROWSER restart drops queued events."
+    },
+    {
+      "id": "P3-09",
+      "title": "P1-P3 close-out: full CI sequence green",
+      "priority": "critical",
+      "depends_on": [
+        "P3-01",
+        "P3-07",
+        "P3-08"
+      ],
+      "description": "The CI steps, run locally.",
+      "steps": [
+        "typecheck all 4 workspaces",
+        "lint",
+        "test: shared 32, client 189, server 162, extension 16",
+        "build client, server, extension",
+        "one React version"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-20 (exit 0 on every step). UNEXPLAINED: one test run failed moduleLoad.test.ts for DevRoleSwitcher and useBugTrackerData right after lint/typecheck; the error text was not captured, and 9 reruns (cold cache x4, full-workspace x3, concurrent builds x1, single) all passed. The signature differs from the module-scope-baseURL regression (that one fails services/api.ts + useBugTrackerData). The file's test timeout was widened to 30s as a hedge, NOT a diagnosis. If it recurs, read the message before touching anything."
+    },
+    {
+      "id": "P4-01",
+      "title": "The web app publishes where its API is: /apexops.json",
+      "priority": "critical",
+      "depends_on": [
+        "P2-01"
+      ],
+      "description": "Vite serves and emits { app, v, apiUrl } from VITE_API_URL (same fallback as main.tsx).",
+      "steps": [
+        "dev server answers /apexops.json with the rig API",
+        "a production build with VITE_API_URL=https://ops.example.test/ emits dist/apexops.json with the slash stripped"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-21 (dev via the p4 check, build by reading dist/). No automated test: it is a build plugin, proven by running it."
+    },
+    {
+      "id": "P4-02",
+      "title": "Project-URL parsing and API discovery refuse what is unsafe (R19)",
+      "priority": "critical",
+      "depends_on": [
+        "P4-01"
+      ],
+      "description": "lib/projectUrl.ts + lib/discovery.ts, driven with a fake fetch.",
+      "steps": [
+        "slug, scheme and credentials rules; apiUrl must be https or plain http on a loopback host only; discovery file read without cookies and without following redirects",
+        "in the real popup: malformed URL, non-project page, unreachable address, a site that is not ApexOps, and an API on http://evil.example.test each produce a message, and the last never shows a password field",
+        "Mutations: loopback check loosened, credential check off, redirects followed: each turns a test red"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-21: 10 unit tests plus the popup cases in checks/p4-extension.mjs, Chrome and Edge. NOT covered: an apexops.json that is huge or slow (no size or time cap on the read)."
+    },
+    {
+      "id": "P4-03",
+      "title": "The password goes to the discovered API and nowhere else",
+      "priority": "critical",
+      "depends_on": [
+        "P4-02"
+      ],
+      "description": "The worker re-derives the API from the pasted URL on connect; the popup cannot supply one.",
+      "steps": [
+        "unit: credentials reach exactly {discovered apiUrl}/api/auth/login; an insecure discovered API sends nothing; a second server while signed in to the first is refused before any request",
+        "popup names the host in large type before the fields",
+        "Mutation: letting a caller-supplied apiUrl through turns four tests red"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-21. The sign-in step was also read as a screenshot (host localhost:3013 in the largest type on the panel)."
+    },
+    {
+      "id": "P4-04",
+      "title": "Connect end to end: bound with the server's key, capture registered, events arrive",
+      "priority": "critical",
+      "depends_on": [
+        "P4-03",
+        "P3-02"
+      ],
+      "description": "popup -> worker -> discover -> login -> GET /api/projects/:slug -> binding -> registrations.",
+      "steps": [
+        "wrong password says so and binds nothing",
+        "a project the user is not a member of says so, binds nothing (the server answers 404, which is also the membership proof)",
+        "success: binding holds the server's key, apiUrl, projectId, slug, appOrigin; scripts registered for that origin only; an error on the site becomes an issue",
+        "the popup HTML never contains the ingest key"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-21, 33/33 on Chrome 131 AND Edge 153 (checks/p4-extension.mjs). LIMIT: the e2e build pre-grants localhost, so permissions.request resolved without a prompt. The real prompt, the browser closing the popup at it, and the saved-draft resume were NOT exercised; the \"Connect this site\" flow through a real toolbar click (activeTab) was not either: the popup was opened as a tab."
+    },
+    {
+      "id": "P4-05",
+      "title": "The extension has a session of its own, labelled, and it stays labelled",
+      "priority": "critical",
+      "depends_on": [
+        "P4-04"
+      ],
+      "description": "X-Apexops-Client: extension/<version> on login AND on refresh; the server stores an ApexOps-extension/<version> prefix; Settings shows \"ApexOps extension - <browser>\".",
+      "steps": [
+        "sessions list has the extension row apart from the checking session",
+        "after a refresh the rotated row is still labelled (found by the browser check: it was not)",
+        "Settings page in the real web app lists it",
+        "Mutation: removing the header from refresh turns the unit test red"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-21. The first design labelled login only; the P4 browser check could not find the session after its first refresh because the server writes a rotation's new row from the refresh request's headers. Fixed in shared (setClientLabel). The label is caller-chosen and used only to name the row."
+    },
+    {
+      "id": "P4-06",
+      "title": "One refresher, however many callers (X2)",
+      "priority": "critical",
+      "depends_on": [
+        "P4-04",
+        "P1-03"
+      ],
+      "description": "Only the service worker calls the API; the popup sends messages.",
+      "steps": [
+        "expired access token, two popup tabs sending three status requests each at once: exactly one POST /auth/refresh, all six replies signed in",
+        "unit: five concurrent callers, one refresh",
+        "a 5xx or an outage keeps the session and reports it unverified; a 401 after the replay ends it"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-21: refreshes=1, signedIn=6/6 in the browser (counted by wrapping the worker's fetch), and the unit tests. Mutation (no in-flight sharing) turns the unit test red."
+    },
+    {
+      "id": "P4-07",
+      "title": "Revoking the extension's session from the web signs the popup out",
+      "priority": "critical",
+      "depends_on": [
+        "P4-05"
+      ],
+      "description": "DELETE /api/auth/sessions/:id from another session.",
+      "steps": [
+        "popup shows \"Not signed in\" on its next call",
+        "capture on the connected site continues (it is keyed by the public ingest key, not the login)"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-21, Chrome and Edge. Signing out leaves bindings in place on purpose, and the popup says so."
+    },
+    {
+      "id": "P4-08",
+      "title": "A rotated ingest key is recovered without re-setup (X13)",
+      "priority": "critical",
+      "depends_on": [
+        "P4-04"
+      ],
+      "description": "A 401 from ingest makes the worker re-read the key, once a minute per site at most, and resend at once.",
+      "steps": [
+        "owner rotates the key on the web: the next event is delivered and the binding holds the new key",
+        "unit: changed / same / rate limit / signed out are distinct results"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-21. Needs the extension to be signed in: signed out, a rotated key is refused and the popup says to sign in again."
+    },
+    {
+      "id": "P4-09",
+      "title": "A project that lists origins refuses the extension, and the popup says why (R6)",
+      "priority": "critical",
+      "depends_on": [
+        "P4-04"
+      ],
+      "description": "The worker sends from chrome-extension://<id>, which an allowlist rejects with 403.",
+      "steps": [
+        "events refused, not delivered; the popup shows the message with this extension's origin",
+        "allowlist lifted: delivery resumes and the warning clears"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-21. GAP: the web app has NO control for allowedOrigins (only PATCH /api/projects/:slug). The card says so. The extension ID is derived from the unpacked folder path until P7 pins a manifest key, so an allowlist entry breaks if the folder moves."
+    },
+    {
+      "id": "P4-10",
+      "title": "Outside text is never run",
+      "priority": "high",
+      "depends_on": [
+        "P4-04"
+      ],
+      "description": "The popup sets textContent only.",
+      "steps": [
+        "a project named <img src=x onerror=...> is shown literally: no img element, window.__xss never set"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-21. The check creates two projects per run (a private one, and the markup one) and archives them with DELETE; they remain as archived rows in the dev database."
+    },
+    {
+      "id": "P4-11",
+      "title": "Disconnect really disconnects",
+      "priority": "critical",
+      "depends_on": [
+        "P4-04"
+      ],
+      "description": "Popup -> binding removed -> scripts unregistered -> host access handed back.",
+      "steps": [
+        "binding gone, registered scripts empty, the site's console.error is native again after a reload"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-21. Handing the browser permission back (permissions.remove) is a no-op in the e2e build, whose localhost grants are fixed, so it was not observed to take effect."
+    },
+    {
+      "id": "P4-12",
+      "title": "The web app's Browser extension card",
+      "priority": "high",
+      "depends_on": [
+        "P4-01"
+      ],
+      "description": "ExtensionConnectCard on /p/:slug/settings.",
+      "steps": [
+        "renders with the exact project URL and the three steps",
+        "the allowlist note appears only when origins are restricted",
+        "\"Copy project URL\" hands the URL to clipboard.writeText and says Copied",
+        "read as a screenshot in the real app"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-21 (checks/p4-web-card.mjs, 5/5). Headless Chrome has no clipboard focus, so what is tested is the value passed to writeText, not the OS clipboard. A first draft of the note pointed at a control that does not exist; corrected."
+    },
+    {
+      "id": "P4-13",
+      "title": "Popup is readable in both colour schemes and its fields are labelled",
+      "priority": "high",
+      "depends_on": [
+        "P4-04"
+      ],
+      "description": "Tokens on :root, redefined for dark.",
+      "steps": [
+        "every visible text element >= 4.5:1 in light and dark, in five states (unconnected, error, sign-in, bound + signed in, bound with an error)",
+        "every input has exactly one label",
+        "screenshots read"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-21: contrast computed in the browser (13-18 text elements per state). Disabled controls are exempt by WCAG. NOT tested: keyboard-only use, a screen reader, zoom or a high-contrast theme."
+    },
+    {
+      "id": "P4-14",
+      "title": "P4 close-out: full CI sequence",
+      "priority": "critical",
+      "depends_on": [
+        "P4-04",
+        "P4-13"
+      ],
+      "description": "CI steps run locally.",
+      "steps": [
+        "typecheck (4 workspaces), lint, tests: shared 34, client 192, server 166, extension 54",
+        "builds: client, server, extension; the shipped manifest still has no host_permissions and no content_scripts (it now has a popup)"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-21."
+    },
+    {
+      "id": "P4-15",
+      "title": "The build a person installs, loaded unpacked",
+      "priority": "critical",
+      "depends_on": [
+        "P4-14"
+      ],
+      "description": "app/extension/.output/chrome-mv3 (npm run build), plus a zip from npm run zip. Guide: .agents/docs/guides/browser-extension-unpacked.md.",
+      "steps": [
+        "checks/unpacked-build.mjs: the shipped manifest asks for no site access, registers no content scripts, and has icons and a popup",
+        "nothing is granted at install (chrome.permissions.getAll has no origins)",
+        "the popup opens against that build"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-21, 6/6 on Chrome 131 and Edge 153. The zip is 19.4 kB. NOT exercised by automation: the real permission prompt, and the toolbar-icon click itself — see P4-17."
+    },
+    {
+      "id": "P4-16",
+      "title": "Finding the API needs no permission prompt",
+      "priority": "high",
+      "depends_on": [
+        "P4-15"
+      ],
+      "description": "The web app serves /apexops.json with Access-Control-Allow-Origin: *, so the worker can read it before any site access exists. If a host does not send it, the popup asks for access to that site and retries.",
+      "steps": [
+        "against the shipped build with zero origins granted: a pasted project URL resolves to the API and the grant list is still empty afterwards",
+        "the response is readable cross-origin from the extension"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-21. This removes one of the two prompts in the connect flow; the remaining one covers the API and the site together. ACAO itself cannot be asserted from JS (it is not a readable response header), so what is checked is that the read succeeds."
+    },
+    {
+      "id": "P4-17",
+      "title": "Connecting starts capturing the open tab, with no reload",
+      "priority": "critical",
+      "depends_on": [
+        "P4-04"
+      ],
+      "description": "Registered content scripts only run on a navigation, so the tab a person just connected would stay silent until reloaded. The worker injects both scripts into that tab once; each sets a marker in its own world and returns early if it is already there.",
+      "steps": [
+        "after connect, an error fired WITHOUT reloading becomes an issue",
+        "after a reload the registered scripts take over and each error is still counted once (no double capture)",
+        "FAILURE CASE: with the injection disabled, only the no-reload case fails (33/34)"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-21 in the p4 check, 34/34. The popup says which of the two happened (\"being captured now\" vs \"reload the site\")."
+    },
+    {
+      "id": "P4-18",
+      "title": "Toolbar icons",
+      "priority": "medium",
+      "depends_on": [
+        "P4-15"
+      ],
+      "description": "scripts/make-icons.mjs draws the web app mark (lime #C5F43A ground, dark activity pulse) at 16/32/48/96/128 and writes public/icon/*.png. No image dependency: PNG chunks plus zlib, shapes by distance field at 4x.",
+      "steps": [
+        "the manifest carries all five sizes",
+        "the 128px file was read back as an image and looks like the sidebar mark"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-21. Lime is the background rather than the glyph so the icon stays visible in a dark toolbar. The PNGs are committed; re-run `npm run icons` to regenerate."
+    },
+    {
+      "id": "P4-19",
+      "title": "A password is never sent to a server that has not said it is ApexOps",
+      "priority": "critical",
+      "depends_on": [
+        "P4-03"
+      ],
+      "description": "GET /api/health now answers app: 'apexops', and the extension checks it before POSTing credentials.",
+      "steps": [
+        "unit: a 404 (another project on that port), a plain {status:ok}, and an app:\"other\" each refuse with not-apexops-api, send no login request, and store nothing",
+        "unit: an unreachable server is a network problem and still sends nothing",
+        "in the browser, against the real dev servers: a web app naming a non-ApexOps API is refused and that server received nothing at all",
+        "Mutations: skipping the check, or accepting any 200, each turn the refusal tests red"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-22. This exists because :3000 on this machine is sometimes held by another project (see memory): the address comes from a web app's /apexops.json, and without a marker an ApexOps password would be posted to a stranger's login route and reported as a wrong password. It is a mistake-catcher, NOT authentication — any server can serve the string; what it rules out is the wrong-port case."
+    },
+    {
+      "id": "P4-20",
+      "title": "Ready to use on this machine: the whole flow against the developer's own dev servers",
+      "priority": "critical",
+      "depends_on": [
+        "P4-19",
+        "P4-17"
+      ],
+      "description": "checks/ready-dev.mjs runs the popup, worker and API against client :5173 + API :3000 (not the rig), on a cleared extension profile.",
+      "steps": [
+        "the API on :3000 identifies itself and its database is connected; /apexops.json names that same API",
+        "the sign-in step names the real host; connect succeeds and reports capturing without a reload",
+        "console.error on the site becomes an issue in the project",
+        "the extension session is labelled; disconnect and sign out leave nothing behind"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-22: 8/8 in Chrome 131 against the live dev setup, project \"test\", issue #435 in 5.3s. Uses the e2e build because the permission dialog is native UI; everything else is the shipped path. Rerun with READY_APP/READY_API for other ports."
+    },
+    {
+      "id": "P4-21",
+      "title": "Building while the extension is loaded",
+      "priority": "medium",
+      "depends_on": [
+        "P4-15"
+      ],
+      "description": "Windows refuses to wipe the output folder a browser has open (EBUSY), which is the normal state once someone has loaded it unpacked.",
+      "steps": [
+        "WXT_OUT_DIR=<path> builds elsewhere instead",
+        "the guide says to reload the extension card after any build"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-22: reproduced against the folder the user had loaded (the shipped build was a day stale and locked), and the override built cleanly with the new health check inside. Not a code defect — a Windows file-lock fact that costs ten confusing minutes."
+    },
+    {
+      "id": "P5a-01",
+      "title": "The toolbar is on bound sites only, and appears without a reload",
+      "priority": "critical",
+      "depends_on": [
+        "P4"
+      ],
+      "description": "Spec 8.1 #1, 9.4 P5a. toolbar.content.ts is registered with capture/bridge for bound origins, and injected into the open tab on connect.",
+      "steps": [
+        "unbound site: no apexops-toolbar element",
+        "connect: the rail appears in the open tab",
+        "reload: exactly one rail"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-26 by checks/p5a-rail.mjs, 39/39 on Chrome 131 AND Edge 153. P3 (14/14) and P4 (34/34) checks updated from 2 to 3 registered scripts and still pass."
+    },
+    {
+      "id": "P5a-02",
+      "title": "The page cannot read the rail or the panel (R16, section 10 zones)",
+      "priority": "critical",
+      "depends_on": [
+        "P5a-01"
+      ],
+      "description": "Rail in a CLOSED shadow root from the ISOLATED world, with no ApexOps data; everything of ApexOps is in the extension-origin iframe.",
+      "steps": [
+        "page patches attachShadow first: captures nothing",
+        "host.shadowRoot is null",
+        "a scan of everything the page can reach has no project name, ingest key, issue title or panel text"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-26 by checks/p5a-rail.mjs, 39/39 on Chrome 131 AND Edge 153."
+    },
+    {
+      "id": "P5a-03",
+      "title": "Panel: project, events from this tab, recent issues, open in ApexOps",
+      "priority": "high",
+      "depends_on": [
+        "P5a-01"
+      ],
+      "description": "Spec 8.5 P5 #2. panel-state / panel-issues; the site is read from sender.tab, never from the message.",
+      "steps": [
+        "console.error on the page -> count goes 0 -> 1",
+        "Refresh lists the new issue, linked to /p/<slug>/issues/<id>"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-26 by checks/p5a-rail.mjs, 39/39 on Chrome 131 AND Edge 153."
+    },
+    {
+      "id": "P5a-04",
+      "title": "Report bug from the panel",
+      "priority": "critical",
+      "depends_on": [
+        "P5a-03"
+      ],
+      "description": "Spec 8.5 P5 #3. POST /api/tickets with the binding projectId; the Page line comes from the browser, stripped of query and fragment.",
+      "steps": [
+        "ticket in the bound project with the chosen priority",
+        "description has Page: <url without ?/#> and Tab title",
+        "success links to /p/<slug>/board"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-26 by checks/p5a-rail.mjs, 39/39 on Chrome 131 AND Edge 153. Ticket ids are display strings (TICK-030), not numbers: the first run refused the response until that was fixed."
+    },
+    {
+      "id": "P5a-05",
+      "title": "Switch project from the panel",
+      "priority": "high",
+      "depends_on": [
+        "P5a-03"
+      ],
+      "description": "Spec 8.1 #6. Same API; connectSite re-checks membership.",
+      "steps": [
+        "next console.error lands in the new project and not the old one",
+        "binding slug updated"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-26 by checks/p5a-rail.mjs, 39/39 on Chrome 131 AND Edge 153. Known: a batch captured before the switch but still queued is delivered to the new project (delivery reads the binding at send time)."
+    },
+    {
+      "id": "P5a-06",
+      "title": "Out of the way: drag, remembered per origin, clamped, clicks not leaked (R20)",
+      "priority": "high",
+      "depends_on": [
+        "P5a-01"
+      ],
+      "description": "Spec 8.1 #8. Default bottom-right; drag from the logo; position in chrome.storage.local toolbarPrefs[origin].",
+      "steps": [
+        "rail covers a fixed button in the corner; after a drag the button is clickable",
+        "same place after a reload; still on screen at 500x400",
+        "clicking the rail never reaches the page's click handlers"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-26 by checks/p5a-rail.mjs, 39/39 on Chrome 131 AND Edge 153."
+    },
+    {
+      "id": "P5a-07",
+      "title": "Keyboard: Alt+Shift+A, Esc, focus",
+      "priority": "high",
+      "depends_on": [
+        "P5a-01"
+      ],
+      "description": "Rail button is out of the page tab order; the command opens the panel with focus on its first control; Esc closes from the panel or the page; the page keeps its own Escape when the panel is closed.",
+      "steps": [
+        "toggle command opens with focus inside, and closes",
+        "Esc in panel / on page closes",
+        "closed: page receives Escape"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-26 by checks/p5a-rail.mjs, 39/39 on Chrome 131 AND Edge 153. The real Alt+Shift+A keystroke is NOT exercised: browser accelerators are not reachable from CDP input, so the check sends the worker's message itself. The worker's onCommand -> tabs.sendMessage half is untested by automation."
+    },
+    {
+      "id": "P5a-08",
+      "title": "Hide per site, show again from the popup",
+      "priority": "medium",
+      "depends_on": [
+        "P5a-06"
+      ],
+      "description": "Hide is in the panel (reversible); Show toolbar is in the popup.",
+      "steps": [
+        "hide: gone, and gone after a reload",
+        "popup Show toolbar: back, live",
+        "a page-forged 'hide' postMessage is ignored"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-26 by checks/p5a-rail.mjs, 39/39 on Chrome 131 AND Edge 153."
+    },
+    {
+      "id": "P5a-09",
+      "title": "Panel may not do what only the popup may (R18), and signs in naming the host (R19)",
+      "priority": "critical",
+      "depends_on": [
+        "P5a-03"
+      ],
+      "description": "Worker routes by the sending page path: panel-* only from /panel.html, the rest only from other extension pages.",
+      "steps": [
+        "disconnect sent from the panel: ignored, still bound",
+        "panel-state from the popup: no answer",
+        "signed out: sign-in shows localhost:3013, then signing in restores the view"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-26 by checks/p5a-rail.mjs, 39/39 on Chrome 131 AND Edge 153."
+    },
+    {
+      "id": "P5a-10",
+      "title": "Robustness and contrast",
+      "priority": "high",
+      "depends_on": [
+        "P5a-03"
+      ],
+      "description": "Spec 8.5 close: a page that throws constantly does not wedge the panel; AA in both schemes; a closed panel does not keep the worker awake.",
+      "steps": [
+        "page throwing ~70 errors/s: panel shows the project in < 1 s",
+        "contrast >= 4.5:1 light and dark, signed-in (46 elements) and sign-in views",
+        "0 panel polls in 9 s while closed",
+        "disconnect removes the rail from the open tab"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-26 by checks/p5a-rail.mjs, 39/39 on Chrome 131 AND Edge 153. Found on the way: an out-of-process iframe keeps its innerWidth while display:none and gets no IntersectionObserver update, so the rail now tells the panel when it is shown or hidden."
+    },
+    {
+      "id": "P5b",
+      "title": "Vendored VisBug tools + Report bug with element",
+      "priority": "high",
+      "depends_on": [
+        "P5a"
+      ],
+      "description": "Spec 9.4, X17 amended (vendor).",
+      "steps": [],
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "P6",
+      "title": "Screenshot",
+      "priority": "medium",
+      "depends_on": [
+        "P5a"
+      ],
+      "description": "Waits on X7 storage.",
+      "steps": [],
+      "passes": false,
+      "notes": ""
+    },
+    {
+      "id": "P7",
+      "title": "Packaging + Firefox",
+      "priority": "medium",
+      "depends_on": [
+        "P5b"
+      ],
+      "description": "Waits on 8.8 Q3.",
+      "steps": [],
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}

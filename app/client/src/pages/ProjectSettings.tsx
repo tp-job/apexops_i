@@ -16,8 +16,9 @@ import {
 } from '@/components/design-system';
 import ProjectTabs from '@/components/layout/ProjectTabs';
 import SourceMapsPanel from '@/components/common/SourceMapsPanel';
+import ExtensionConnectCard from '@/components/common/ExtensionConnectCard';
 import { useProject } from '@/hooks/useProject';
-import { getApiBaseUrl } from '@/api/config';
+import { getApiBaseUrl } from '@apexops/shared/api';
 import { getErrorMessage } from '@/utils/error';
 import { formatDate } from '@/utils/format';
 import { CAPTURE_LEVELS, type CaptureLevel } from '@/types/projects';
@@ -310,6 +311,9 @@ const ProjectSettings: FC = () => {
                     </div>
                 )}
             </Surface>
+
+            {/* ── Browser extension ────────────────────────────── */}
+            {slug && <ExtensionConnectCard slug={slug} restrictsOrigins={project.allowedOrigins.length > 0} />}
 
             {/* ── Source maps ──────────────────────────────────── */}
             {/* Owner/admin only — the list names releases and generated file

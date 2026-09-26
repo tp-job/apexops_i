@@ -1,4 +1,4 @@
-import { fetchWithAuth } from '@/api/client';
+import { fetchWithAuth } from '@apexops/shared/api';
 import type {
     AssistantError,
     AssistantErrorCode,
@@ -12,7 +12,7 @@ import type {
  * The only module that talks to `/api/ai/*` (spec F009).
  *
  * Everything goes through `fetchWithAuth`, so the refresh-and-retry on 401 is
- * **inherited rather than reimplemented**. `lib/authSession.ts` is the single
+ * **inherited rather than reimplemented**. `packages/shared/src/auth/authSession.ts` is the single
  * refresh coordinator in this app; a second one here would mean two callers
  * racing to spend the same refresh token.
  *

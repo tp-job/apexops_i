@@ -1,10 +1,10 @@
 /**
  * Centralized API for calendar/notes data.
- * Reads base URL and token from api/config; no requests if token is missing.
+ * Reads base URL and token from @apexops/shared/api; no requests if token is missing.
  */
 
-import { getAuthToken } from '@/api/config';
-import { fetchWithAuth } from '@/api/client';
+import { getAuthToken } from '@apexops/shared/api';
+import { fetchWithAuth } from '@apexops/shared/api';
 import { isMockEnabled, isNetworkFailure } from '@/utils/offlineMock';
 import { buildMockCalendarNotes } from '@/utils/mockData';
 

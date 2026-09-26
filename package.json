@@ -3,8 +3,10 @@
   "version": "1.0.0",
   "private": true,
   "workspaces": [
+    "packages/shared",
     "app/client",
-    "app/server"
+    "app/server",
+    "app/extension"
   ],
   "scripts": {
     "install:all": "npm install --workspaces --include-workspace-root",

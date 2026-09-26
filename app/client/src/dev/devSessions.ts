@@ -20,8 +20,9 @@
  *
  * Run `npm run seed:dev --workspace app/server` once to create the accounts.
  */
-import { getApiBaseUrl } from '@/api/config';
-import type { User } from '@/types/auth';
+import { getApiBaseUrl } from '@apexops/shared/api';
+import { getStoredUser, persistTokens } from '@apexops/shared/auth';
+import type { User } from '@apexops/shared/types/auth';
 
 export type DevRole = 'user' | 'admin';
 
@@ -81,17 +82,12 @@ function writeSessions(sessions: DevSessionMap): void {
  */
 export function readActiveRole(): DevRole | null {
     if (!devSwitcherEnabled()) return null;
-    try {
-        const raw = localStorage.getItem('user');
-        if (!raw) return null;
-        const { email } = JSON.parse(raw) as User;
-        const match = (Object.entries(DEV_CREDENTIALS) as [DevRole, { email: string }][]).find(
-            ([, creds]) => creds.email === email
-        );
-        return match ? match[0] : null;
-    } catch {
-        return null;
-    }
+    const email = getStoredUser<User>()?.email;
+    if (!email) return null;
+    const match = (Object.entries(DEV_CREDENTIALS) as [DevRole, { email: string }][]).find(
+        ([, creds]) => creds.email === email
+    );
+    return match ? match[0] : null;
 }
 
 export function clearDevSessions(): void {
@@ -225,9 +221,9 @@ export async function activateRole(role: DevRole): Promise<DevSession> {
     }
 
     writeSessions({ ...sessions, [role]: fresh });
-    localStorage.setItem('accessToken', fresh.accessToken);
-    localStorage.setItem('refreshToken', fresh.refreshToken);
-    localStorage.setItem('user', JSON.stringify(fresh.user));
+    // Awaited: every caller reloads the page next, and the reload must find the
+    // new session in storage, not just in this page's memory.
+    await persistTokens(fresh);
 
     return fresh;
 }

@@ -7,22 +7,23 @@
  * The *session* calls — login, register, logout — use raw `fetch`, because they
  * are precisely the requests that must never trigger a token refresh: a 401 from
  * `/login` means "wrong password", and refreshing there would turn a typo into a
- * logout. `api/client.ts` also skips them by path, so this is belt and braces.
+ * logout. `fetchWithAuth` also skips them by path, so this is belt and braces.
  *
  * Everything else — profile, password, settings — goes through `fetchWithAuth`
  * and therefore recovers from an expired access token like the rest of the app.
  * Before this they hand-rolled their own `Authorization` header, which made them
  * the last authed surface with no retry.
  *
- * `refreshToken()` used to live here. It now lives in `lib/authSession.ts`,
+ * `refreshToken()` used to live here. It now lives in `packages/shared/src/auth/authSession.ts`,
  * because a refresh needs the single-in-flight coordination that a plain API
  * wrapper cannot provide — and having two implementations of it was a live risk
  * of them disagreeing about when a session is over.
  */
 
-import { getApiBaseUrl } from '@/api/config';
-import { fetchWithAuth } from '@/api/client';
-import type { LoginResponse, ProfileResponse, User, UserSettings } from '@/types/auth';
+import { getApiBaseUrl } from '@apexops/shared/api';
+import { fetchWithAuth } from '@apexops/shared/api';
+import { getAccessToken, getRefreshToken } from '@apexops/shared/auth';
+import type { LoginResponse, ProfileResponse, User, UserSettings } from '@apexops/shared/types/auth';
 
 export const authApi = {
     async getProfile(): Promise<ProfileResponse> {
@@ -90,10 +91,10 @@ export const authApi = {
     },
 
     async logout(): Promise<void> {
-        const refreshTokenValue = typeof localStorage !== 'undefined' ? localStorage.getItem('refreshToken') : null;
+        const refreshTokenValue = getRefreshToken();
         if (!refreshTokenValue) return;
 
-        const token = typeof localStorage !== 'undefined' ? localStorage.getItem('accessToken') : null;
+        const token = getAccessToken();
         await fetch(`${getApiBaseUrl()}/api/auth/logout`, {
             method: 'POST',
             headers: {

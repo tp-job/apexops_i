@@ -11,11 +11,11 @@ import type { AssistantMessage } from '@/types/assistant';
  *
  * `fetchWithAuth` is mocked rather than reimplemented. What is asserted is that
  * this module *goes through* it, because that is what inherits the single
- * refresh-and-retry coordinator in `lib/authSession.ts`.
+ * refresh-and-retry coordinator in `packages/shared/src/auth/authSession.ts`.
  */
 
 const fetchWithAuth = vi.fn();
-vi.mock('@/api/client', () => ({ fetchWithAuth: (...args: unknown[]) => fetchWithAuth(...args) }));
+vi.mock('@apexops/shared/api', () => ({ fetchWithAuth: (...args: unknown[]) => fetchWithAuth(...args) }));
 
 const { sendMessage, fetchStoredKey, saveKey, AssistantRequestError, MAX_HISTORY_MESSAGES } = await import(
     '@/services/assistant'

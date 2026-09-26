@@ -5,8 +5,8 @@
  * chat route that exists).
  */
 
-import { getAuthToken } from '@/api/config';
-import { fetchWithAuth } from '@/api/client';
+import { getAuthToken } from '@apexops/shared/api';
+import { fetchWithAuth } from '@apexops/shared/api';
 import type { ChatUser } from '@/types/chat';
 
 /** Users available to start a direct conversation with. Empty (not throwing) if logged out or offline. */

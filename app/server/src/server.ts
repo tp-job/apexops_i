@@ -18,6 +18,7 @@ import path from 'path';
 import { Server as SocketIOServer } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import type { ChatMessage } from './utils/chat';
+import ingestRoutes from './api/ingest';
 import {
     parseDirectRoom,
     isParticipant,
@@ -39,6 +40,15 @@ import { registerRealtime } from './lib/realtime';
 // ── Express App ──────────────────────────────────────────────
 const app = express();
 app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
+
+// Ingest goes FIRST, above the app-wide CORS and JSON parser. It is the one
+// route that takes posts from sites we do not control, so it brings its own
+// permissive CORS and 1MB body cap (`api/ingest.ts`). Until 2026-09-20 it was
+// mounted below both: the global `cors` answered every preflight with the
+// frontend's origin, so browsers refused every cross-origin SDK post, and the
+// global 100kB `express.json` had already parsed the body, so the 1MB cap never
+// applied. Same-origin harness pages could not show either.
+app.use('/api/ingest', ingestRoutes);
 
 // CORS: allow frontend dev server (Vite 5173) and explicit preflight
 const corsOrigin = process.env.CORS_ORIGIN || 'http://localhost:5173';
@@ -347,6 +357,28 @@ server.listen(WS_PORT, () => {
 
 app.get('/ws-endpoint', (_req: Request, res: Response) => res.status(200).send('WebSocket endpoint is running'));
 
+/**
+ * The SDK (spec G3). Served explicitly rather than left to `express.static` so
+ * the headers are guaranteed: it is embedded by third-party pages, so it needs
+ * `*` and a real cache policy. The version is in the *path*, so the file at a
+ * given URL never changes meaning — a breaking SDK change ships as `/sdk/v2.js`.
+ *
+ * **Must stay above `express.static`.** Until 2026-09-20 it sat below it, so
+ * static answered `/sdk/v1.js` first and this handler never ran. The response
+ * carried helmet's `Cross-Origin-Resource-Policy: same-origin` instead, and every
+ * browser refused the script on any site but ApexOps itself
+ * (`ERR_BLOCKED_BY_RESPONSE.NotSameOrigin`), which is every site the SDK exists
+ * for. The same-origin harness pages (/sdk/test, /sdk/demo) hid it.
+ */
+app.get('/sdk/v1.js', (_req: Request, res: Response) => {
+    res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    // Overrides helmet's `same-origin`: this file is public by design (spec D4).
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.sendFile(path.join(__dirname, '../public/sdk/v1.js'));
+});
+
 // ── Static Files ─────────────────────────────────────────────
 app.use(express.static(path.join(__dirname, '../public')));
 
@@ -354,19 +386,6 @@ app.get('/bug-tracker-client.js', (_req: Request, res: Response) => {
     res.setHeader('Content-Type', 'application/javascript');
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.sendFile(path.join(__dirname, '../public/bug-tracker-client.js'));
-});
-
-/**
- * The SDK (spec G3). Served explicitly rather than left to `express.static` so
- * the headers are guaranteed: it is embedded by third-party pages, so it needs
- * `*` and a real cache policy. The version is in the *path*, so the file at a
- * given URL never changes meaning — a breaking SDK change ships as `/sdk/v2.js`.
- */
-app.get('/sdk/v1.js', (_req: Request, res: Response) => {
-    res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Cache-Control', 'public, max-age=3600');
-    res.sendFile(path.join(__dirname, '../public/sdk/v1.js'));
 });
 
 /** End-to-end fixture for the G3 acceptance test. */
@@ -402,8 +421,26 @@ app.get('/', (_req: Request, res: Response) => {
     });
 });
 
+/**
+ * Health, and "yes, this really is an ApexOps API".
+ *
+ * `app: 'apexops'` is there for the browser extension. It is handed an API
+ * address by a web app it was pointed at, and on a developer's machine that
+ * address is a localhost port which some *other* project may be holding — so
+ * without a marker, a sign-in could post an ApexOps password to a neighbouring
+ * server's login route. The extension refuses to send credentials until this
+ * answers (`app/extension/lib/session.ts`).
+ *
+ * It is a mistake-catcher, not an authentication: anyone can serve this string.
+ * What it rules out is the honest wrong-port case, which is the likely one.
+ */
 app.get('/api/health', (_req: Request, res: Response) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString(), database: dbConnected ? 'connected' : 'disconnected' });
+    res.json({
+        app: 'apexops',
+        status: 'ok',
+        timestamp: new Date().toISOString(),
+        database: dbConnected ? 'connected' : 'disconnected',
+    });
 });
 
 // ── API Routes ───────────────────────────────────────────────
@@ -424,14 +461,10 @@ import chatRoutes from './api/chat';
 import notificationsRoutes from './api/notifications';
 import projectsRoutes from './api/projects';
 import invitesRoutes from './api/invites';
-import ingestRoutes from './api/ingest';
 import docsRoutes from './api/docs';
 import adminDocsRoutes from './api/admin-docs';
 
-// Mounted before the JSON-body and CORS defaults matter to it: `api/ingest` sets
-// its own permissive CORS and 1MB body cap, because it is the only route that
-// legitimately accepts cross-origin posts from sites we do not control.
-app.use('/api/ingest', ingestRoutes);
+// `/api/ingest` is mounted near the top, above the global CORS — see there.
 
 app.use('/api/auth', authRoutes);
 // Admin-only throughout — the router gates itself, so it is safe to mount here
