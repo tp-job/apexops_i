@@ -7,6 +7,7 @@ import { readIngestProblems } from './ingestProblems';
 import type { BindingView, DiscoverResult, Reply, Request, Status } from './messages';
 import { ProjectUrlProblem } from './projectUrl';
 import { ensureSession, login, logout, SessionProblem, storedApiUrl, whoami } from './session';
+import { readToolbarPrefs } from './toolbarPrefs';
 
 /**
  * Every request the popup can make, answered.
@@ -22,10 +23,10 @@ export interface RequestContext {
     extensionOrigin: string;
 }
 
-const fail = (code: string, message: string): Reply<never> => ({ ok: false, error: { code, message } });
+export const fail = (code: string, message: string): Reply<never> => ({ ok: false, error: { code, message } });
 
 /** Map the typed problems onto replies; rethrow anything else. */
-function toReply(err: unknown): Reply<never> {
+export function toReply(err: unknown): Reply<never> {
     if (
         err instanceof ProjectUrlProblem ||
         err instanceof DiscoveryProblem ||
@@ -66,13 +67,14 @@ export async function handleRequest(req: Request, ctx: RequestContext): Promise<
     try {
         switch (req.type) {
             case 'status': {
-                const [session, bindings, problems] = await Promise.all([whoami(), readBindings(), readIngestProblems()]);
+                const [session, bindings, problems, prefs] = await Promise.all([whoami(), readBindings(), readIngestProblems(), readToolbarPrefs()]);
                 const status: Status = {
                     version: ctx.version,
                     extensionOrigin: ctx.extensionOrigin,
                     session,
                     bindings: viewOf(bindings),
                     problems,
+                    hiddenToolbars: Object.keys(prefs).filter((origin) => prefs[origin]?.hidden),
                 };
                 return { ok: true, data: status };
             }

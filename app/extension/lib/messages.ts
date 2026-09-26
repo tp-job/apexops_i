@@ -39,6 +39,8 @@ export interface Status {
     session: Whoami;
     bindings: Record<string, BindingView>;
     problems: Record<string, IngestProblem>;
+    /** Sites whose toolbar the person hid; the popup offers to show it again. */
+    hiddenToolbars: string[];
 }
 
 export interface DiscoverResult {
@@ -52,8 +54,63 @@ export interface DiscoverResult {
     signedInElsewhere: string | null;
 }
 
+/**
+ * What the toolbar's panel (the extension-origin iframe on the site under test)
+ * may ask for. A narrower set than the popup's, on purpose:
+ *
+ * - **No site in any request.** The worker reads which site the panel is on from
+ *   the browser's record of the sender's tab, so the page it is embedded in
+ *   cannot point it at another site's binding.
+ * - **Nothing that cannot be undone** — no disconnect, no sign-out (spec R18: a
+ *   page can lay a transparent element over the panel and borrow a click). Those
+ *   stay in the popup, which no page can cover.
+ */
+export type PanelRequest =
+    | { type: 'panel-state' }
+    | { type: 'panel-issues' }
+    | { type: 'panel-projects' }
+    | { type: 'panel-switch'; slug: string }
+    | { type: 'panel-report'; title: string; description: string; priority: string }
+    | { type: 'panel-signin'; email: string; password: string };
+
+export type PanelState =
+    | { bound: false }
+    | {
+          bound: true;
+          site: string;
+          project: { name: string; slug: string; appOrigin: string | null };
+          /** `host:port` of the API — shown before a password is typed (R19). */
+          apiHost: string;
+          session: Whoami;
+          /** Signed in, but to a different API than this site's project lives on. */
+          otherServer: boolean;
+          eventsFromTab: number;
+          problem: string | null;
+      };
+
+export interface PanelIssue {
+    id: number;
+    title: string;
+    level: string;
+    count: number;
+    lastSeen: string;
+    url: string | null;
+}
+
+export interface PanelProject {
+    slug: string;
+    name: string;
+}
+
+export interface ReportResult {
+    /** The ticket's display id, e.g. `TICK-042`. */
+    id: string;
+    /** Where to see it in the web app, when the web app is known. */
+    url: string | null;
+}
+
 export type Reply<T> = { ok: true; data: T } | { ok: false; error: { code: string; message: string } };
 
-export async function send<T>(request: Request): Promise<Reply<T>> {
+export async function send<T>(request: Request | PanelRequest): Promise<Reply<T>> {
     return (await browser.runtime.sendMessage(request)) as Reply<T>;
 }

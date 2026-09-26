@@ -594,3 +594,38 @@ rig server ตั้ง `RATE_LIMIT_AUTH_MAX_LOGIN=200` ใน `launch.json` (�
 **gotcha ของ Windows:** ถ้าโหลด extension จากโฟลเดอร์ไหนอยู่ `npm run build` จะลบโฟลเดอร์นั้นไม่ได้ (`EBUSY`)
 ทางออก: เอา extension ออก/ปิดเบราว์เซอร์ แล้ว build ใหม่ หรือ `WXT_OUT_DIR=<path> npx wxt build` เพื่อ build ไปที่อื่น
 และหลัง build ทุกครั้ง**ต้องกด reload (⟳)** ที่การ์ด extension ไม่งั้นยังเป็นตัวเก่า
+
+---
+
+## 16. ผล P5a — rail + ปุ่ม ApexOps + panel — 2026-09-26 (ledger P5a-01…P5a-10)
+
+**P5a เสร็จ** — เว็บที่ผูกแล้วมีปุ่ม ApexOps ลอยอยู่มุมขวาล่าง กดแล้วเปิด panel ที่ทำงานประจำวันได้จากหน้าเว็บที่ test เลย
+ตรวจด้วย `checks/p5a-rail.mjs` **39/39 บน Chrome 131 และ Edge 153** · check ของ P3 (14/14), P4 (34/34), unpacked build (6/6) ยังผ่าน
+
+**ใน panel มี:** ชื่อ project + ลิงก์เปิดใน web app · จำนวน event ที่ tab นี้ส่ง · issue ที่ยังไม่ resolve ใน 24 ชม. (10 อัน, ลิงก์ไปหน้า issue) ·
+**Report bug** → ticket ใน project ที่ผูก (หัวข้อ, รายละเอียด, priority; ใส่ URL หน้าที่ตัด query/hash และ title ของ tab ให้เอง) ·
+**สลับ project** จากรายการ project บน server เดียวกัน · ซ่อน toolbar บนเว็บนี้ · ถ้ายังไม่ login จะขึ้นฟอร์ม login ที่บอก host ของ API ตัวใหญ่ (R19)
+
+**สามโซนตามข้อ 10 ทำงานจริง:**
+- rail = content script ISOLATED ใน **closed shadow root** ไม่มีข้อมูล ApexOps เลย — หน้าเว็บที่ patch `attachShadow` ไว้ก่อนดักไม่ได้ และ scan ทั้งหน้าไม่เจอชื่อ project / ingest key / ชื่อ issue
+- panel = `panel.html` ใน iframe (extension origin) — ถามทุกอย่างผ่าน worker ด้วยคำขอ `panel-*` และ **worker อ่านว่าเป็นเว็บไหนจาก `sender.tab` ของเบราว์เซอร์ ไม่ใช่จากข้อความ**
+- worker แยกชุดคำขอตาม path ของหน้าที่ส่ง: panel ขอ disconnect / logout ไม่ได้ (R18 — หน้าเว็บเอา element ใสมาทับ panel ได้) popup ขอ `panel-*` ไม่ได้
+
+**ไม่บังเว็บ (R20):** ลากจากปุ่มโลโก้ได้ จำตำแหน่งต่อ origin และดึงกลับเข้าจอเมื่อหน้าต่างเล็กลง · คลิกบน rail ไม่ถึง click handler ของหน้าเว็บ ·
+ไม่ฟัง event ของหน้าเว็บตอน panel ปิด · ปุ่มไม่อยู่ใน tab order ของหน้าเว็บ (ใช้ `Alt+Shift+A` แทน ซึ่งเปิด panel แล้ว focus ช่องแรก) · `Esc` ปิด panel ·
+ไม่แสดงใน tab ที่ถูก automation คุม (`navigator.webdriver`) ยกเว้น build e2e · ยกเลิกผูกจาก popup แล้ว rail หายจาก tab ที่เปิดอยู่ทันที
+
+**สิ่งที่เจอระหว่างทำ (แก้แล้ว):**
+1. ticket id เป็นข้อความ (`TICK-030`) ไม่ใช่ตัวเลข — panel เคยปฏิเสธคำตอบของ server
+2. `runtime.getURL()` คืนที่อยู่แบบ `use_dynamic_url` (uuid) แต่ข้อความจาก panel มี origin เป็น ID ตายตัว — เทียบ `origin` จึงไม่มีวันตรง ใช้ `event.source === iframe.contentWindow` แทน (ยืนยันแล้วว่าตรงกัน และหน้าเว็บปลอมไม่ได้)
+3. iframe ข้าม process ที่ถูก `display:none` **ยังรายงาน `innerWidth` เดิม และไม่ได้ IntersectionObserver** — panel จึงไม่รู้ว่าถูกปิดและ poll worker ไปเรื่อยๆ (ทำให้ worker ไม่หลับ) ตอนนี้ rail บอก panel เองว่าแสดงอยู่หรือไม่ · check ยืนยัน 0 poll ใน 9 วินาทีตอนปิด
+
+**ข้อจำกัด (ไม่ได้ซ่อน):**
+1. **ปุ่ม `Alt+Shift+A` จริงยังไม่ได้ทดสอบ** — คีย์ลัดของเบราว์เซอร์ส่งผ่าน CDP ไม่ได้ check จึงส่งข้อความของ worker เอง ครึ่งฝั่ง `commands.onCommand` → `tabs.sendMessage` ยังไม่มีใครกดจริง
+2. **เงื่อนไข `navigator.webdriver` ใน build ที่แจกยังไม่ได้ทดสอบ** — build ที่แจกผูกเว็บได้ต้องผ่านหน้าต่างขอสิทธิ์ ซึ่ง automation กดไม่ได้
+3. **WXT ส่ง `postMessage` ชื่อ `<extension-id>:toolbar:wxt:content-script-started` เข้าหน้าเว็บ** ตอน content script เริ่ม — หน้าเว็บที่ผูกไว้จึงรู้ ID ของ extension ได้ ซึ่งทำให้ `use_dynamic_url` กันการตรวจเจอไม่ได้บนเว็บที่ผูก (เว็บที่ไม่ผูกไม่มี script ของเราเลย) ไม่มีข้อมูล ApexOps ในข้อความนั้น
+4. สลับ project แล้ว event ที่ดักไว้ก่อนสลับแต่ยังค้างในคิว จะไปเข้า project ใหม่ (ส่งตาม binding ตอนส่ง)
+5. `web_accessible_resources` ของ `panel.html` ต้องเป็น "ทุกเว็บ" เพราะรายการเว็บที่ผูกเปลี่ยนตอน runtime — ตัวที่จำกัดคือ script ที่ใส่ iframe ซึ่งลงเฉพาะเว็บที่ผูก
+6. rail ใน P5a มีแค่ปุ่ม ApexOps — เครื่องมือตรวจ UI 13 ชิ้น + ปุ่มสี 3 ปุ่มตามดีไซน์ข้อ 9 มาใน P5b
+
+**ถัดไป: P5b** — vendor VisBug + Report bug พร้อม element · branch `ext/p5b-tools`

@@ -750,16 +750,163 @@
       "notes": "VERIFIED 2026-09-22: reproduced against the folder the user had loaded (the shipped build was a day stale and locked), and the override built cleanly with the new health check inside. Not a code defect — a Windows file-lock fact that costs ten confusing minutes."
     },
     {
-      "id": "P5a",
-      "title": "Rail shell + ApexOps button + iframe panel",
+      "id": "P5a-01",
+      "title": "The toolbar is on bound sites only, and appears without a reload",
       "priority": "critical",
       "depends_on": [
         "P4"
       ],
-      "description": "Spec 9.4 / 10 three-zone model.",
-      "steps": [],
-      "passes": false,
-      "notes": ""
+      "description": "Spec 8.1 #1, 9.4 P5a. toolbar.content.ts is registered with capture/bridge for bound origins, and injected into the open tab on connect.",
+      "steps": [
+        "unbound site: no apexops-toolbar element",
+        "connect: the rail appears in the open tab",
+        "reload: exactly one rail"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-26 by checks/p5a-rail.mjs, 39/39 on Chrome 131 AND Edge 153. P3 (14/14) and P4 (34/34) checks updated from 2 to 3 registered scripts and still pass."
+    },
+    {
+      "id": "P5a-02",
+      "title": "The page cannot read the rail or the panel (R16, section 10 zones)",
+      "priority": "critical",
+      "depends_on": [
+        "P5a-01"
+      ],
+      "description": "Rail in a CLOSED shadow root from the ISOLATED world, with no ApexOps data; everything of ApexOps is in the extension-origin iframe.",
+      "steps": [
+        "page patches attachShadow first: captures nothing",
+        "host.shadowRoot is null",
+        "a scan of everything the page can reach has no project name, ingest key, issue title or panel text"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-26 by checks/p5a-rail.mjs, 39/39 on Chrome 131 AND Edge 153."
+    },
+    {
+      "id": "P5a-03",
+      "title": "Panel: project, events from this tab, recent issues, open in ApexOps",
+      "priority": "high",
+      "depends_on": [
+        "P5a-01"
+      ],
+      "description": "Spec 8.5 P5 #2. panel-state / panel-issues; the site is read from sender.tab, never from the message.",
+      "steps": [
+        "console.error on the page -> count goes 0 -> 1",
+        "Refresh lists the new issue, linked to /p/<slug>/issues/<id>"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-26 by checks/p5a-rail.mjs, 39/39 on Chrome 131 AND Edge 153."
+    },
+    {
+      "id": "P5a-04",
+      "title": "Report bug from the panel",
+      "priority": "critical",
+      "depends_on": [
+        "P5a-03"
+      ],
+      "description": "Spec 8.5 P5 #3. POST /api/tickets with the binding projectId; the Page line comes from the browser, stripped of query and fragment.",
+      "steps": [
+        "ticket in the bound project with the chosen priority",
+        "description has Page: <url without ?/#> and Tab title",
+        "success links to /p/<slug>/board"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-26 by checks/p5a-rail.mjs, 39/39 on Chrome 131 AND Edge 153. Ticket ids are display strings (TICK-030), not numbers: the first run refused the response until that was fixed."
+    },
+    {
+      "id": "P5a-05",
+      "title": "Switch project from the panel",
+      "priority": "high",
+      "depends_on": [
+        "P5a-03"
+      ],
+      "description": "Spec 8.1 #6. Same API; connectSite re-checks membership.",
+      "steps": [
+        "next console.error lands in the new project and not the old one",
+        "binding slug updated"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-26 by checks/p5a-rail.mjs, 39/39 on Chrome 131 AND Edge 153. Known: a batch captured before the switch but still queued is delivered to the new project (delivery reads the binding at send time)."
+    },
+    {
+      "id": "P5a-06",
+      "title": "Out of the way: drag, remembered per origin, clamped, clicks not leaked (R20)",
+      "priority": "high",
+      "depends_on": [
+        "P5a-01"
+      ],
+      "description": "Spec 8.1 #8. Default bottom-right; drag from the logo; position in chrome.storage.local toolbarPrefs[origin].",
+      "steps": [
+        "rail covers a fixed button in the corner; after a drag the button is clickable",
+        "same place after a reload; still on screen at 500x400",
+        "clicking the rail never reaches the page's click handlers"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-26 by checks/p5a-rail.mjs, 39/39 on Chrome 131 AND Edge 153."
+    },
+    {
+      "id": "P5a-07",
+      "title": "Keyboard: Alt+Shift+A, Esc, focus",
+      "priority": "high",
+      "depends_on": [
+        "P5a-01"
+      ],
+      "description": "Rail button is out of the page tab order; the command opens the panel with focus on its first control; Esc closes from the panel or the page; the page keeps its own Escape when the panel is closed.",
+      "steps": [
+        "toggle command opens with focus inside, and closes",
+        "Esc in panel / on page closes",
+        "closed: page receives Escape"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-26 by checks/p5a-rail.mjs, 39/39 on Chrome 131 AND Edge 153. The real Alt+Shift+A keystroke is NOT exercised: browser accelerators are not reachable from CDP input, so the check sends the worker's message itself. The worker's onCommand -> tabs.sendMessage half is untested by automation."
+    },
+    {
+      "id": "P5a-08",
+      "title": "Hide per site, show again from the popup",
+      "priority": "medium",
+      "depends_on": [
+        "P5a-06"
+      ],
+      "description": "Hide is in the panel (reversible); Show toolbar is in the popup.",
+      "steps": [
+        "hide: gone, and gone after a reload",
+        "popup Show toolbar: back, live",
+        "a page-forged 'hide' postMessage is ignored"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-26 by checks/p5a-rail.mjs, 39/39 on Chrome 131 AND Edge 153."
+    },
+    {
+      "id": "P5a-09",
+      "title": "Panel may not do what only the popup may (R18), and signs in naming the host (R19)",
+      "priority": "critical",
+      "depends_on": [
+        "P5a-03"
+      ],
+      "description": "Worker routes by the sending page path: panel-* only from /panel.html, the rest only from other extension pages.",
+      "steps": [
+        "disconnect sent from the panel: ignored, still bound",
+        "panel-state from the popup: no answer",
+        "signed out: sign-in shows localhost:3013, then signing in restores the view"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-26 by checks/p5a-rail.mjs, 39/39 on Chrome 131 AND Edge 153."
+    },
+    {
+      "id": "P5a-10",
+      "title": "Robustness and contrast",
+      "priority": "high",
+      "depends_on": [
+        "P5a-03"
+      ],
+      "description": "Spec 8.5 close: a page that throws constantly does not wedge the panel; AA in both schemes; a closed panel does not keep the worker awake.",
+      "steps": [
+        "page throwing ~70 errors/s: panel shows the project in < 1 s",
+        "contrast >= 4.5:1 light and dark, signed-in (46 elements) and sign-in views",
+        "0 panel polls in 9 s while closed",
+        "disconnect removes the rail from the open tab"
+      ],
+      "passes": true,
+      "notes": "VERIFIED 2026-09-26 by checks/p5a-rail.mjs, 39/39 on Chrome 131 AND Edge 153. Found on the way: an out-of-process iframe keeps its innerWidth while display:none and gets no IntersectionObserver update, so the rail now tells the panel when it is shown or hidden."
     },
     {
       "id": "P5b",

@@ -55,3 +55,10 @@ backslashes twice in this phase: write files with a file tool, not shell substit
 **Unpacked build (2026-09-21).** `checks/unpacked-build.mjs` runs against `.output/chrome-mv3` (the shipped build) and needs only the Vite
 client :5199. The rig server now sets RATE_LIMIT_AUTH_MAX_LOGIN=200 in launch.json, because a debugging session burns the 10/15min default fast.
 Writing a session into localStorage on a page that is still booting gets cleared by AuthContext: wait for networkidle first.
+
+**P5a (2026-09-26).** `checks/p5a-rail.mjs` needs the rig API :3013 and client :5199, and `npm run build:e2e`. `P5_BROWSER=edge` for Edge,
+`P5_SHOTS=<dir>` for screenshots of the panel in both schemes. Traps found by this check:
+- Puppeteer's `waitForFunction` polls on requestAnimationFrame, which never runs in a background tab. Poll with `evaluate` instead.
+- An out-of-process iframe keeps its `innerWidth` while `display:none`: "is the panel open" is measured from the page with `elementFromPoint`.
+- CSS `text-transform` changes `innerText`: match section headings case-insensitively.
+- The panel is reached with `page.frames()` (OOPIF); colour-scheme emulation must also be sent to its own target (`Emulation.setEmulatedMedia`).

@@ -29,6 +29,8 @@ export async function injectIntoTab(tabId: number, origin: string): Promise<Inje
         // Bridge first: the capture starts sending as soon as it is patched.
         await browser.scripting.executeScript({ target: { tabId }, files: ['/content-scripts/bridge.js'] });
         await browser.scripting.executeScript({ target: { tabId }, world: 'MAIN', files: ['/content-scripts/capture.js'] });
+        // And the toolbar, so the site shows its ApexOps button straight away too.
+        await browser.scripting.executeScript({ target: { tabId }, files: ['/content-scripts/toolbar.js'] });
         return 'injected';
     } catch {
         // A page the browser will not script (an error page, a PDF viewer).

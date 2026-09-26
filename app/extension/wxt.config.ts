@@ -25,6 +25,18 @@ export default defineConfig({
         description: 'Capture errors and inspect UI on the site you are testing, straight into an ApexOps project.',
         permissions: ['storage', 'scripting', 'alarms', 'activeTab'],
         optional_host_permissions: ['http://*/*', 'https://*/*'],
+        // The toolbar's panel (spec X10) is framed into bound sites. The list of
+        // bound sites is the user's and changes at runtime, so the manifest can
+        // only say "any web page"; the toolbar script that frames it is what is
+        // limited to bound origins. `use_dynamic_url` gives the panel a per-
+        // session random address, so a page cannot probe for the extension.
+        web_accessible_resources: [{ resources: ['panel.html'], matches: ['http://*/*', 'https://*/*'], use_dynamic_url: true }],
+        commands: {
+            'toggle-toolbar': {
+                suggested_key: { default: 'Alt+Shift+A' },
+                description: 'Open or close the ApexOps panel on this site',
+            },
+        },
         ...(mode === 'e2e' && { host_permissions: ['http://localhost/*', 'http://127.0.0.1/*'] }),
     }),
 });

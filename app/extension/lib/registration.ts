@@ -12,6 +12,8 @@ import { patternFor, readBindings } from './bindings';
 
 export const CAPTURE_SCRIPT_ID = 'apexops-capture';
 export const BRIDGE_SCRIPT_ID = 'apexops-bridge';
+export const TOOLBAR_SCRIPT_ID = 'apexops-toolbar';
+const SCRIPT_IDS = [CAPTURE_SCRIPT_ID, BRIDGE_SCRIPT_ID, TOOLBAR_SCRIPT_ID];
 
 let chain: Promise<void> = Promise.resolve();
 
@@ -31,9 +33,7 @@ async function doSync(): Promise<void> {
         if (await browser.permissions.contains({ origins: [pattern] })) matches.push(pattern);
     }
 
-    const existing = await browser.scripting.getRegisteredContentScripts({
-        ids: [CAPTURE_SCRIPT_ID, BRIDGE_SCRIPT_ID],
-    });
+    const existing = await browser.scripting.getRegisteredContentScripts({ ids: SCRIPT_IDS });
     if (existing.length) {
         await browser.scripting.unregisterContentScripts({ ids: existing.map((s) => s.id) });
     }
@@ -55,6 +55,14 @@ async function doSync(): Promise<void> {
             js: ['content-scripts/bridge.js'],
             matches,
             runAt: 'document_start',
+            persistAcrossSessions: true,
+        },
+        {
+            // ISOLATED world, top frame only (the default). Spec P5a.
+            id: TOOLBAR_SCRIPT_ID,
+            js: ['content-scripts/toolbar.js'],
+            matches,
+            runAt: 'document_idle',
             persistAcrossSessions: true,
         },
     ]);

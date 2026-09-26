@@ -3,11 +3,14 @@ import { readBindings, BINDINGS_KEY, type Binding } from '@/lib/bindings';
 import { refreshBindingKey } from '@/lib/connect';
 import { clearIngestProblem, recordIngestProblem } from '@/lib/ingestProblems';
 import { createIngestQueue, type QueueItem, type SendResult } from '@/lib/ingestQueue';
-import type { Request } from '@/lib/messages';
+import type { PanelRequest, Request } from '@/lib/messages';
+import { handlePanelRequest } from '@/lib/panelRequests';
 import { syncRegistrations } from '@/lib/registration';
 import { handleRequest } from '@/lib/requests';
 import { sanitizeBatch } from '@/lib/sanitize';
 import { ensureSession } from '@/lib/session';
+import { countEvents, forgetTab } from '@/lib/tabCounts';
+import { TOOLBAR_COMMAND, TOOLBAR_TOGGLE } from '@/lib/toolbarChannel';
 
 /**
  * The service worker: the only part of the extension that talks to ApexOps.
@@ -24,15 +27,31 @@ const RETRY_ALARM = 'ingest-retry';
 const extensionOrigin = () => new URL(browser.runtime.getURL('/')).origin;
 
 /**
- * Is this message from one of the extension's own pages (popup, options)?
+ * The path of the extension page that sent this, or null if it is not one of
+ * ours (popup, panel).
  *
  * Decided by the sender's URL, not by `sender.tab`: an extension page opened in
  * a tab has one, and a content script running in a web page has one too. A
  * content script's `sender.url` is the web page's, which is what tells them
- * apart — and a web page can never make that URL start with our origin.
+ * apart — a web page's URL is http(s), never our scheme.
+ *
+ * The scheme rather than our exact origin because the toolbar panel is loaded
+ * through `use_dynamic_url`, whose host is a per-session random id, not the
+ * extension id. `sender.id` is what says the page is this extension's.
  */
-const isExtensionPage = (sender: Browser.runtime.MessageSender): boolean =>
-    sender.id === browser.runtime.id && typeof sender.url === 'string' && sender.url.startsWith(`${extensionOrigin()}/`);
+const extensionPagePath = (sender: Browser.runtime.MessageSender): string | null => {
+    if (sender.id !== browser.runtime.id || typeof sender.url !== 'string') return null;
+    try {
+        const url = new URL(sender.url);
+        return url.protocol === new URL(extensionOrigin()).protocol ? url.pathname : null;
+    } catch {
+        return null;
+    }
+};
+
+const isExtensionPage = (sender: Browser.runtime.MessageSender): boolean => extensionPagePath(sender) !== null;
+
+const PANEL_PATH = '/panel.html';
 
 const queue = createIngestQueue(
     {
@@ -97,7 +116,28 @@ async function onIngest(body: unknown, sender: Browser.runtime.MessageSender): P
 
     const events = sanitizeBatch(body);
     await queue.enqueue(origin, events);
+    await countEvents(sender.tab.id ?? -1, events.length);
     await queue.flush();
+}
+
+type Respond = (reply: unknown) => void;
+
+async function answer(work: () => Promise<unknown>, sendResponse: Respond): Promise<void> {
+    try {
+        sendResponse(await work());
+    } catch (err) {
+        console.error('[apexops] request failed', err);
+        sendResponse({ ok: false, error: { code: 'internal', message: 'Something went wrong inside the extension.' } });
+    }
+}
+
+/** Alt+Shift+A: tell the toolbar on the active tab to open or close its panel. */
+async function onCommand(command: string): Promise<void> {
+    if (command !== TOOLBAR_COMMAND) return;
+    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+    if (typeof tab?.id !== 'number') return;
+    // No toolbar on this tab (an unbound site) means no listener: nothing to do.
+    await browser.tabs.sendMessage(tab.id, { type: TOOLBAR_TOGGLE }).catch(() => undefined);
 }
 
 export default defineBackground(() => {
@@ -113,22 +153,33 @@ export default defineBackground(() => {
             return undefined; // the page side never waits on the worker
         }
 
-        // Everything else is a request from the popup, and only the popup.
-        if (!isExtensionPage(sender)) return undefined;
-        void (async () => {
-            try {
-                const reply = await handleRequest(message as Request, {
-                    version: browser.runtime.getManifest().version,
-                    extensionOrigin: extensionOrigin(),
-                });
-                sendResponse(reply);
-            } catch (err) {
-                console.error('[apexops] request failed', err);
-                sendResponse({ ok: false, error: { code: 'internal', message: 'Something went wrong inside the extension.' } });
-            }
-        })();
+        // Everything else is a request from one of our own pages, and each page
+        // gets its own set: the panel lives on a site someone else controls,
+        // so it cannot ask for what the popup can (spec R18).
+        const path = extensionPagePath(sender);
+        if (path === null) return undefined;
+        const version = browser.runtime.getManifest().version;
+        const isPanelRequest = typeof msg?.type === 'string' && msg.type.startsWith('panel-');
+
+        if (path === PANEL_PATH) {
+            // Always inside a tab; which one — and so which site — is the
+            // browser's answer, not the message's.
+            if (!isPanelRequest || typeof sender.tab?.id !== 'number') return undefined;
+            const tab = sender.tab;
+            void answer(
+                () => handlePanelRequest(message as PanelRequest, { version, tabId: tab.id!, tabUrl: tab.url ?? null, tabTitle: tab.title ?? '' }),
+                sendResponse
+            );
+            return true;
+        }
+
+        if (isPanelRequest) return undefined;
+        void answer(() => handleRequest(message as Request, { version, extensionOrigin: extensionOrigin() }), sendResponse);
         return true; // keep the channel open for the async reply
     });
+
+    browser.commands.onCommand.addListener((command) => void onCommand(command));
+    browser.tabs.onRemoved.addListener((tabId) => void forgetTab(tabId));
 
     browser.storage.onChanged.addListener((changes, area) => {
         if (area === 'local' && changes[BINDINGS_KEY]) void syncRegistrations();
