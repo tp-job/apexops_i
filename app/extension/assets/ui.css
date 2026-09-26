@@ -1,7 +1,8 @@
 /*
- * Popup styles. Colours are tokens on :root, redefined for dark mode, so nothing
- * below hardcodes one. Contrast is checked in the browser for both schemes
- * (checks/p4-extension.mjs), not eyeballed: body text is >= 4.5:1 against the
+ * Styles for the extension's own pages (popup, toolbar panel). Colours are
+ * tokens on :root, redefined for dark mode, so nothing below hardcodes one.
+ * Contrast is checked in the browser for both schemes (checks/p4-extension.mjs,
+ * checks/p5a-rail.mjs), not eyeballed: body text is >= 4.5:1 against the
  * surface it sits on, and the accent button's white label is >= 4.5:1 too.
  */
 :root {
@@ -204,4 +205,78 @@ li + li {
     button {
         transition: background-color 120ms;
     }
+}
+
+/* ── toolbar panel ───────────────────────────────────────────
+   The same page vocabulary, sized by the iframe instead of a fixed width. */
+body.panel {
+    width: auto;
+    min-height: 100vh;
+}
+
+body.panel main {
+    gap: 10px;
+    padding: 12px;
+}
+
+.panel-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.panel-head h1 {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.icon-button {
+    display: grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border-color: transparent;
+    font-size: 18px;
+    line-height: 1;
+}
+
+textarea,
+select {
+    width: 100%;
+    padding: 8px 10px;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font: inherit;
+}
+
+textarea {
+    min-height: 72px;
+    resize: vertical;
+}
+
+.issues li {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+    justify-content: space-between;
+}
+
+.issues a {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.count {
+    flex: none;
+    color: var(--muted);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
 }

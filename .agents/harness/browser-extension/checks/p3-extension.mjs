@@ -163,12 +163,13 @@ try {
         { apiUrl: PROXY, slug: SLUG, projectId: project.id, name: project.name, ingestKey: project.ingestKey }
     );
     const registered = await until(
-        async () => (await sw.evaluate(() => chrome.scripting.getRegisteredContentScripts())).length === 2,
+        // capture + bridge (P3), toolbar (P5a)
+        async () => (await sw.evaluate(() => chrome.scripting.getRegisteredContentScripts())).length === 3,
         5000
     );
     const scripts = await sw.evaluate(() => chrome.scripting.getRegisteredContentScripts());
     check(
-        'binding registers the two scripts for the bound origin only',
+        'binding registers its scripts for the bound origin only',
         registered && scripts.every((s) => s.matches.length === 1 && s.matches[0] === `${BOUND}/*`),
         scripts.map((s) => `${s.id}:${s.world ?? 'ISOLATED'}:${s.matches.join(',')}`).join(' | ')
     );

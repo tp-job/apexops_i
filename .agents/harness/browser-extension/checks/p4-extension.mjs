@@ -278,7 +278,8 @@ try {
         b ? `slug=${b.slug} api=${b.apiUrl}` : 'no binding'
     );
     const scripts = await sw.evaluate(() => chrome.scripting.getRegisteredContentScripts());
-    check('capture scripts registered for exactly this site', scripts.length === 2 && scripts.every((s) => s.matches.join() === `${SITE}/*`), scripts.map((s) => s.matches.join()).join(' | '));
+    // capture + bridge (P3), toolbar (P5a)
+    check('capture and toolbar scripts registered for exactly this site', scripts.length === 3 && scripts.every((s) => s.matches.join() === `${SITE}/*`), scripts.map((s) => s.matches.join()).join(' | '));
     await pop.reload();
     await settled(pop);
     t = await text(pop);

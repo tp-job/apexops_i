@@ -1,12 +1,15 @@
-import './style.css';
+import '@/assets/ui.css';
+import { add, h, host } from '@/lib/dom';
 import type { DiscoverResult, Status } from '@/lib/messages';
 import { send } from '@/lib/messages';
 import { parseProjectUrl, ProjectUrlProblem } from '@/lib/projectUrl';
+import { setToolbarHidden } from '@/lib/toolbarPrefs';
 
 /**
  * The popup (spec X15/X16): who you are, which project this site is bound to,
- * and the flow that binds it. The day-to-day toolbar arrives in P5; this is the
- * page that gets a site connected in the first place.
+ * and the flow that binds it. Day-to-day work happens in the toolbar on the
+ * site itself (P5); this is the page that gets a site connected in the first
+ * place, and the only place a site is disconnected or the session ended (R18).
  *
  * Everything here is text set with `textContent`, never `innerHTML`: project
  * names, servers' error messages and site origins are all outside input.
@@ -18,42 +21,6 @@ import { parseProjectUrl, ProjectUrlProblem } from '@/lib/projectUrl';
  */
 
 const app = document.getElementById('app')!;
-
-type Child = Node | string | null | false | undefined | Child[];
-
-function h<K extends keyof HTMLElementTagNameMap>(
-    tag: K,
-    props: Partial<Record<string, unknown>> = {},
-    ...children: Child[]
-): HTMLElementTagNameMap[K] {
-    const el = document.createElement(tag);
-    for (const [key, value] of Object.entries(props)) {
-        if (value === undefined || value === false || value === null) continue;
-        if (key.startsWith('on') && typeof value === 'function') el.addEventListener(key.slice(2), value as EventListener);
-        else if (key === 'class') el.className = String(value);
-        else if (key in el && key !== 'list') (el as unknown as Record<string, unknown>)[key] = value;
-        else el.setAttribute(key, String(value));
-    }
-    add(el, children);
-    return el;
-}
-
-/** Append children, skipping the falsy ones and flattening nested lists. */
-function add(parent: ParentNode, children: readonly Child[]): void {
-    for (const c of children) {
-        if (!c) continue;
-        if (Array.isArray(c)) add(parent, c);
-        else parent.append(c as Node | string);
-    }
-}
-
-const host = (url: string): string => {
-    try {
-        return new URL(url).host;
-    } catch {
-        return url;
-    }
-};
 
 // ── state ────────────────────────────────────────────────────
 
@@ -198,6 +165,14 @@ function disconnect(origin: string): Promise<void> {
     });
 }
 
+function showToolbar(origin: string): Promise<void> {
+    return withBusy(async () => {
+        // Every open tab of the site follows the stored flag (toolbar.content.ts).
+        await setToolbarHidden(origin, false);
+        await refresh();
+    });
+}
+
 function signOut(): Promise<void> {
     return withBusy(async () => {
         await send<null>({ type: 'logout' });
@@ -234,7 +209,15 @@ function boundView(s: Status, origin: string): HTMLElement {
         h('p', { class: 'mono' }, host(origin)),
         h('p', {}, 'Sending errors to ', h('strong', {}, b.name), open ? [' · ', h('a', { href: open, target: '_blank', rel: 'noopener' }, 'open project')] : null),
         problem ? h('p', { class: 'error', role: 'alert' }, problem.message) : null,
-        h('div', { class: 'row' }, h('button', { type: 'button', disabled: busy, onclick: () => void disconnect(origin) }, 'Disconnect this site'))
+        s.hiddenToolbars.includes(origin)
+            ? h('p', { class: 'muted small' }, 'The toolbar is hidden on this site.')
+            : h('p', { class: 'muted small' }, 'Open the toolbar on the page with its ApexOps button, or Alt+Shift+A.'),
+        h(
+            'div',
+            { class: 'row' },
+            s.hiddenToolbars.includes(origin) ? h('button', { type: 'button', class: 'primary', disabled: busy, onclick: () => void showToolbar(origin) }, 'Show toolbar') : null,
+            h('button', { type: 'button', disabled: busy, onclick: () => void disconnect(origin) }, 'Disconnect this site')
+        )
     );
 }
 
